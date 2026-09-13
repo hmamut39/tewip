@@ -6,3 +6,10 @@ blob-report/
 # Collected triage data stays local; keep only the directory itself.
 data/*
 !data/.gitkeep
+
+# Hand labels for real CI failures describe collected failure data; they stay local too.
+eval/ground-truth.jsonl
+
+# Secrets (API keys) never leave this machine.
+.env
+.env.*

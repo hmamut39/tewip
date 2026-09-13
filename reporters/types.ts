@@ -4,32 +4,40 @@ export const SCHEMA_VERSION = 1;
 export type FailureStatus = 'failed' | 'timedOut';
 
 export interface TriageAttachment {
-  name: 'trace' | 'screenshot';
+  /** error-context is Playwright's error-context.md, which holds the page snapshot. */
+  name: 'trace' | 'screenshot' | 'error-context';
   contentType: string;
   /** Path relative to the project root, forward slashes. */
   path: string;
 }
 
-/**
- * Reserved for the diagnosis layer (phase 2, LLM-backed). Phase 1 never sets it.
- * The shape is a draft and may change before phase 2 ships.
- */
-export type FailureCategory =
-  | 'missing-selector'
-  | 'timeout'
-  | 'assertion'
-  | 'network'
-  | 'flaky'
-  | 'environment'
-  | 'unknown';
+/** The fixed root-cause taxonomy from ROADMAP.md. No layer may add to it. */
+export const ROOT_CAUSES = ['REAL_BUG', 'LOCATOR_DRIFT', 'TIMING', 'ENV', 'TEST_DATA'] as const;
+export type RootCause = (typeof ROOT_CAUSES)[number];
+
+/** UNKNOWN is not a root cause: it means "not decided here", handed to the next layer. */
+export type DiagnosisCategory = RootCause | 'UNKNOWN';
+
+export interface Evidence {
+  /** Id of the rule (or, from phase 3, the model) that produced this line. */
+  source: string;
+  message: string;
+  /** Machine-readable facts a later action step can use, e.g. the drift candidate. */
+  data?: Record<string, unknown>;
+}
 
 export interface Diagnosis {
-  category: FailureCategory;
-  /** 0..1 */
+  category: DiagnosisCategory;
+  /** 0..1; always 0 for UNKNOWN. */
   confidence: number;
-  summary: string;
-  suggestedAction?: string;
-  /** Model identifier that produced this diagnosis. */
+  /** Rule that decided the category; absent for UNKNOWN. */
+  ruleId?: string;
+  /** For a decision: why. For UNKNOWN: what each rule saw and why it declined. */
+  evidence: Evidence[];
+  source: 'rules' | 'llm';
+  /** Rule-set version (phase 2) so stale diagnoses can be recomputed. */
+  engineVersion: string;
+  /** Model identifier, set only by the LLM layer. */
   model?: string;
   diagnosedAt: string;
 }

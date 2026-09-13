@@ -1,11 +1,14 @@
 import { relative, sep } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import type { FullResult, Reporter, TestCase, TestResult } from '@playwright/test/reporter';
+import { HistoryIndex } from '../engine/history.ts';
+import { llmFromEnv } from '../engine/llm/client.ts';
+import { diagnosePipeline } from '../engine/pipeline.ts';
 import { resolveGitSha, resolveRunId } from './run-context.ts';
-import { appendJsonl, PROJECT_ROOT, RUNS_FILE, TRIAGE_FILE } from './store.ts';
+import { appendJsonl, PROJECT_ROOT, readRunSummaries, readTriageRecords, RUNS_FILE, TRIAGE_FILE } from './store.ts';
 import { SCHEMA_VERSION, type RunSummary, type TriageAttachment, type TriageRecord } from './types.ts';
 
-const COLLECTED_ATTACHMENTS = new Set(['trace', 'screenshot']);
+const COLLECTED_ATTACHMENTS = new Set(['trace', 'screenshot', 'error-context']);
 
 const projectPath = (p: string) => relative(PROJECT_ROOT, p).split(sep).join('/');
 
@@ -39,9 +42,6 @@ export default class TriageReporter implements Reporter {
   }
 
   async onEnd(result: FullResult): Promise<void> {
-    const records = await this.enrich(this.records);
-    appendJsonl(TRIAGE_FILE, records);
-
     const summary: RunSummary = {
       schemaVersion: SCHEMA_VERSION,
       runId: this.runId,
@@ -51,18 +51,33 @@ export default class TriageReporter implements Reporter {
       status: result.status,
       attempts: this.attempts,
     };
+    const records = await this.enrich(this.records, summary);
+    appendJsonl(TRIAGE_FILE, records);
     appendJsonl(RUNS_FILE, [summary]);
 
-    console.log(`[triage] ${records.length} failure record(s) appended to ${projectPath(TRIAGE_FILE)} (runId=${this.runId})`);
+    const by = (source: string) => records.filter((r) => r.diagnosis?.source === source && r.diagnosis.category !== 'UNKNOWN').length;
+    const unknown = records.filter((r) => !r.diagnosis || r.diagnosis.category === 'UNKNOWN').length;
+    console.log(
+      `[triage] ${records.length} failure record(s) appended to ${projectPath(TRIAGE_FILE)} (runId=${this.runId}); ` +
+        `rules classified ${by('rules')}, LLM ${by('llm')}, ${unknown} UNKNOWN`,
+    );
   }
 
   /**
-   * Extension point for the diagnosis layer: runs after the run finishes and before
-   * records are persisted. Phase 1 passes records through untouched; a subclass (or a
-   * later composed step) can fill in `record.diagnosis` here.
+   * Diagnosis step: runs after the run finishes and before records are persisted. Rules
+   * decide first; failures they leave UNKNOWN go to the LLM layer when OPENAI_API_KEY is set
+   * (TRIAGE_LLM=off disables it). A failing engine must never cost us the collected data.
    */
-  protected async enrich(records: TriageRecord[]): Promise<TriageRecord[]> {
-    return records;
+  protected async enrich(records: TriageRecord[], summary: RunSummary): Promise<TriageRecord[]> {
+    if (records.length === 0) return records;
+    try {
+      const index = new HistoryIndex([...readTriageRecords(), ...records], [...readRunSummaries(), summary]);
+      const diagnoses = await diagnosePipeline(records, index, llmFromEnv());
+      return records.map((record, i) => ({ ...record, diagnosis: diagnoses[i] }));
+    } catch (error) {
+      console.warn(`[triage] rule engine failed, saving records without a diagnosis: ${String(error)}`);
+      return records;
+    }
   }
 
   printsToStdio(): boolean {

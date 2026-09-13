@@ -2,7 +2,7 @@
   "name": "triage-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Playwright failure triage — phase 1: failure data collection and history stats",
+  "description": "Playwright failure triage agent — failure collection (phase 1) and rule-based diagnosis (phase 2)",
   "type": "module",
   "engines": {
     "node": ">=22.18"
@@ -11,6 +11,10 @@
     "test": "playwright test",
     "test:loop": "node scripts/test-loop.ts 5",
     "history": "node scripts/history.ts",
+    "diagnose": "node scripts/diagnose.ts",
+    "test:engine": "node --test engine/test/*.test.ts",
+    "eval": "node eval/evaluate.ts eval/ground-truth.jsonl",
+    "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
     "typecheck": "tsc --noEmit"
   },
   "license": "UNLICENSED",

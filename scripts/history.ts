@@ -1,10 +1,10 @@
 // Aggregates data/triage.jsonl (+ data/runs.jsonl for run counts) per testId and prints a table.
 import { relative } from 'node:path';
+import { FLAKY_MAX_RATE, FLAKY_MIN_RATE } from '../engine/rules.ts';
+import { errorSignature } from '../engine/signature.ts';
 import { PROJECT_ROOT, readRunSummaries, readTriageRecords, TRIAGE_FILE } from '../reporters/store.ts';
 import type { TriageRecord } from '../reporters/types.ts';
-
-const FLAKY_MIN_RATE = 0.2;
-const FLAKY_MAX_RATE = 0.8;
+import { renderTable } from './table.ts';
 
 export interface TestHistory {
   testId: string;
@@ -15,15 +15,6 @@ export interface TestHistory {
   /** Distinct error signatures across failures (0 when the test never failed). */
   distinctErrors: number;
   suspectedFlaky: boolean;
-}
-
-/**
- * Error identity used for "same error every time?". Playwright appends a call log whose
- * details (e.g. "9 × locator resolved to ...") change between identical failures, so
- * only the text before "Call log:" is compared.
- */
-export function errorSignature(message: string): string {
-  return message.split(/\n\s*Call log:/)[0].replace(/\s+/g, ' ').trim();
 }
 
 export function aggregate(records: TriageRecord[], attemptsByRun: Map<string, Record<string, number>>): TestHistory[] {
@@ -58,14 +49,6 @@ export function aggregate(records: TriageRecord[], attemptsByRun: Map<string, Re
       suspectedFlaky: failureRate >= FLAKY_MIN_RATE && failureRate <= FLAKY_MAX_RATE && distinctErrors > 1,
     };
   });
-}
-
-function renderTable(headers: string[], rows: string[][], rightAligned: Set<number>): string {
-  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
-  const line = '+' + widths.map((w) => '-'.repeat(w + 2)).join('+') + '+';
-  const fmt = (cells: string[]) =>
-    '| ' + cells.map((c, i) => (rightAligned.has(i) ? c.padStart(widths[i]) : c.padEnd(widths[i]))).join(' | ') + ' |';
-  return [line, fmt(headers), line, ...rows.map(fmt), line].join('\n');
 }
 
 function main(): void {

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Triage Fixture Shop</title>
+</head>
+<body>
+  <h1>Fixture Shop</h1>
+
+  <section id="product">
+    <h2 id="product-name">Mechanical Keyboard</h2>
+    <p>Price: <span id="price">$24.99</span></p>
+    <button id="add-to-cart" type="button">Add to cart</button>
+    <p>Cart items: <span id="cart-count">0</span></p>
+  </section>
+
+  <section id="orders">
+    <button id="load-orders" type="button">Load orders</button>
+    <p id="orders-status">idle</p>
+  </section>
+
+  <p>App state: <span id="app-state"></span></p>
+
+  <script>
+    // The app announces 'loading' and never reaches 'ready' — used by the timeout test.
+    window.appState = 'loading';
+    document.getElementById('app-state').textContent = window.appState;
+
+    let count = 0;
+    document.getElementById('add-to-cart').addEventListener('click', () => {
+      count += 1;
+      document.getElementById('cart-count').textContent = String(count);
+    });
+
+    document.getElementById('load-orders').addEventListener('click', async () => {
+      const status = document.getElementById('orders-status');
+      status.textContent = 'loading';
+      const res = await fetch('/api/orders');
+      status.textContent = res.ok ? 'loaded' : `error ${res.status}`;
+    });
+  </script>
+</body>
+</html>

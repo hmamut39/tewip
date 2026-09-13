@@ -1,0 +1,8 @@
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+
+# Collected triage data stays local; keep only the directory itself.
+data/*
+!data/.gitkeep

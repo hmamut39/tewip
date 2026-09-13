@@ -15,6 +15,11 @@ export interface FailureContext {
   /** Lines around the failing line, comments removed. Null when unavailable. */
   failingCode: string[] | null;
   history: {
+    /** Plain-language reading of this commit's attempts versus other commits. */
+    pattern: string;
+    sameCommitAttempts: number;
+    sameCommitFailures: number;
+    passesOnOtherCommits: number;
     runs: number;
     failures: number;
     failureRatePct: number;
@@ -23,6 +28,8 @@ export interface FailureContext {
     passesBeforeStreak: number;
     failuresBeforeStreak: number;
   };
+  /** This test's attempts in this run: did another attempt of the same code pass? */
+  thisRun: { attempts: number; failedAttempts: number; anotherAttemptPassed: boolean };
   run: { testsAttempted: number; testsFailed: number; otherFailures: string[] };
   /** What the phase-2 rules examined and why they declined. */
   rules: string[];
@@ -79,6 +86,22 @@ function traceSummary(record: TriageRecord): FailureContext['trace'] {
   }
 }
 
+/**
+ * Separates "flaky on the same code" from "broken by this commit": an overall failure rate
+ * that mixes commits reads as flakiness even when every attempt on this commit failed.
+ */
+export function historyPattern(h: TestHistory): string {
+  if (h.currentRunFailures < h.currentRunAttempts) return 'another attempt of the same code passed in this run: the failure is not deterministic';
+  if (h.sameCommitAttempts === 0) return 'commit unknown: cannot compare with other commits';
+  if (h.sameCommitFailures < h.sameCommitAttempts) {
+    return `this commit both failed and passed (${h.sameCommitFailures}/${h.sameCommitAttempts} attempts failed): the failure is not deterministic`;
+  }
+  if (h.passesOnOtherCommits > 0) {
+    return `every attempt on this commit failed (${h.sameCommitFailures}/${h.sameCommitAttempts}) while the test passed ${h.passesOnOtherCommits} time(s) on other commits: something in this commit likely changed behaviour`;
+  }
+  return `every recorded attempt failed (${h.sameCommitFailures}/${h.sameCommitAttempts}) and there is no passing run to compare with`;
+}
+
 export function buildFailureContext(record: TriageRecord, history: TestHistory, run: RunContext, rules: Diagnosis): FailureContext {
   const contextFile = errorContextPath(record);
   const markdown = contextFile ? readFileSync(contextFile, 'utf8') : '';
@@ -90,6 +113,10 @@ export function buildFailureContext(record: TriageRecord, history: TestHistory, 
     error: errorPart(record.errorMessage),
     failingCode: markdown ? failingCode(markdown) : null,
     history: {
+      pattern: historyPattern(history),
+      sameCommitAttempts: history.sameCommitAttempts,
+      sameCommitFailures: history.sameCommitFailures,
+      passesOnOtherCommits: history.passesOnOtherCommits,
       runs: history.runs,
       failures: history.failures,
       failureRatePct: Math.round(history.failureRate * 100),
@@ -97,6 +124,11 @@ export function buildFailureContext(record: TriageRecord, history: TestHistory, 
       failingStreak: history.failingStreak,
       passesBeforeStreak: history.passesBeforeStreak,
       failuresBeforeStreak: history.failuresBeforeStreak,
+    },
+    thisRun: {
+      attempts: history.currentRunAttempts,
+      failedAttempts: history.currentRunFailures,
+      anotherAttemptPassed: history.currentRunFailures < history.currentRunAttempts,
     },
     run: {
       testsAttempted: run.testsAttempted,

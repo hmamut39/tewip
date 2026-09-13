@@ -13,7 +13,9 @@
     "history": "node scripts/history.ts",
     "diagnose": "node scripts/diagnose.ts",
     "test:engine": "node --test engine/test/*.test.ts",
-    "eval": "node eval/evaluate.ts eval/ground-truth.jsonl",
+    "eval": "node eval/evaluate.ts eval/ground-truth.jsonl --data data/real/gutenberg",
+    "eval:holdout": "node eval/evaluate.ts eval/ground-truth.holdout.jsonl --data data/real/gutenberg-holdout",
+    "harvest": "node eval/harvest/harvest.ts",
     "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
     "typecheck": "tsc --noEmit"
   },

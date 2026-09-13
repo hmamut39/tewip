@@ -150,6 +150,27 @@ describe('TIMING rule', () => {
   });
 });
 
+describe('timing-retry-pass rule', () => {
+  it('a failure whose retry passed in the same run → TIMING', () => {
+    const at = '2026-01-01T00:00:00.000Z';
+    const r = record('a', 'run-1', "TimeoutError: locator.click: Timeout 2000ms exceeded.\nCall log:\n  - waiting for locator('#x')\n");
+    const s: RunSummary = { schemaVersion: 1, runId: 'run-1', gitSha: '', startedAt: at, finishedAt: at, status: 'passed', attempts: { a: 2 } };
+    const index = new HistoryIndex([r], [s]);
+    const d = diagnose({ record: r, history: index.historyAsOf('a', 'run-1'), run: index.runContext('run-1'), loadSnapshot: () => SHOP_SNAPSHOT });
+    assert.equal(d.category, 'TIMING');
+    assert.equal(d.ruleId, 'timing-retry-pass');
+  });
+
+  it('a network error that passed on retry stays ENV', () => {
+    const at = '2026-01-01T00:00:00.000Z';
+    const r = record('a', 'run-1', 'Error: apiRequestContext.fetch: socket hang up');
+    const s: RunSummary = { schemaVersion: 1, runId: 'run-1', gitSha: '', startedAt: at, finishedAt: at, status: 'passed', attempts: { a: 2 } };
+    const index = new HistoryIndex([r], [s]);
+    const d = diagnose({ record: r, history: index.historyAsOf('a', 'run-1'), run: index.runContext('run-1'), loadSnapshot: () => null });
+    assert.equal(d.category, 'ENV');
+  });
+});
+
 describe('REAL_BUG rule', () => {
   it('value mismatch after a clean history → REAL_BUG', () => {
     const d = diagnoseLast({ a: ['P', 'P', 'P', MISMATCH('$19.99', '$24.99'), MISMATCH('$19.99', '$24.99')] }, 'a');

@@ -8,7 +8,11 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 
 export function readZipEntries(file: string, wanted: (name: string) => boolean): Map<string, Buffer> {
-  const buf = readFileSync(file);
+  return readZipBuffer(readFileSync(file), wanted, file);
+}
+
+/** Same as readZipEntries for a zip already in memory (e.g. a zip nested in another zip). */
+export function readZipBuffer(buf: Buffer, wanted: (name: string) => boolean, file = 'zip'): Map<string, Buffer> {
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 0xffff); i--) {
     if (buf.readUInt32LE(i) === EOCD_SIGNATURE) {

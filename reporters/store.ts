@@ -1,6 +1,6 @@
 // JSONL persistence shared by the reporter, the history script and future layers.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import type { RunSummary, TriageRecord } from './types.ts';
 
 export const PROJECT_ROOT = join(import.meta.dirname, '..');
@@ -33,3 +33,13 @@ export function readJsonl<T>(file: string): T[] {
 
 export const readTriageRecords = (file = TRIAGE_FILE) => readJsonl<TriageRecord>(file);
 export const readRunSummaries = (file = RUNS_FILE) => readJsonl<RunSummary>(file);
+
+/**
+ * The triage/runs files of a dataset directory. The default dataset is data/ (what the
+ * reporter collects); imported datasets live elsewhere, e.g. data/real/<source>/.
+ */
+export function datasetFiles(dir?: string): { dir: string; triage: string; runs: string } {
+  if (!dir) return { dir: DATA_DIR, triage: TRIAGE_FILE, runs: RUNS_FILE };
+  const abs = isAbsolute(dir) ? dir : join(PROJECT_ROOT, dir);
+  return { dir: abs, triage: join(abs, 'triage.jsonl'), runs: join(abs, 'runs.jsonl') };
+}

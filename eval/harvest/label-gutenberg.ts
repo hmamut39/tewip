@@ -1,0 +1,96 @@
+// Turns data/real/gutenberg/evidence.jsonl into eval/ground-truth.jsonl using explicit,
+// evidence-based rules. Written BEFORE looking at the pipeline's answers on this data.
+// Anything the evidence can't settle is excluded (and counted), never guessed.
+// Usage: node eval/harvest/label-gutenberg.ts [dataset] [labels out] [warm-up end]
+//   defaults: gutenberg  eval/ground-truth.jsonl  2026-09-08T01:00:00Z
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PROJECT_ROOT, readJsonl } from '../../reporters/store.ts';
+import type { RootCause } from '../../reporters/types.ts';
+import type { GroundTruthLabel } from '../evaluate.ts';
+import type { Evidence } from './evidence.ts';
+
+const DATASET = process.argv[2] ?? 'gutenberg';
+const OUT_FILE = process.argv[3] ?? 'eval/ground-truth.jsonl';
+/** Cases need some history before them: skip the first hour of the harvested window. */
+const WARM_UP_UNTIL = process.argv[4] ?? '2026-09-08T01:00:00Z';
+/** One PR broke 163 tests in a single run; cap it so one root cause can't dominate. */
+const MAX_CASES_PER_RUN = 10;
+const LABELED_BY = 'claude (from CI evidence: retries, later runs, fix diffs)';
+
+const NETWORK = /socket hang up|apiRequestContext\.\w+: Timeout|ECONNRESET|ECONNREFUSED/;
+const UI_RACE =
+  /^(TimeoutError: locator\.(click|fill|dragTo|waitFor)|Error: expect\(locator\)\.(toBeVisible|toHaveCount|toBeChecked|toBeFocused|toHaveValue|toBeDisabled|toContainText|toHaveText)\(|Error: expect\(received\)\.(toBe|toMatchObject)\(|Error: locator\.evaluate: Error: The selection change event listener|Error: locator\.check: Clicking the checkbox did not change its state)/;
+
+/** Clusters the evidence cannot settle, with the reason they are left out. */
+const EXCLUDED: Array<{ test: RegExp; error?: RegExp; reason: string }> = [
+  { test: /single-file-placeholder-drop/, reason: 'media found after a "uploads nothing" test: leftover data or an intermittent app upload race, cannot tell' },
+  { test: /collaboration-stress/, reason: 'stress test with performance thresholds: slow runner (ENV) vs race (TIMING) unclear' },
+  { test: /.*/, error: /resolveLink\d* is not a function/, reason: 'intermittent TypeError: app loading race vs real bug unclear' },
+  { test: /.*/, error: /toMatchSnapshot|strict mode violation|should select all blocks/, reason: 'snapshot / ambiguous intermittent failure' },
+];
+
+/** Manual decisions from reading the fix diffs (fixed-by-test-change cases). */
+const MANUAL: Array<{ test: RegExp; label: RootCause | null; note: string }> = [
+  { test: /user-global-styles-revisions\.spec\.js > Style Revisions > should close the revisions panel/, label: 'LOCATOR_DRIFT', note: 'button still exists but its name changed from "Apply the selected revision to your site." to "Reset"; fix only updated the locator' },
+  { test: /block-bindings\/post-meta\.spec\.js/, label: null, note: 'Settings tab was removed on purpose; fix deleted the step. Outdated test: no matching category in the taxonomy' },
+];
+
+function decide(e: Evidence): { label: RootCause; note: string } | { excluded: string } {
+  const error = e.errorHead.split(' | ')[0];
+  const excluded = EXCLUDED.find((x) => x.test.test(e.testId) && (!x.error || x.error.test(e.errorHead)));
+
+  if (e.basis === 'passed-on-retry' || e.basis === 'recurs-on-unrelated-branches') {
+    const why = e.basis === 'passed-on-retry' ? 'passed on a retry of the same code' : 'fails on unrelated branches and passes elsewhere';
+    if (NETWORK.test(e.errorHead)) return { label: 'ENV', note: `${why}; the test lost its connection to the WordPress test server (${error.slice(0, 60)})` };
+    if (excluded) return { excluded: excluded.reason };
+    if (UI_RACE.test(error)) return { label: 'TIMING', note: `${why}; UI wait/assertion that succeeds on another attempt: a race` };
+    return { excluded: `non-deterministic, error type not covered by a labelling rule: ${error.slice(0, 60) || '(empty error)'}` };
+  }
+  if (e.basis === 'fixed-by-test-change') {
+    const manual = MANUAL.find((m) => m.test.test(e.testId));
+    if (!manual) return { excluded: 'test-change fix not reviewed' };
+    return manual.label ? { label: manual.label, note: manual.note } : { excluded: manual.note };
+  }
+  if (e.basis === 'fixed-by-app-change') {
+    const s = e.stats;
+    if (s.failedBranches === 1 && s.failuresHere === s.attemptsHere && s.attemptsHere >= 2) {
+      return { label: 'REAL_BUG', note: `every attempt failed (${s.failuresHere}/${s.attemptsHere}), only on this branch; passed after app-only changes with the spec untouched` };
+    }
+    return { excluded: 'app change fixed it, but the test also failed elsewhere or passed a retry' };
+  }
+  return { excluded: e.basis === 'unresolved' ? 'no later passing run on the branch in the window' : 'fix mixed app and test changes' };
+}
+
+function main(): void {
+  const evidence = readJsonl<Evidence>(join(PROJECT_ROOT, 'data/real', DATASET, 'evidence.jsonl'))
+    .filter((e) => e.stats.createdAt >= WARM_UP_UNTIL)
+    .sort((a, b) => a.runId.localeCompare(b.runId) || a.testId.localeCompare(b.testId));
+
+  const labels: Array<GroundTruthLabel & { basis: string }> = [];
+  const exclusions: Record<string, number> = {};
+  const perRun = new Map<string, Evidence[]>();
+  for (const e of evidence) perRun.set(e.runId, [...(perRun.get(e.runId) ?? []), e]);
+
+  for (const cases of perRun.values()) {
+    const decided = cases.map((e) => ({ e, d: decide(e) }));
+    const labelled = decided.filter((x) => 'label' in x.d);
+    // Spread the cap evenly over the run's (sorted) cases instead of taking the first ones.
+    const step = Math.max(1, labelled.length / MAX_CASES_PER_RUN);
+    const kept = new Set(labelled.filter((_, i) => i % step < 1).slice(0, MAX_CASES_PER_RUN));
+    for (const x of decided) {
+      if ('excluded' in x.d) exclusions[x.d.excluded] = (exclusions[x.d.excluded] ?? 0) + 1;
+      else if (!kept.has(x)) exclusions['over the per-run cap (one root cause, many tests)'] = (exclusions['over the per-run cap (one root cause, many tests)'] ?? 0) + 1;
+      else labels.push({ testId: x.e.testId, runId: x.e.runId, label: x.d.label, dataset: 'real', labeledBy: LABELED_BY, basis: x.e.basis, note: x.d.note });
+    }
+  }
+
+  const target = join(PROJECT_ROOT, OUT_FILE);
+  writeFileSync(target, labels.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  const byLabel = labels.reduce<Record<string, number>>((m, l) => ({ ...m, [l.label]: (m[l.label] ?? 0) + 1 }), {});
+  console.log(`[label] ${labels.length} labelled case(s) from ${evidence.length} after warm-up -> ${target}`);
+  console.log('by label:', byLabel);
+  console.log('excluded:', exclusions);
+}
+
+if (import.meta.main) main();

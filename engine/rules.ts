@@ -121,6 +121,25 @@ const locatorDrift: Rule = {
   },
 };
 
+/**
+ * The test failed but another attempt of the same code in the same run passed: Playwright's
+ * own "flaky" signal. A deterministic cause (real bug, drifted locator) would fail every
+ * attempt. Confidence stays below the auto-fix threshold: the rule knows a race happened,
+ * not where. Network signals are handled first by env-network.
+ */
+const timingRetryPass: Rule = {
+  id: 'timing-retry-pass',
+  evaluate({ history }) {
+    const { currentRunAttempts: attempts, currentRunFailures: failures } = history;
+    if (attempts < 2 || failures >= attempts) return null;
+    return {
+      category: 'TIMING',
+      confidence: 0.75,
+      evidence: [{ source: this.id, message: `${failures} of ${attempts} attempts in this run failed and another attempt of the same code passed`, data: { attempts, failures } }],
+    };
+  },
+};
+
 /** Intermittent failures whose error keeps changing: a race, not a deterministic break. */
 const timingFlaky: Rule = {
   id: 'timing-flaky',
@@ -173,4 +192,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, locatorDrift, timingFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];

@@ -22,6 +22,15 @@ export interface TestHistory {
   failuresBeforeStreak: number;
   /** Passing attempts in the window before the streak started. */
   passesBeforeStreak: number;
+  /** Attempts of this test in the run being diagnosed (retries included). */
+  currentRunAttempts: number;
+  /** Failed attempts in that run; fewer than currentRunAttempts means a retry passed. */
+  currentRunFailures: number;
+  /** Attempts / failures on the same git commit as this run (re-runs included); 0 when the SHA is unknown. */
+  sameCommitAttempts: number;
+  sameCommitFailures: number;
+  /** Passing attempts on other (earlier) commits in the window. */
+  passesOnOtherCommits: number;
 }
 
 export interface RunContext {
@@ -35,6 +44,8 @@ interface RunEntry {
   runId: string;
   /** ISO time used to order runs. */
   at: string;
+  /** Git commit the run tested; '' when unknown. */
+  sha: string;
   attempts: Record<string, number>;
   failures: TriageRecord[];
 }
@@ -47,22 +58,23 @@ export class HistoryIndex {
 
   constructor(records: TriageRecord[], summaries: RunSummary[]) {
     const entries = new Map<string, RunEntry>();
-    const entry = (runId: string, at: string) => {
+    const entry = (runId: string, at: string, sha: string) => {
       const existing = entries.get(runId);
       if (existing) {
         if (at < existing.at) existing.at = at;
+        existing.sha ||= sha;
         return existing;
       }
-      const created: RunEntry = { runId, at, attempts: {}, failures: [] };
+      const created: RunEntry = { runId, at, sha, attempts: {}, failures: [] };
       entries.set(runId, created);
       return created;
     };
 
     for (const s of summaries) {
-      const e = entry(s.runId, s.startedAt);
+      const e = entry(s.runId, s.startedAt, s.gitSha);
       for (const [testId, n] of Object.entries(s.attempts)) e.attempts[testId] = (e.attempts[testId] ?? 0) + n;
     }
-    for (const r of records) entry(r.runId, r.timestamp).failures.push(r);
+    for (const r of records) entry(r.runId, r.timestamp, r.gitSha).failures.push(r);
     // A run with no summary line: its failures are the only attempts we know about.
     for (const e of entries.values()) {
       for (const r of e.failures) {
@@ -86,7 +98,10 @@ export class HistoryIndex {
       .slice(0, until + 1)
       .filter((e) => (e.attempts[testId] ?? 0) > 0)
       .slice(-HISTORY_WINDOW)
-      .map((e) => ({ attempts: e.attempts[testId], failures: e.failures.filter((f) => f.testId === testId) }));
+      .map((e) => ({ sha: e.sha, attempts: e.attempts[testId], failures: e.failures.filter((f) => f.testId === testId) }));
+    const sha = this.runs[until].sha;
+    const sameCommit = sha ? entries.filter((e) => e.sha === sha) : [];
+    const otherCommits = sha ? entries.filter((e) => e.sha !== sha) : [];
 
     let streakStart = entries.length;
     while (streakStart > 0 && entries[streakStart - 1].failures.length >= entries[streakStart - 1].attempts) streakStart--;
@@ -96,7 +111,14 @@ export class HistoryIndex {
     const runs = entries.reduce((sum, e) => sum + e.attempts, 0);
     const allFailures = entries.flatMap((e) => e.failures);
     const failuresBeforeStreak = before.reduce((sum, e) => sum + e.failures.length, 0);
+    const current = this.runs[until].attempts[testId] ? entries[entries.length - 1] : undefined;
+    const sum = (xs: typeof entries, f: (e: (typeof entries)[number]) => number) => xs.reduce((n, e) => n + f(e), 0);
     return {
+      currentRunAttempts: current?.attempts ?? 0,
+      currentRunFailures: current?.failures.length ?? 0,
+      sameCommitAttempts: sum(sameCommit, (e) => e.attempts),
+      sameCommitFailures: sum(sameCommit, (e) => e.failures.length),
+      passesOnOtherCommits: sum(otherCommits, (e) => e.attempts - e.failures.length),
       testId,
       runs,
       failures: allFailures.length,

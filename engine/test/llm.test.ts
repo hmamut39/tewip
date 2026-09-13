@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import type { Diagnosis, RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { HistoryIndex } from '../history.ts';
 import type { LlmClient } from '../llm/client.ts';
-import type { FailureContext } from '../llm/context.ts';
+import { historyPattern, type FailureContext } from '../llm/context.ts';
 import { llmDiagnose, parseLlmOutput } from '../llm/llm-diagnose.ts';
 import { diagnosePipeline } from '../pipeline.ts';
 import { lastMainFrameDom, notableElements, type FrameSnapshot } from '../trace/dom.ts';
@@ -81,6 +81,21 @@ describe('pipeline routing', () => {
     assert.equal(net.source, 'rules');
     assert.equal(net.category, 'ENV');
     assert.equal(odd.source, 'llm');
+  });
+});
+
+describe('history pattern', () => {
+  it('tells "broken by this commit" apart from "flaky on the same code"', () => {
+    const at = (m: number) => new Date(Date.UTC(2026, 0, 1, 0, m)).toISOString();
+    const fail = (runId: string, m: number, sha: string): TriageRecord => ({
+      schemaVersion: 1, testId: 't', file: 'x', status: 'failed', errorMessage: 'Error: x', errorStack: '', duration: 1, retry: 0, attachments: [], runId, gitSha: sha, timestamp: at(m),
+    });
+    const run = (runId: string, m: number, sha: string, attempts: number): RunSummary => ({
+      schemaVersion: 1, runId, gitSha: sha, startedAt: at(m), finishedAt: at(m), status: 'x', attempts: { t: attempts },
+    });
+    const records = [fail('r3', 3, 'new'), fail('r3', 3, 'new'), fail('r3', 3, 'new')];
+    const index = new HistoryIndex(records, [run('r1', 1, 'old', 1), run('r2', 2, 'old', 1), run('r3', 3, 'new', 3)]);
+    assert.match(historyPattern(index.historyAsOf('t', 'r3')), /every attempt on this commit failed \(3\/3\).*passed 2 time/);
   });
 });
 

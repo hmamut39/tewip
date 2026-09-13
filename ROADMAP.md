@@ -22,10 +22,12 @@ Output: root cause classification + confidence + evidence for each failure; auto
 
 ## Phases
 
+> Order changed on 2026-09-13 at the owner's request: the multi-role outlets (formerly Phase 5) now come before the auto-fix loop (formerly Phase 4), and the outlets now serve the whole senior engineering organisation, not only QA.
+
 ### Phase 1: Collection Layer (DONE)
 Custom reporter writes failure records to JSONL; history script aggregates failure rates and flags SUSPECTED_FLAKY.
 
-### Phase 2: Rule-Based Diagnosis Layer (NEXT — no LLM)
+### Phase 2: Rule-Based Diagnosis Layer (BUILT — coverage target missed on synthetic data: 43.5% vs 50%)
 Create an engine/ directory with a purely deterministic rule engine. Input: one failure record + that test's history. Output: one of the five categories + confidence score + evidence explanation.
 
 Rules must include at minimum:
@@ -39,7 +41,8 @@ Anything the rules cannot decide is marked UNKNOWN with confidence 0 and left fo
 
 Phase metric: run against all collected history and print the coverage ratio (share of non-UNKNOWN classifications). Target ≥ 50%.
 
-### Phase 3: LLM Diagnosis Layer
+### Phase 3: LLM Diagnosis Layer (BUILT — held-out real accuracy 83.2%, see caveats in eval/README.md)
+> Held-out set: 155 real WordPress Gutenberg CI failures (Sep 4–7 2026), labelled by Claude from CI evidence, never used for tuning. 83.2% overall; but on the cases whose labels do not share a signal with the rules, accuracy is 10/36 (recurring cross-branch flakes 0/22, PR-caused REAL_BUG 10/14). TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.
 Handles only the cases Phase 2 marked UNKNOWN.
 - Extract DOM snapshot, network log, and console output from trace.zip; send a structured summary to the model, never raw logs
 - Enforce JSON schema output; the model may only return one of the five categories
@@ -48,18 +51,26 @@ Handles only the cases Phase 2 marked UNKNOWN.
 
 Phase metric: overall classification accuracy ≥ 80%.
 
-### Phase 4: Auto-Fix Loop
+### Phase 4: Multi-Role Outlets (moved up from Phase 5)
+The engine emits one unified diagnosis object. Every view renders that same object, and each one shows the diagnosis's confidence and data source and ends in a concrete next action, not just a status:
+- PR comment (developers): does this failure relate to your change, with the evidence and the suggested fix
+- Engineering-quality view (senior / principal engineers): recurring root-cause patterns, flakiness hotspots by component, test-design debt (hard waits, brittle selectors) ranked by cost
+- Architecture view (architects): cross-cutting fragility, i.e. which modules, shared components and service dependencies cause the most REAL_BUG / ENV failures, and changes that break many suites at once
+- Infrastructure view (senior DevOps / SRE): ENV failures grouped by dependency, runner or service, with the re-run result and a single grouped alert
+- CLI triage board (SDETs): classification + evidence + suggested fix
+- Weekly risk digest (leads / managers): which modules are degrading
+- Release-readiness report (UAT business users): which business flow is broken, in plain language
+
+Phase metric: on a real failed CI run, ≥ 90% of failures appear in the right role's view with a concrete next action and its evidence, and no view ever shows a diagnosis without its confidence and data source.
+
+### Phase 5: Auto-Fix Loop (moved down from Phase 4; gated by the Reality Check Gate)
 Applies to LOCATOR_DRIFT only:
 Pull candidate elements from the DOM snapshot → rank by similarity → generate a new locator → re-run that single test locally → only generate a PR if it passes; discard otherwise.
 
 Phase metric: auto-fix success rate, plus false-positive rate (incorrect fixes must be near zero).
 
-### Phase 5: Four Outlets
-The engine emits one unified diagnosis object, rendered into four views:
-- PR comment (for developers): does this failure relate to your change
-- CLI triage board (for SDETs): classification + evidence + suggested fix
-- Weekly risk digest (for leads/managers): which modules are degrading
-- Release-readiness report (for UAT business users): which business flow is broken, in plain language
+### Beyond Phase 5: Continuous Improvement
+The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example, misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change, and a change that lowers either is reverted.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
@@ -97,17 +108,17 @@ The success criterion is the autonomy rate: the percentage of failures resolved 
 
 The five synthetic test cases in tests/ exist only to build and debug the pipeline. They are NOT evidence that this tool works.
 
-Before Phase 4 begins, this gate must be passed:
+Before the Auto-Fix Loop (Phase 5) begins, this gate must be passed. Phase 4 views may be built before it, but they must label every diagnosis with its confidence and data source:
 
 1. I will collect 100 real failure cases from actual CI runs and hand-label each with one of the five root cause categories. This becomes eval/ground-truth.jsonl
 2. The Phase 2 rule engine and Phase 3 LLM layer are measured against this real dataset, not against synthetic tests
-3. If accuracy on real data is below 80%, do not proceed to Phase 4. Instead, analyze the misclassifications, report which categories are failing and why, and propose rule or prompt changes
+3. If accuracy on real data is below 80%, do not proceed to the Auto-Fix Loop (Phase 5). Instead, analyze the misclassifications, report which categories are failing and why, and propose rule or prompt changes
 
 Never report a metric computed on synthetic test data as if it were a product metric. Always state clearly which dataset a number came from.
 
 ## Anti-Scope-Creep Rules
 
-- Do not add a web UI, dashboard, authentication, or database before Phase 5
+- Do not add a web UI, dashboard, authentication, or database before Phase 4 (Multi-Role Outlets)
 - Do not add support for other test frameworks (Cypress, Selenium, Jest) — Playwright only
 - Do not add multi-tenancy, billing, or user accounts at any phase in this repo
 - If I ask for something outside the current phase, remind me which phase it belongs to and ask whether I want to reorder deliberately

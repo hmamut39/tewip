@@ -6,7 +6,7 @@ import { RULES, type Rule, type RuleInput, type RuleOutcome } from './rules.ts';
 import { readPageSnapshot } from './snapshot.ts';
 
 /** Bump whenever a rule or threshold changes, so stored diagnoses can be recomputed. */
-export const ENGINE_VERSION = 'rules-1';
+export const ENGINE_VERSION = 'rules-2';
 
 /** Subtracted when rules disagree on the category, so the decision is less likely to trigger an autonomous action. */
 const CONFLICT_PENALTY = 0.1;

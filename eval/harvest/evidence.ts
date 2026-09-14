@@ -5,7 +5,7 @@
 // Usage: node eval/harvest/evidence.ts <source> [dataset name, default = source]
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { lastFailedAttempts } from '../evaluate.ts';
+import { lastFailedAttempts } from '../../engine/dataset.ts';
 import { datasetFiles, readJsonl, readRunSummaries, readTriageRecords } from '../../reporters/store.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import { ghApi } from './gh.ts';

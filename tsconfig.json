@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["tests", "reporters", "engine", "eval", "scripts", "fixtures", "playwright.config.ts"]
+  "include": ["tests", "reporters", "engine", "outlets", "eval", "scripts", "fixtures", "playwright.config.ts"]
 }

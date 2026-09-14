@@ -51,7 +51,8 @@ Handles only the cases Phase 2 marked UNKNOWN.
 
 Phase metric: overall classification accuracy ≥ 80%.
 
-### Phase 4: Multi-Role Outlets (moved up from Phase 5)
+### Phase 4: Multi-Role Outlets (moved up from Phase 5) (BUILT — metric met: 223/223 on 41 real failed Gutenberg runs; see caveat)
+> The metric checks routing and completeness of the views, which the code controls, so meeting it says nothing about usefulness. Usefulness needs real users (Definition of Success). Reading the real views exposed a classifier weakness: expected server errors inside error-handling tests are read as ENV.
 The engine emits one unified diagnosis object. Every view renders that same object, and each one shows the diagnosis's confidence and data source and ends in a concrete next action, not just a status:
 - PR comment (developers): does this failure relate to your change, with the evidence and the suggested fix
 - Engineering-quality view (senior / principal engineers): recurring root-cause patterns, flakiness hotspots by component, test-design debt (hard waits, brittle selectors) ranked by cost

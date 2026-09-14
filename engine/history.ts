@@ -31,6 +31,8 @@ export interface TestHistory {
   sameCommitFailures: number;
   /** Passing attempts on other (earlier) commits in the window. */
   passesOnOtherCommits: number;
+  /** Runs on other commits in the window where this test failed at least once. */
+  failingRunsOnOtherCommits: number;
 }
 
 export interface RunContext {
@@ -119,6 +121,7 @@ export class HistoryIndex {
       sameCommitAttempts: sum(sameCommit, (e) => e.attempts),
       sameCommitFailures: sum(sameCommit, (e) => e.failures.length),
       passesOnOtherCommits: sum(otherCommits, (e) => e.attempts - e.failures.length),
+      failingRunsOnOtherCommits: otherCommits.filter((e) => e.failures.length > 0).length,
       testId,
       runs,
       failures: allFailures.length,

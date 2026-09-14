@@ -74,6 +74,12 @@ function failingCode(markdown: string): string[] | null {
     .filter((l) => l.split('|')[1]?.trim());
 }
 
+/** Lines around the failing line of the record's test (comments removed), or null. */
+export function failingCodeOf(record: TriageRecord): string[] | null {
+  const file = errorContextPath(record);
+  return file ? failingCode(readFileSync(file, 'utf8')) : null;
+}
+
 function traceSummary(record: TriageRecord): FailureContext['trace'] {
   const rel = record.attachments.find((a) => a.name === 'trace')?.path;
   if (!rel) return { unavailable: 'no trace attached to this failure' };

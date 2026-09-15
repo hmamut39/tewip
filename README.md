@@ -56,14 +56,27 @@ npm run history       # failure-rate table
 npm run diagnose      # rule-engine classification + coverage metric (add -- --evidence for details)
 npm run eval:synthetic   # rules + LLM vs the synthetic labels (pipeline check, not a product metric)
 npm run eval             # rules + LLM vs your real labels in eval/ground-truth.jsonl
+npm run lab           # drift lab: the full collect -> diagnose -> decide -> auto-fix -> verify loop, locally
 npm run triage        # every role's view for data/ + the phase-4 metric
 npm run triage -- --data data/real/gutenberg-holdout   # the same on real CI data
 npm run test:engine   # unit tests for rules, LLM layer, decide step and views (no network)
 ```
 
+## Auto-fix and the drift lab (Phase 5, in progress)
+
+`engine/autofix/` is the ACT + VERIFY loop for LOCATOR_DRIFT. It finds the failing locator in the spec, then tries up to 3 role-based replacements taken from the failure-time page. It re-runs that one test after each attempt, keeps a change only if the test passes, and otherwise restores the file. These safety rules are built into the code:
+
+- It only edits files inside a sandbox directory, never application code.
+- It refuses tests with no `expect()` after the broken call, because a pass there would prove nothing.
+- It acts only on drift diagnosed by the deterministic `locator-drift` rule above 0.85. On real CI data the AI alone called real bugs "drift" at 0.88–0.96, so AI-only drift goes to a person.
+- Every decision is logged with its reason, and it never pushes or merges.
+
+`npm run lab` runs the whole loop against `lab/app`. Version v1 is what the tests were written for. Version v2 is a release with 6 renamed or re-shaped elements and 5 traps: removed features with look-alike elements, a wrong price, a disabled button, a server outage, and a test without assertions. The ground truth is in `lab/cases.json`. The current result is **5/6 drifted locators fixed and verified, 0/5 false fixes**. This is synthetic data and not a product metric. On 590 real labelled Gutenberg failures, the current rules would auto-fix **0**: every high-confidence drift call there came from the AI alone.
+
 ## Known issues (found on real data)
 
-- **Expected server errors are read as ENV.** Some tests check how the app handles a server rejection, and the failed request is part of that test. The classifier sometimes calls these ENV with high confidence, when the real problem is the app's handling. Seen in Gutenberg run 33916726925.
+- **Drift and real bugs are hard to tell apart.** Measured on the held-out and fresh real sets, real LOCATOR_DRIFT was classified correctly in 1 of 7 cases, and a few real bugs were called drift. The auto-fix safety rule above keeps that from turning into code changes.
+- **Expected server errors (partly fixed).** Tests that deliberately provoke server errors used to be read as ENV. The model is now told when a test's name says it exercises error handling (prompt llm-4).
 - **Views can't tell pull-request branches from the main branch yet.** Records don't store the branch, so regressions inside unmerged PRs count as product bugs in the architecture view and the digest.
 - **Some recurring flakes are misread.** Flaky tests that also fail on other branches are misclassified (0/22 on the held-out set), and TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.
 

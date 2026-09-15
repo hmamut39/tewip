@@ -1,12 +1,14 @@
 // JSONL persistence shared by the reporter, the history script and future layers.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { RunSummary, TriageRecord } from './types.ts';
 
 export const PROJECT_ROOT = join(import.meta.dirname, '..');
 export const DATA_DIR = join(PROJECT_ROOT, 'data');
-export const TRIAGE_FILE = join(DATA_DIR, 'triage.jsonl');
-export const RUNS_FILE = join(DATA_DIR, 'runs.jsonl');
+/** Where the reporter collects failures. TRIAGE_DATA_DIR redirects it (e.g. the drift lab uses data/lab). */
+const COLLECT_DIR = process.env.TRIAGE_DATA_DIR ? resolve(PROJECT_ROOT, process.env.TRIAGE_DATA_DIR) : DATA_DIR;
+export const TRIAGE_FILE = join(COLLECT_DIR, 'triage.jsonl');
+export const RUNS_FILE = join(COLLECT_DIR, 'runs.jsonl');
 
 export function appendJsonl(file: string, rows: readonly unknown[]): void {
   if (rows.length === 0) return;

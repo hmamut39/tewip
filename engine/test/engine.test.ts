@@ -59,6 +59,11 @@ const SHOP_SNAPSHOT = extractPageSnapshot(
 )!;
 
 describe('snapshot parsing', () => {
+  it('finds the snapshot of an expect() failure, which Playwright writes without a heading', () => {
+    const md = '# Error details\n\n```\nError: expect(locator).toBeVisible() failed\n```\n\n```yaml\n- heading "Your order" [level=2]\n```\n\n# Test source\n';
+    assert.deepEqual(extractPageSnapshot(md)?.map((e) => e.name), ['Your order']);
+  });
+
   it('reads roles, names, inline text and refs from an ARIA snapshot', () => {
     assert.deepEqual(SHOP_SNAPSHOT.find((e) => e.ref === 'e7'), { role: 'button', name: 'Proceed to checkout', text: '', ref: 'e7' });
     assert.equal(SHOP_SNAPSHOT.find((e) => e.ref === 'e5')?.text, 'Price: $24.99');
@@ -77,17 +82,21 @@ describe('history index', () => {
 });
 
 describe('ENV rules', () => {
-  it('many tests failing with the same error shape in one run → ENV', () => {
-    const d = diagnoseLast(
-      { a: [NOT_FOUND("locator('#a')")], b: [NOT_FOUND("locator('#b')")], c: [NOT_FOUND("locator('#c')")], d: ['P'] },
-      'a',
-    );
+  it('many tests failing with the same infrastructure error in one run → ENV', () => {
+    const NAV = (path: string) => `TimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to "http://app/${path}"\n`;
+    const d = diagnoseLast({ a: [NAV('a')], b: [NAV('b')], c: [NAV('c')], d: ['P'] }, 'a');
     assert.equal(d.category, 'ENV');
     assert.equal(d.ruleId, 'env-mass-failure');
   });
 
+  it('many tests unable to find their elements is a UI change, not ENV', () => {
+    const d = diagnoseLast({ a: [NOT_FOUND("locator('#a')")], b: [NOT_FOUND("locator('#b')")], c: [NOT_FOUND("locator('#c')")], d: ['P'] }, 'a', []);
+    assert.notEqual(d.category, 'ENV');
+    assert.ok(d.evidence.some((e) => /could not find their elements/.test(e.message)));
+  });
+
   it('many tests failing with different errors is not ENV by itself', () => {
-    const d = diagnoseLast({ a: [NOT_FOUND("locator('#a')")], b: ['Error: x'], c: ['Error: y'] }, 'a', []);
+    const d = diagnoseLast({ a: [NOT_FOUND("locator('#a')")], b: ['Error: x'], c: ['Error: y'] }, 'b', []);
     assert.equal(d.category, 'UNKNOWN');
     assert.ok(d.evidence.some((e) => e.source === 'env-mass-failure' && /different errors/.test(e.message)));
   });

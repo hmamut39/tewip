@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lab Shop</title>
+</head>
+<body>
+  <nav>
+    <a href="#account">My account</a>
+  </nav>
+  <h1>Lab Shop</h1>
+
+  <section id="product">
+    <h2>Trail Running Shoes</h2>
+    <p>Price: <span id="price">$89.00</span></p>
+    <button type="button" id="add">Add to cart</button>
+  </section>
+
+  <section id="cart">
+    <h2>Cart</h2>
+    <p>Items: <span id="cart-count">0</span></p>
+    <button type="button" id="remove">Remove item</button>
+    <label>Promo code <input data-testid="promo-input" id="promo"></label>
+    <button type="button" id="remove-coupon">Remove coupon</button>
+    <button type="button" id="checkout-button">Checkout</button>
+  </section>
+
+  <section id="summary">
+    <h2>Order summary</h2>
+    <button type="button" id="place-order">Place order</button>
+    <p id="order-status">idle</p>
+    <button type="button" id="load-orders">Load orders</button>
+    <p id="orders">not loaded</p>
+  </section>
+
+  <section id="settings">
+    <h2>Settings</h2>
+    <div role="button" tabindex="0" id="save">Save</div>
+    <p id="save-status">unsaved</p>
+    <button type="button" id="delete-account">Delete account</button>
+    <button type="button" id="delete-address">Delete address</button>
+  </section>
+
+  <script>
+    let count = 0;
+    const $ = (id) => document.getElementById(id);
+    const show = () => ($('cart-count').textContent = String(count));
+    $('add').onclick = () => { count += 1; show(); };
+    $('remove').onclick = () => { count = Math.max(0, count - 1); show(); };
+    $('checkout-button').onclick = () => ($('order-status').textContent = 'checking out');
+    $('place-order').onclick = () => ($('order-status').textContent = 'placed');
+    $('save').onclick = () => ($('save-status').textContent = 'saved');
+    $('load-orders').onclick = async () => {
+      const res = await fetch('/api/orders');
+      $('orders').textContent = res.ok ? 'loaded' : `error ${res.status}`;
+    };
+  </script>
+</body>
+</html>

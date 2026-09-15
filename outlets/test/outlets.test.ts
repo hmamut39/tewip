@@ -47,9 +47,10 @@ describe('decide (ROADMAP autonomy table)', () => {
     assert.equal(decide(diagnosis('TEST_DATA')).autonomous, false);
   });
 
-  it('only lets the agent fix code above 0.85', () => {
-    assert.equal(decide(diagnosis('LOCATOR_DRIFT', 0.9)).autonomous, true);
-    assert.equal(decide(diagnosis('LOCATOR_DRIFT', 0.8)).autonomous, false);
+  it('only lets the agent fix a locator above 0.85 and with a deterministic element match', () => {
+    assert.equal(decide(diagnosis('LOCATOR_DRIFT', 0.9, { ruleId: 'locator-drift' })).autonomous, true);
+    assert.equal(decide(diagnosis('LOCATOR_DRIFT', 0.8, { ruleId: 'locator-drift' })).autonomous, false);
+    assert.equal(decide(diagnosis('LOCATOR_DRIFT', 0.95, { source: 'llm' })).autonomous, false, 'AI-only drift goes to a person');
     assert.equal(decide(diagnosis('TIMING', 0.95), { hardWait: 'await page.waitForTimeout(500)' }).autonomous, true);
     assert.equal(decide(diagnosis('TIMING', 0.95)).autonomous, false, 'no hard wait: nothing safe to rewrite');
   });
@@ -60,7 +61,7 @@ describe('decide (ROADMAP autonomy table)', () => {
   });
 
   it('puts the suggested locator into a drift fix', () => {
-    const a = decide(diagnosis('LOCATOR_DRIFT', 0.9), { locator: "locator('#pay')", suggestedLocator: "getByRole('button', { name: 'Pay now' })" });
+    const a = decide(diagnosis('LOCATOR_DRIFT', 0.9, { ruleId: 'locator-drift' }), { locator: "locator('#pay')", suggestedLocator: "getByRole('button', { name: 'Pay now' })" });
     assert.match(a.summary, /getByRole\('button', \{ name: 'Pay now' \}\)/);
   });
 });

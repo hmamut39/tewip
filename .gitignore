@@ -10,6 +10,7 @@ data/*
 # Hand labels for real CI failures describe collected failure data; they stay local too.
 eval/ground-truth.jsonl
 eval/ground-truth.holdout.jsonl
+eval/ground-truth.fresh.jsonl
 
 # Secrets (API keys) never leave this machine.
 .env

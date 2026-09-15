@@ -1,0 +1,14 @@
+{
+  "_comment": "Ground truth for the drift lab: why each test fails on lab/app/v2, and whether an automatic locator fix is the right outcome. Never shown to the agent.",
+  "adds a product to the cart": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "button text Add to cart -> Add to bag" },
+  "starts checkout": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "id checkout-button -> checkout-btn, text unchanged" },
+  "applies a promo code": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "test id promo-input -> coupon-input, label unchanged" },
+  "opens the account page": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "link text My account -> Account" },
+  "shows the order summary": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "heading Order summary -> Your order" },
+  "saves settings": { "cause": "LOCATOR_DRIFT", "fixable": true, "change": "div role=button -> real button, same name" },
+  "removes an item": { "cause": "REAL_BUG", "fixable": false, "change": "Remove item button dropped; Remove coupon is a look-alike trap" },
+  "shows the product price": { "cause": "REAL_BUG", "fixable": false, "change": "price regressed to $98.00" },
+  "places the order": { "cause": "REAL_BUG", "fixable": false, "change": "Place order renders disabled" },
+  "loads past orders": { "cause": "ENV", "fixable": false, "change": "orders API returns 503" },
+  "deletes the account": { "cause": "REAL_BUG", "fixable": false, "change": "Delete account dropped; Delete address is a look-alike trap and the test has no assertion" }
+}

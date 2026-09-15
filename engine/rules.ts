@@ -23,6 +23,8 @@ export interface RuleInput {
   run: RunContext;
   /** Lazy: only rules that need the page snapshot pay for reading it. */
   loadSnapshot: () => SnapshotElement[] | null;
+  /** Lazy: requests that failed (HTTP >= 400 or no response) during the test, from its trace. */
+  loadFailedRequests?: () => Array<{ url: string; status: number | null }>;
 }
 
 export interface RuleOutcome {
@@ -45,13 +47,21 @@ function declined(source: string, message: string, data?: Record<string, unknown
 
 /**
  * Many tests in one run failing with the same error shape → one shared cause outside the
- * tests. Many failures with *different* errors (e.g. a bad deploy) are not enough.
+ * tests. Many failures with *different* errors (e.g. a bad deploy) are not enough, and
+ * neither are many "element not found" timeouts: those share a shape only because the call
+ * log (with each test's own locator) is left out, and they point to a UI change or a broken
+ * page rather than to the environment (found in the drift lab, rules-3).
  */
 const envMassFailure: Rule = {
   id: 'env-mass-failure',
   evaluate({ record, run }) {
+    if (isElementNotFound(record.errorMessage)) {
+      const alike = run.failures.filter((f) => isElementNotFound(f.errorMessage)).length;
+      if (alike >= MASS_MIN_TESTS) return declined(this.id, `${alike} tests in this run could not find their elements: a UI change or a broken page, not by itself an environment signal`);
+      return null;
+    }
     const shape = errorShape(record.errorMessage);
-    const sameShape = new Set(run.failures.filter((f) => errorShape(f.errorMessage) === shape).map((f) => f.testId));
+    const sameShape = new Set(run.failures.filter((f) => !isElementNotFound(f.errorMessage) && errorShape(f.errorMessage) === shape).map((f) => f.testId));
     const failing = new Set(run.failures.map((f) => f.testId));
     const attempted = Math.max(run.testsAttempted, failing.size, 1);
     const share = sameShape.size / attempted;
@@ -159,10 +169,15 @@ const timingFlaky: Rule = {
   },
 };
 
-/** A value mismatch on a test that was reliable until it started failing the same way. */
+/**
+ * A value mismatch on a test that was reliable until it started failing the same way.
+ * Declines when the server failed during the test: the wrong value may come from the
+ * backend (ENV) or from a test that provokes errors on purpose, which only the LLM layer,
+ * seeing the whole trace, can tell apart (rules-3).
+ */
 const realBugAssertion: Rule = {
   id: 'real-bug-assertion',
-  evaluate({ record, history }) {
+  evaluate({ record, history, loadFailedRequests }) {
     const mismatch = valueMismatch(record.errorMessage);
     if (!mismatch) return null;
     const { runs, failingStreak, streakDistinctErrors, failuresBeforeStreak, passesBeforeStreak } = history;
@@ -174,6 +189,10 @@ const realBugAssertion: Rule = {
     }
     if (streakDistinctErrors > 1) {
       return declined(this.id, `value mismatch, but the error changed across the last ${failingStreak} failing runs (${streakDistinctErrors} variants)`);
+    }
+    const serverFailure = (loadFailedRequests?.() ?? []).find((r) => r.status !== null && r.status >= 500);
+    if (serverFailure) {
+      return declined(this.id, `value mismatch (${values}), but ${serverFailure.url} returned ${serverFailure.status} during the test: the backend may explain the wrong value`);
     }
 
     const message =

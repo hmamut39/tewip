@@ -67,14 +67,22 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
         reason: `${conf}: the application is broken, so the test stays as it is`,
       };
     case 'LOCATOR_DRIFT': {
-      const auto = d.confidence > AUTO_FIX_ABOVE;
+      // On real CI data the AI alone called real bugs "drift" at 0.88-0.96, while every correct
+      // lab fix came from the deterministic rule that found the renamed element on the page.
+      // So code changes need that rule's match, not just a high confidence.
+      const matched = d.source === 'rules' && d.ruleId === 'locator-drift';
+      const auto = d.confidence > AUTO_FIX_ABOVE && matched;
       const fix = hints.suggestedLocator ? `Update the locator${target} to ${hints.suggestedLocator}` : `Update the locator${target} to match the renamed element`;
       return {
         kind: 'fix-locator',
         owner: 'sdet',
         autonomous: auto,
         summary: `${fix}, re-run the test, and open a PR only if it passes.`,
-        reason: auto ? `${conf} is above ${AUTO_FIX_ABOVE}: auto-fix eligible (auto-fix loop is Phase 5)` : `${conf} is below ${AUTO_FIX_ABOVE}: an SDET reviews the fix`,
+        reason: auto
+          ? `${conf} is above ${AUTO_FIX_ABOVE} and the page has a matching renamed element: auto-fix eligible`
+          : !matched
+            ? `${conf}, but no deterministic match of a renamed element on the page: an SDET reviews the fix`
+            : `${conf} is below ${AUTO_FIX_ABOVE}: an SDET reviews the fix`,
       };
     }
     case 'TIMING': {

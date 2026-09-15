@@ -38,6 +38,10 @@ node eval/harvest/label-gutenberg.ts gutenberg-holdout eval/ground-truth.holdout
 npm run eval:holdout
 ```
 
+**Fresh set.** `data/real/gutenberg-fresh` (Sep 1–3) was labelled after the prompt-llm-4 change, and nothing was tuned on it. On it the frozen pipeline scored **89.9%** (189 cases). Run it with `npm run eval:fresh`.
+
+**Label rule v2 (2026-09-14).** After reviewing disagreements, one rule was added and applied to every dataset: a non-deterministic failure whose own trace shows a failed request to a third-party host is ENV. It came from failures of the external Openverse API, which v1 had labelled TIMING. The scores before and after the change are kept in the commit history.
+
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.
 - For "passed on retry" cases, the label and the `timing-retry-pass` rule use the same fact, so agreement between them is partly built in.
 - TEST_DATA has no labelled cases, and LOCATOR_DRIFT has almost none.

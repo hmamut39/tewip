@@ -4,9 +4,13 @@ import type { Diagnosis, Evidence, TriageRecord } from '../reporters/types.ts';
 import type { HistoryIndex } from './history.ts';
 import { RULES, type Rule, type RuleInput, type RuleOutcome } from './rules.ts';
 import { readPageSnapshot } from './snapshot.ts';
+import { summarizeTrace } from './trace/trace-summary.ts';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { PROJECT_ROOT } from '../reporters/store.ts';
 
 /** Bump whenever a rule or threshold changes, so stored diagnoses can be recomputed. */
-export const ENGINE_VERSION = 'rules-2';
+export const ENGINE_VERSION = 'rules-3';
 
 /** Subtracted when rules disagree on the category, so the decision is less likely to trigger an autonomous action. */
 const CONFLICT_PENALTY = 0.1;
@@ -53,6 +57,17 @@ export function diagnose(input: RuleInput, now = new Date()): Diagnosis {
   return { ...base, category: winner.outcome.category!, confidence: round2(confidence), ruleId: winner.rule.id, evidence };
 }
 
+/** Requests that failed during the record's test, from its trace; [] when there is no readable trace. */
+function failedRequestsOf(record: TriageRecord): Array<{ url: string; status: number | null }> {
+  const rel = record.attachments.find((a) => a.name === 'trace')?.path;
+  if (!rel || !existsSync(join(PROJECT_ROOT, rel))) return [];
+  try {
+    return summarizeTrace(join(PROJECT_ROOT, rel)).network.failed;
+  } catch {
+    return [];
+  }
+}
+
 /** Diagnoses `targets` using the point-in-time history held by `index`. */
 export function diagnoseRecords(targets: TriageRecord[], index: HistoryIndex, now = new Date()): Diagnosis[] {
   return targets.map((record) =>
@@ -62,6 +77,7 @@ export function diagnoseRecords(targets: TriageRecord[], index: HistoryIndex, no
         history: index.historyAsOf(record.testId, record.runId),
         run: index.runContext(record.runId),
         loadSnapshot: () => readPageSnapshot(record),
+        loadFailedRequests: () => failedRequestsOf(record),
       },
       now,
     ),

@@ -5,8 +5,9 @@
 //   defaults: gutenberg  eval/ground-truth.jsonl  2026-09-08T01:00:00Z
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PROJECT_ROOT, readJsonl } from '../../reporters/store.ts';
-import type { RootCause } from '../../reporters/types.ts';
+import { summarizeTrace } from '../../engine/trace/trace-summary.ts';
+import { PROJECT_ROOT, readJsonl, readTriageRecords } from '../../reporters/store.ts';
+import type { RootCause, TriageRecord } from '../../reporters/types.ts';
 import type { GroundTruthLabel } from '../evaluate.ts';
 import type { Evidence } from './evidence.ts';
 
@@ -34,15 +35,38 @@ const EXCLUDED: Array<{ test: RegExp; error?: RegExp; reason: string }> = [
 const MANUAL: Array<{ test: RegExp; label: RootCause | null; note: string }> = [
   { test: /user-global-styles-revisions\.spec\.js > Style Revisions > should close the revisions panel/, label: 'LOCATOR_DRIFT', note: 'button still exists but its name changed from "Apply the selected revision to your site." to "Reset"; fix only updated the locator' },
   { test: /block-bindings\/post-meta\.spec\.js/, label: null, note: 'Settings tab was removed on purpose; fix deleted the step. Outdated test: no matching category in the taxonomy' },
+  { test: /list\.spec\.js > List \(@firefox\) > should outdent an empty middle item/, label: 'LOCATOR_DRIFT', note: '"Add default block" still exists but its role changed from document to button; fix only changed the role in the locator' },
+  { test: /navigation\.spec\.js > .*can add a page link to an empty link field/, label: 'LOCATOR_DRIFT', note: 'locator started matching 2 elements after a similarly named element appeared; fix only made the name match exact' },
+  { test: /undo\.spec\.js > undo > should be able to undo and redo property cross property changes/, label: 'TIMING', note: 'app now merges title edits made within a second into one undo level; fix only added a wait between the edits' },
+  { test: /preview\.spec\.js > Preview > /, label: 'LOCATOR_DRIFT', note: 'preview dropdown was refactored; fix only replaced the "Preview in new tab" locator' },
+  { test: /post-summary\.spec\.js > .*sets the description of a custom template/, label: 'TEST_DATA', note: 'setup created the template as a WordPress suggestion, so it was not custom and the description field was hidden; fix only changed how the test creates its data' },
 ];
 
-function decide(e: Evidence): { label: RootCause; note: string } | { excluded: string } {
+/**
+ * Label rule v2 (added 2026-09-14 after reviewing disagreements, applied to every case):
+ * a third-party service the test depends on failed during the test, per its own trace.
+ * v1 labelled these TIMING because it never looked at the trace.
+ */
+function externalFailure(record: TriageRecord | undefined): string | null {
+  const trace = record?.attachments.find((a) => a.name === 'trace')?.path;
+  if (!trace) return null;
+  try {
+    const failed = summarizeTrace(join(PROJECT_ROOT, trace)).network.failed.find((f) => !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(f.url));
+    return failed ? `${failed.method} ${failed.url} ${failed.status ?? 'no response'}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCause; note: string } | { excluded: string } {
   const error = e.errorHead.split(' | ')[0];
   const excluded = EXCLUDED.find((x) => x.test.test(e.testId) && (!x.error || x.error.test(e.errorHead)));
 
   if (e.basis === 'passed-on-retry' || e.basis === 'recurs-on-unrelated-branches') {
     const why = e.basis === 'passed-on-retry' ? 'passed on a retry of the same code' : 'fails on unrelated branches and passes elsewhere';
     if (NETWORK.test(e.errorHead)) return { label: 'ENV', note: `${why}; the test lost its connection to the WordPress test server (${error.slice(0, 60)})` };
+    const external = externalFailure(record);
+    if (external) return { label: 'ENV', note: `${why}; a third-party service the test depends on failed during the test (${external})` };
     if (excluded) return { excluded: excluded.reason };
     if (UI_RACE.test(error)) return { label: 'TIMING', note: `${why}; UI wait/assertion that succeeds on another attempt: a race` };
     return { excluded: `non-deterministic, error type not covered by a labelling rule: ${error.slice(0, 60) || '(empty error)'}` };
@@ -72,8 +96,10 @@ function main(): void {
   const perRun = new Map<string, Evidence[]>();
   for (const e of evidence) perRun.set(e.runId, [...(perRun.get(e.runId) ?? []), e]);
 
+  const records = readTriageRecords(join(PROJECT_ROOT, 'data/real', DATASET, 'triage.jsonl'));
+  const recordOf = (e: Evidence) => records.find((r) => r.runId === e.runId && r.testId === e.testId && r.retry === e.retry);
   for (const cases of perRun.values()) {
-    const decided = cases.map((e) => ({ e, d: decide(e) }));
+    const decided = cases.map((e) => ({ e, d: decide(e, recordOf(e)) }));
     const labelled = decided.filter((x) => 'label' in x.d);
     // Spread the cap evenly over the run's (sorted) cases instead of taking the first ones.
     const step = Math.max(1, labelled.length / MAX_CASES_PER_RUN);

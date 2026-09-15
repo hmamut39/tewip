@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import type { Diagnosis, RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { HistoryIndex } from '../history.ts';
 import type { LlmClient } from '../llm/client.ts';
-import { historyPattern, type FailureContext } from '../llm/context.ts';
+import { errorScenarioOf, historyPattern, type FailureContext } from '../llm/context.ts';
 import { llmDiagnose, parseLlmOutput } from '../llm/llm-diagnose.ts';
 import { diagnosePipeline } from '../pipeline.ts';
 import { lastMainFrameDom, notableElements, type FrameSnapshot } from '../trace/dom.ts';
@@ -96,6 +96,14 @@ describe('history pattern', () => {
     const records = [fail('r3', 3, 'new'), fail('r3', 3, 'new'), fail('r3', 3, 'new')];
     const index = new HistoryIndex(records, [run('r1', 1, 'old', 1), run('r2', 2, 'old', 1), run('r3', 3, 'new', 3)]);
     assert.match(historyPattern(index.historyAsOf('t', 'r3')), /every attempt on this commit failed \(3\/3\).*passed 2 time/);
+  });
+});
+
+describe('error-scenario detection', () => {
+  it('flags tests whose name says they provoke failures', () => {
+    assert.match(errorScenarioOf('chromium > upload.spec.js > Upload > does not claim completion for a file the server rejects') ?? '', /rejects/);
+    assert.match(errorScenarioOf('chromium > media.spec.js > Media > recovers from a transient upload failure via automatic retry') ?? '', /transient/);
+    assert.equal(errorScenarioOf('chromium > image.spec.js > Image > can be replaced by dragging'), null);
   });
 });
 

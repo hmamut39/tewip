@@ -6,11 +6,19 @@ import { PROJECT_ROOT } from '../../reporters/store.ts';
 import type { Diagnosis, TriageRecord } from '../../reporters/types.ts';
 import type { RunContext, TestHistory } from '../history.ts';
 import { errorShape, truncate } from '../signature.ts';
-import { errorContextPath } from '../snapshot.ts';
+import { errorContextPath, pageSnapshotYaml } from '../snapshot.ts';
 import { summarizeTrace, type TraceSummary } from '../trace/trace-summary.ts';
 
 export interface FailureContext {
-  test: { id: string; file: string; status: string; durationMs: number; retry: number };
+  test: {
+    id: string;
+    file: string;
+    status: string;
+    durationMs: number;
+    retry: number;
+    /** Set when the test's name says it exercises failure handling: then server errors are expected. */
+    exercisesErrorHandling: string | null;
+  };
   error: { message: string; callLog: string[] };
   /** Lines around the failing line, comments removed. Null when unavailable. */
   failingCode: string[] | null;
@@ -40,6 +48,19 @@ export interface FailureContext {
 
 const CALL_LOG = /\n\s*Call log:/;
 const MAX_ARIA_LINES = 60;
+
+const ERROR_SCENARIO = /\b(rejects?|rejected|errors?|fail(s|ed|ures?)?|retr(y|ies|ying)|offline|timeouts?|invalid|denied|unauthori[sz]ed|forbidden|not allowed|unavailable|exhausting|transient|broken)\b/gi;
+
+/**
+ * The words in a test's name that show it deliberately provokes a failure (e.g. "reports a
+ * server failure", "recovers from a transient upload failure"), or null. In such tests a
+ * failed request is the scenario under test, not evidence of a broken environment.
+ */
+export function errorScenarioOf(testId: string): string | null {
+  const title = testId.split(' > ').slice(-2).join(' > ');
+  const words = [...new Set((title.match(ERROR_SCENARIO) ?? []).map((w) => w.toLowerCase()))];
+  return words.length > 0 ? `test name mentions: ${words.join(', ')}` : null;
+}
 
 function errorPart(message: string): FailureContext['error'] {
   const [head, log = ''] = message.split(CALL_LOG);
@@ -111,11 +132,22 @@ export function historyPattern(h: TestHistory): string {
 export function buildFailureContext(record: TriageRecord, history: TestHistory, run: RunContext, rules: Diagnosis): FailureContext {
   const contextFile = errorContextPath(record);
   const markdown = contextFile ? readFileSync(contextFile, 'utf8') : '';
-  const aria = markdownBlock(markdown, 'Page snapshot')?.map((l) => l.replace(/\s*\[ref=[^\]]+\]/g, '')) ?? null;
+  const aria =
+    pageSnapshotYaml(markdown)
+      ?.split(/\r?\n/)
+      .filter((l) => l.trim() !== '')
+      .map((l) => l.replace(/\s*\[ref=[^\]]+\]/g, '')) ?? null;
   const others = run.failures.filter((f) => f.testId !== record.testId);
 
   return {
-    test: { id: record.testId, file: record.file, status: record.status, durationMs: record.duration, retry: record.retry },
+    test: {
+      id: record.testId,
+      file: record.file,
+      status: record.status,
+      durationMs: record.duration,
+      retry: record.retry,
+      exercisesErrorHandling: errorScenarioOf(record.testId),
+    },
     error: errorPart(record.errorMessage),
     failingCode: markdown ? failingCode(markdown) : null,
     history: {

@@ -13,9 +13,11 @@
     "history": "node scripts/history.ts",
     "diagnose": "node scripts/diagnose.ts",
     "triage": "node scripts/triage.ts",
+    "lab": "node scripts/lab.ts",
     "test:engine": "node --test engine/test/*.test.ts outlets/test/*.test.ts",
     "eval": "node eval/evaluate.ts eval/ground-truth.jsonl --data data/real/gutenberg",
     "eval:holdout": "node eval/evaluate.ts eval/ground-truth.holdout.jsonl --data data/real/gutenberg-holdout",
+    "eval:fresh": "node eval/evaluate.ts eval/ground-truth.fresh.jsonl --data data/real/gutenberg-fresh",
     "harvest": "node eval/harvest/harvest.ts",
     "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
     "typecheck": "tsc --noEmit"

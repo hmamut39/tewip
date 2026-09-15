@@ -33,10 +33,18 @@ export function readPageSnapshot(record: TriageRecord): SnapshotElement[] | null
   return extractPageSnapshot(readFileSync(file, 'utf8'));
 }
 
-/** Pulls the "# Page snapshot" yaml block out of an error-context.md document. */
+/**
+ * The page snapshot yaml of an error-context.md document. Playwright puts it under
+ * "# Page snapshot" for action failures, but for expect() failures it follows the error
+ * details with no heading, so fall back to the first yaml block.
+ */
+export function pageSnapshotYaml(markdown: string): string | null {
+  return markdown.match(/# Page snapshot\s*```yaml\r?\n([\s\S]*?)```/)?.[1] ?? markdown.match(/```yaml\r?\n([\s\S]*?)```/)?.[1] ?? null;
+}
+
 export function extractPageSnapshot(markdown: string): SnapshotElement[] | null {
-  const yaml = markdown.match(/# Page snapshot\s*```yaml\r?\n([\s\S]*?)```/)?.[1];
-  return yaml === undefined ? null : parseAriaSnapshot(yaml);
+  const yaml = pageSnapshotYaml(markdown);
+  return yaml === null ? null : parseAriaSnapshot(yaml);
 }
 
 // - role "name" [attr] [ref=e1]: text

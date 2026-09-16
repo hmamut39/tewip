@@ -51,19 +51,20 @@ async function main(): Promise<void> {
 
   const llm = llmFromEnv();
   const items = await buildItems(imported.records, index, { dataset: `${ctx.repo} CI`, llm });
-  const views = [prCommentView, sdetBoardView, infraView, releaseView].map((view) => view(items, ctx.runId, ctx.repo));
-  for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
-  writeStepSummary(ctx, items);
 
   const github = ctx.token ? new GitHub(ctx.token, ctx.repo, ctx.apiUrl) : null;
   let fixes: FixResult[] = [];
   let fixPr: IssueRef | null = null;
-  if (github && ctx.autofix && items.some((i) => i.action.kind === 'fix-locator' && i.action.autonomous)) {
+  if (github && ctx.autofix && items.some((i) => i.action.kind === 'fix-locator')) {
     const result = await step('auto-fix', () => autofixAndOpenPr(ctx, github, items, imported.records));
     fixes = result?.fixes ?? [];
     fixPr = result?.pr ?? null;
     if (fixPr) log(`opened fix PR ${fixPr.html_url}`);
   }
+  // Written after auto-fix: checking suggestions can revise an item's action and evidence.
+  const views = [prCommentView, sdetBoardView, infraView, releaseView].map((view) => view(items, ctx.runId, ctx.repo));
+  for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
+  writeStepSummary(ctx, items);
   if (github) {
     const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes)));
     if (comment) log(`PR comment: ${comment}`);
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
   writeFileSync(history.triage, [...pastRecords, ...diagnosed].filter((r) => kept.has(r.runId)).map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
 
   const byCategory = [...new Set(items.map((i) => i.diagnosis.category))].map((c) => `${c} ${items.filter((i) => i.diagnosis.category === c).length}`);
-  log(`${items.length} failing test(s): ${byCategory.join(', ') || 'none'}; LLM layer ${llm?.model ?? 'off'}; fixes accepted ${fixes.filter((f) => f.status === 'fixed').length}`);
+  log(`${items.length} failing test(s): ${byCategory.join(', ') || 'none'}; LLM layer ${llm?.model ?? 'off'}; fixes kept ${fixes.filter((f) => f.applied).length}, suggestions checked ${fixes.filter((f) => !f.applied && f.status !== 'not-eligible').length}`);
 }
 
 try {

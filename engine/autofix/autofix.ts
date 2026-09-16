@@ -21,6 +21,8 @@ export interface FixResult {
   testId: string;
   specFile: string;
   status: FixStatus;
+  /** True only when a passing change was kept in the file (a suggestion check restores it). */
+  applied: boolean;
   original?: string;
   replacement?: string;
   line?: number;
@@ -53,12 +55,22 @@ function pickSite(sites: LocatorSite[], line: number | null): LocatorSite | unde
   return sites.find((s) => s.line === line) ?? [...sites].filter((s) => s.line <= line).sort((a, b) => b.line - a.line)[0] ?? sites[0];
 }
 
-export async function attemptFix({ record, diagnosis, action, specFile }: FixInput, deps: AutofixDeps): Promise<FixResult> {
+export interface FixOptions {
+  /**
+   * false = check a suggestion only: run the same loop for a locator fix the agent may not apply
+   * on its own, and restore the file even when a candidate passes. The outcome feeds DECIDE.
+   */
+  keep?: boolean;
+}
+
+export async function attemptFix({ record, diagnosis, action, specFile }: FixInput, deps: AutofixDeps, { keep = true }: FixOptions = {}): Promise<FixResult> {
   const title = record.testId.split(' > ').at(-1) ?? record.testId;
-  const result: FixResult = { testId: record.testId, specFile, status: 'not-eligible', attempts: [], log: [] };
+  const result: FixResult = { testId: record.testId, specFile, status: 'not-eligible', applied: false, attempts: [], log: [] };
   const stop = (status: FixStatus, why: string) => ({ ...result, status, log: [...result.log, why] });
 
-  if (action.kind !== 'fix-locator' || !action.autonomous) return stop('not-eligible', `not an agent-eligible locator fix (${diagnosis.category} at ${diagnosis.confidence.toFixed(2)}, action ${action.kind})`);
+  if (action.kind !== 'fix-locator' || (keep && !action.autonomous)) {
+    return stop('not-eligible', `not an agent-eligible locator fix (${diagnosis.category} at ${diagnosis.confidence.toFixed(2)}, action ${action.kind})`);
+  }
   const rel = relative(resolve(deps.allowedRoot), resolve(specFile));
   if (rel.startsWith('..') || rel.startsWith(sep) || /^[a-zA-Z]:/.test(rel)) return stop('outside-sandbox', `refused: ${specFile} is outside the sandbox ${deps.allowedRoot}`);
 
@@ -82,7 +94,10 @@ export async function attemptFix({ record, diagnosis, action, specFile }: FixInp
     const outcome = await deps.verify(specFile, title);
     result.attempts.push({ candidate: c.expression, passed: outcome.passed, detail: outcome.detail });
     result.log.push(`tried ${c.expression} (similarity ${c.score.toFixed(2)}): ${outcome.passed ? 'test passed' : `test still fails (${outcome.detail})`}`);
-    if (outcome.passed) return { ...result, status: 'fixed', replacement: c.expression };
+    if (outcome.passed) {
+      if (!keep) deps.writeFile(specFile, source);
+      return { ...result, status: 'fixed', applied: keep, replacement: c.expression, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
+    }
     deps.writeFile(specFile, source);
   }
   return stop('all-candidates-failed', `all ${candidates.length} candidate(s) failed verification; original file restored`);
@@ -90,6 +105,6 @@ export async function attemptFix({ record, diagnosis, action, specFile }: FixInp
 
 /** Unified-diff-style summary of an accepted fix, for a PR description. */
 export function fixDiff(fix: FixResult, displayPath: string): string {
-  if (fix.status !== 'fixed' || !fix.original || !fix.replacement) return '';
+  if (!fix.applied || !fix.original || !fix.replacement) return '';
   return [`--- a/${displayPath}`, `+++ b/${displayPath}`, `@@ line ${fix.line} @@`, `-${fix.original}`, `+${fix.replacement}`].join('\n');
 }

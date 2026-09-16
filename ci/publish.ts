@@ -20,7 +20,7 @@ const fit = (body: string, runUrl: string) =>
 export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[]): string {
   const footer = `<sub>[CI run](${ctx.runUrl}) · every role's view is in the \`triage-agent-report\` artifact · triage-agent never merges and never edits application code</sub>`;
   if (items.length === 0) return `## triage-agent: all tests passed on \`${ctx.sha.slice(0, 8)}\`\n\n${footer}`;
-  const accepted = fixes.filter((f) => f.status === 'fixed').length;
+  const accepted = fixes.filter((f) => f.applied).length;
   const fixLine = fixPr
     ? `\n\n**Verified locator fixes: ${fixPr.html_url}** (${accepted} test(s) re-run and passing with the new locator). Review before merging: an intended UI change and a regression can look alike.`
     : '';

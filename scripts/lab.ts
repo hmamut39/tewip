@@ -99,12 +99,12 @@ async function main(): Promise<void> {
 
   const fixable = rows.filter((r) => r.truth?.fixable);
   const notFixable = rows.filter((r) => r.truth && !r.truth.fixable);
-  const fixed = fixable.filter((r) => r.fix.status === 'fixed');
-  const falsePositives = notFixable.filter((r) => r.fix.status === 'fixed');
+  const fixed = fixable.filter((r) => r.fix.applied);
+  const falsePositives = notFixable.filter((r) => r.fix.applied);
   const classified = rows.filter((r) => r.truth && r.item.diagnosis.category === r.truth.cause).length;
 
   mkdirSync(join(WORK, 'fixes'), { recursive: true });
-  const accepted = rows.filter((r) => r.fix.status === 'fixed');
+  const accepted = rows.filter((r) => r.fix.applied);
   const pr = [
     `# Fix ${accepted.length} drifted locator(s) (verified by re-running each test)`,
     '',

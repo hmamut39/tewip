@@ -35,6 +35,40 @@ export interface ActionHints {
 
 const pct = (n: number) => n.toFixed(2);
 
+/**
+ * VERIFY -> DECIDE: what re-running the test with the suggested locator says about a drift
+ * diagnosis. Passing confirms the suggestion; failing with every candidate means the element was
+ * probably not renamed, so a human should check whether the feature itself broke.
+ */
+export function reviseAfterVerification(action: PlannedAction, outcome: { status: string; replacement?: string }): { action: PlannedAction; note: string | null } {
+  if (action.kind !== 'fix-locator') return { action, note: null };
+  if (outcome.status === 'fixed' && outcome.replacement) {
+    return {
+      action: { ...action, summary: `Verified by re-running the test: with ${outcome.replacement} it passes. ${action.summary}`, reason: `${action.reason}; suggestion verified by a re-run` },
+      note: `re-running the test with ${outcome.replacement} passed`,
+    };
+  }
+  if (outcome.status === 'all-candidates-failed') {
+    return {
+      action: {
+        kind: 'escalate',
+        owner: 'sdet',
+        autonomous: false,
+        summary: 'The test still fails with the most similar elements on the page, so this is probably not a renamed element: check whether the feature itself still works (possible real bug) before touching the test.',
+        reason: `${action.reason}; every suggested locator failed a re-run`,
+      },
+      note: 'every suggested replacement locator failed when the test was re-run',
+    };
+  }
+  if (outcome.status === 'no-assertion') {
+    return {
+      action: { ...action, summary: `${action.summary} Cannot be verified automatically: the test has no assertion after this step, so check by hand that the new element is the intended one.` },
+      note: 'the suggestion cannot be verified: the test has no assertion after the failing step',
+    };
+  }
+  return { action, note: null };
+}
+
 export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
   const conf = `${d.category} at confidence ${pct(d.confidence)}`;
   const target = hints.locator ? ` ${hints.locator}` : '';

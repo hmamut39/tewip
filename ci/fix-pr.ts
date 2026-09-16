@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { attemptFix, fixDiff, type FixResult } from '../engine/autofix/autofix.ts';
+import { reviseAfterVerification } from '../engine/decide.ts';
 import { readPageSnapshot } from '../engine/snapshot.ts';
 import type { TriageItem } from '../outlets/items.ts';
 import { clean } from '../outlets/view.ts';
@@ -78,12 +79,15 @@ export async function autofixAndOpenPr(
   items: TriageItem[],
   records: TriageRecord[],
 ): Promise<{ fixes: FixResult[]; pr: IssueRef | null }> {
-  const eligible = items.filter((i) => i.action.kind === 'fix-locator' && i.action.autonomous);
+  // Agent-eligible fixes are applied and kept; every other locator suggestion is checked the same
+  // way but restored, and the outcome updates the item's action (VERIFY feeding DECIDE).
+  const suggestions = items.filter((i) => i.action.kind === 'fix-locator');
   const fixes: FixResult[] = [];
   const accepted: Array<{ fix: FixResult; item: TriageItem }> = [];
-  for (const item of eligible) {
+  for (const item of suggestions) {
     const record = records.find((r) => r.runId === item.runId && r.testId === item.testId);
     if (!record) continue;
+    const keep = item.action.autonomous;
     const fix = await attemptFix(
       { record, diagnosis: item.diagnosis, action: item.action, specFile: join(ctx.workspace, record.file) },
       {
@@ -93,9 +97,19 @@ export async function autofixAndOpenPr(
         verify: verifier(ctx),
         loadSnapshot: readPageSnapshot,
       },
+      { keep },
     );
     fixes.push(fix);
-    if (fix.status === 'fixed') accepted.push({ fix, item });
+    if (keep && fix.status === 'fixed') {
+      accepted.push({ fix, item });
+      continue;
+    }
+    const { action, note } = reviseAfterVerification(item.action, fix);
+    item.action = action;
+    if (note) {
+      item.diagnosis = { ...item.diagnosis, evidence: [{ source: 'verify', message: note }, ...item.diagnosis.evidence] };
+      item.evidence = [note, ...item.evidence].slice(0, 3);
+    }
   }
   if (accepted.length === 0) return { fixes, pr: null };
 

@@ -5,7 +5,7 @@
 // Usage: node eval/harvest/harvest.ts <source> --from YYYY-MM-DD --to YYYY-MM-DD [--dataset name] [--max-runs N] [--concurrency 4]
 import { join } from 'node:path';
 import { appendJsonl, datasetFiles, readJsonl } from '../../reporters/store.ts';
-import { importBlobArtifact } from './blob-import.ts';
+import { importBlobArtifact } from '../../engine/import/blob.ts';
 import { downloadArtifact, ghApi } from './gh.ts';
 
 export const SOURCES: Record<string, { repo: string; workflow: string; artifact: string }> = {
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
         return;
       }
       const zip = await downloadArtifact(config.repo, artifact.id);
-      const result = importBlobArtifact(zip, { runId, gitSha: run.head_sha }, join(files.dir, 'files', String(run.id)));
+      const result = importBlobArtifact(zip, { runId, gitSha: run.head_sha, branch: run.head_branch }, join(files.dir, 'files', String(run.id)));
       appendJsonl(files.triage, result.records);
       appendJsonl(files.runs, [result.summary]);
       appendJsonl(metaFile(dataset), [

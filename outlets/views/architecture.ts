@@ -20,7 +20,17 @@ export function architectureView(items: TriageItem[], dataset: string): View {
     .map((component) => {
       const xs = items.filter((i) => i.component === component);
       const count = (c: string) => xs.filter((i) => i.diagnosis.category === c).length;
-      return { component, total: xs.length, bug: count('REAL_BUG'), env: count('ENV'), timing: count('TIMING') };
+      const bugs = xs.filter((i) => i.diagnosis.category === 'REAL_BUG');
+      // Regressions a pull request introduced and CI caught before merge are the process working,
+      // not fragility of the main branch, so they are counted apart.
+      return {
+        component,
+        total: xs.length,
+        bug: bugs.filter((i) => i.onDefaultBranch).length,
+        caught: bugs.filter((i) => !i.onDefaultBranch).length,
+        env: count('ENV'),
+        timing: count('TIMING'),
+      };
     })
     .sort((a, b) => b.bug + b.env - (a.bug + a.env) || b.total - a.total)
     .slice(0, 12);
@@ -42,9 +52,9 @@ export function architectureView(items: TriageItem[], dataset: string): View {
     '',
     '## Fragility by area',
     '',
-    '| Area | Failing cases | Product bugs | Environment | Flaky |',
-    '|---|---:|---:|---:|---:|',
-    ...areas.map((a) => `| ${clean(a.component)} | ${a.total} | ${a.bug} | ${a.env} | ${a.timing} |`),
+    '| Area | Failing cases | Product bugs (main branch) | Regressions caught in PRs | Environment | Flaky |',
+    '|---|---:|---:|---:|---:|---:|',
+    ...areas.map((a) => `| ${clean(a.component)} | ${a.total} | ${a.bug} | ${a.caught} | ${a.env} | ${a.timing} |`),
     '',
     `Next action: review the top area's dependencies and shared components first; product bugs and environment failures there cost every team.`,
     '',
@@ -53,7 +63,7 @@ export function architectureView(items: TriageItem[], dataset: string): View {
     ...(wideBreaks.length === 0
       ? ['None in this window.', '']
       : wideBreaks.flatMap((b) => [
-          `### Commit \`${b.xs[0].commit.slice(0, 8)}\` (run ${clean(b.xs[0].runId)}): ${b.xs.length} test(s) across ${b.areas.length} area(s)`,
+          `### Commit \`${b.xs[0].commit.slice(0, 8)}\` (run ${clean(b.xs[0].runId)}${b.xs[0].onDefaultBranch ? '' : `, pull request branch ${clean(b.xs[0].branch)}, caught before merge`}): ${b.xs.length} test(s) across ${b.areas.length} area(s)`,
           `Areas: ${b.areas.map(clean).join(', ')}.`,
           'Next action: look at what this commit changed in shared code; one change breaking this many suites points to tight coupling.',
           '',

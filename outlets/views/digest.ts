@@ -1,7 +1,7 @@
 // Risk digest for leads / managers: which areas are getting worse, comparing the first and
 // second half of the data window (a weekly digest when the window is two weeks).
 import type { RunSummary } from '../../reporters/types.ts';
-import { componentOf, type TriageItem } from '../items.ts';
+import { componentOf, isDefaultBranch, type TriageItem } from '../items.ts';
 import { clean, itemBlock, PLAIN_CATEGORY, sourceNote, type View } from '../view.ts';
 
 /** Degrading: the failure rate grew by at least this factor, with at least MIN_FAILURES in the later half. */
@@ -11,7 +11,13 @@ const MIN_FAILURES = 3;
 /** Spec file inside a test id ("chromium > editor/blocks/image.spec.js > ..."), or its first segment. */
 const fileOfTestId = (testId: string) => testId.split(' > ').find((s) => /\.(spec|test)\.[jt]sx?$/.test(s)) ?? testId.split(' > ')[0];
 
-export function digestView(items: TriageItem[], summaries: RunSummary[], dataset: string): View {
+export function digestView(allItems: TriageItem[], allSummaries: RunSummary[], dataset: string): View {
+  // Leads care about the main branch: pull-request runs fail on unfinished work by design.
+  const mainRuns = allSummaries.filter((s) => isDefaultBranch(s.branch ?? ''));
+  const mainOnly = mainRuns.length >= 2 && mainRuns.length < allSummaries.length;
+  const summaries = mainOnly ? mainRuns : allSummaries;
+  const items = mainOnly ? allItems.filter((i) => i.onDefaultBranch) : allItems;
+  const scope = mainOnly ? `${summaries.length} main-branch runs (pull-request runs left out)` : `all ${summaries.length} runs`;
   const times = summaries.map((s) => s.startedAt).sort();
   const middle = times[Math.floor(times.length / 2)] ?? '';
   const half = (at: string) => (at < middle ? 0 : 1);
@@ -49,7 +55,7 @@ export function digestView(items: TriageItem[], summaries: RunSummary[], dataset
   const markdown = [
     '# Risk digest',
     '',
-    `Comparing ${period(0)} with ${period(1)}. ${rows.length === 0 ? 'No area got noticeably worse.' : `${rows.length} area(s) got worse.`}`,
+    `Comparing ${period(0)} with ${period(1)}, over ${scope}. ${rows.length === 0 ? 'No area got noticeably worse.' : `${rows.length} area(s) got worse.`}`,
     '',
     sourceNote(dataset),
     '',

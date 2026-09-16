@@ -37,6 +37,8 @@ export interface TestHistory {
 
 export interface RunContext {
   runId: string;
+  /** Branch the run tested; '' when unknown. */
+  branch: string;
   /** Distinct tests attempted in the run. */
   testsAttempted: number;
   failures: TriageRecord[];
@@ -48,6 +50,7 @@ interface RunEntry {
   at: string;
   /** Git commit the run tested; '' when unknown. */
   sha: string;
+  branch: string;
   attempts: Record<string, number>;
   failures: TriageRecord[];
 }
@@ -67,13 +70,14 @@ export class HistoryIndex {
         existing.sha ||= sha;
         return existing;
       }
-      const created: RunEntry = { runId, at, sha, attempts: {}, failures: [] };
+      const created: RunEntry = { runId, at, sha, branch: '', attempts: {}, failures: [] };
       entries.set(runId, created);
       return created;
     };
 
     for (const s of summaries) {
       const e = entry(s.runId, s.startedAt, s.gitSha);
+      e.branch ||= s.branch ?? '';
       for (const [testId, n] of Object.entries(s.attempts)) e.attempts[testId] = (e.attempts[testId] ?? 0) + n;
     }
     for (const r of records) entry(r.runId, r.timestamp, r.gitSha).failures.push(r);
@@ -136,7 +140,7 @@ export class HistoryIndex {
 
   runContext(runId: string): RunContext {
     const e = this.runs[this.indexOf(runId)];
-    return { runId, testsAttempted: Object.keys(e.attempts).length, failures: e.failures };
+    return { runId, branch: e.branch, testsAttempted: Object.keys(e.attempts).length, failures: e.failures };
   }
 
   private indexOf(runId: string): number {

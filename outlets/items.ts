@@ -22,6 +22,9 @@ export interface TriageItem {
   /** Area of the product the test covers, from its spec path (e.g. "editor/blocks"). */
   component: string;
   commit: string;
+  /** Branch of the run ('' when unknown), and whether it is the default branch (main/master/trunk). */
+  branch: string;
+  onDefaultBranch: boolean;
   timestamp: string;
   /** Failed attempts of this test in this run, and the CI time they took. */
   failedAttempts: number;
@@ -38,6 +41,11 @@ export interface TriageItem {
   debt: DesignDebt[];
   locator?: string;
 }
+
+const DEFAULT_BRANCHES = new Set((process.env.TRIAGE_DEFAULT_BRANCH ?? 'main,master,trunk').split(','));
+
+/** Unknown branches count as default: without branch data, failures are treated as before. */
+export const isDefaultBranch = (branch: string) => !branch || DEFAULT_BRANCHES.has(branch);
 
 /** Product area from a spec path: its first two folders, or the spec name when it has none. */
 export function componentOf(file: string): string {
@@ -83,6 +91,7 @@ export async function buildItems(records: TriageRecord[], index: HistoryIndex, {
   return cases.map((record, i) => {
     const d = diagnoses[i];
     const history = index.historyAsOf(record.testId, record.runId);
+    const { branch } = index.runContext(record.runId);
     const attempts = failedAttempts.get(`${record.runId} ${record.testId}`) ?? [record];
     const locator = extractLocator(record.errorMessage) ?? undefined;
     const debt = designDebt(locator ?? null, failingCodeOf(record));
@@ -95,6 +104,8 @@ export async function buildItems(records: TriageRecord[], index: HistoryIndex, {
       file: record.file,
       component,
       commit: record.gitSha,
+      branch,
+      onDefaultBranch: isDefaultBranch(branch),
       timestamp: record.timestamp,
       failedAttempts: attempts.length,
       wastedMs: attempts.reduce((sum, a) => sum + a.duration, 0),

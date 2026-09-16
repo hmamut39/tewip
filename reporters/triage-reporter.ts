@@ -4,7 +4,7 @@ import type { FullResult, Reporter, TestCase, TestResult } from '@playwright/tes
 import { HistoryIndex } from '../engine/history.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
-import { resolveGitSha, resolveRunId } from './run-context.ts';
+import { resolveBranch, resolveGitSha, resolveRunId } from './run-context.ts';
 import { appendJsonl, PROJECT_ROOT, readRunSummaries, readTriageRecords, RUNS_FILE, TRIAGE_FILE } from './store.ts';
 import { SCHEMA_VERSION, type RunSummary, type TriageAttachment, type TriageRecord } from './types.ts';
 
@@ -46,6 +46,7 @@ export default class TriageReporter implements Reporter {
       schemaVersion: SCHEMA_VERSION,
       runId: this.runId,
       gitSha: this.gitSha,
+      branch: resolveBranch(),
       startedAt: this.startedAt,
       finishedAt: new Date().toISOString(),
       status: result.status,

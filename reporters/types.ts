@@ -72,6 +72,8 @@ export interface RunSummary {
   schemaVersion: number;
   runId: string;
   gitSha: string;
+  /** Branch the run tested (e.g. main, or a pull request's branch); empty when unknown. */
+  branch?: string;
   startedAt: string;
   finishedAt: string;
   /** Overall result reported by Playwright. */

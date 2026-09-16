@@ -14,3 +14,8 @@ export function resolveRunId(): string {
 export function resolveGitSha(): string {
   return process.env.GIT_SHA || process.env.GITHUB_SHA || '';
 }
+
+/** On pull requests GitHub sets GITHUB_HEAD_REF (the PR branch); on pushes GITHUB_REF_NAME. */
+export function resolveBranch(): string {
+  return process.env.GIT_BRANCH || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
+}

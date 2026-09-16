@@ -2,7 +2,67 @@
 
 A triage agent for Playwright test failures. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-**Status: phases 1 to 4 are built.** Those are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. Held-out accuracy on 155 real Gutenberg CI failures is 83.2%; the caveats are in [eval/README.md](eval/README.md). Phase 5 (auto-fix) is next on the roadmap.
+**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 89.9%; the caveats are in [eval/README.md](eval/README.md).
+
+## Use it in your project
+
+### 1. In GitHub CI (developers, SDETs, DevOps)
+
+Tell Playwright to write a blob report in CI. It's a built-in reporter, so there's no triage-agent code in your config:
+
+```ts
+// playwright.config.ts
+reporter: process.env.CI ? [['list'], ['blob']] : 'list',
+use: { trace: 'retain-on-failure' },
+```
+
+Then add one step after your tests:
+
+```yaml
+permissions:
+  contents: write        # only needed for autofix
+  pull-requests: write
+  issues: write
+
+steps:
+  # ... checkout, install, npx playwright test ...
+  - name: triage-agent
+    if: always()
+    uses: hmamut39/triage-agent@main
+    with:
+      openai-api-key: ${{ secrets.OPENAI_API_KEY }}   # optional: without it only the rules run
+      autofix: 'true'                                  # optional: verified locator-fix PRs
+```
+
+On every run, the action:
+- **Developers:** posts one diagnosis comment on the pull request and keeps it updated. For each failure it says whether the change likely caused it, why, and what to do next.
+- **SDETs:** writes the triage board into the job summary.
+- **DevOps:** collects environment failures (server errors, connection resets, outages) in **one** GitHub issue, and each new run adds a single grouped comment to it.
+- **Fixes (`autofix: true`):** for drifted locators that the deterministic rule matched to a renamed element, it rewrites the locator, re-runs that test, and opens a separate pull request with the changes that passed. It never merges and never edits application code.
+- **Every role:** uploads all role views as the `triage-agent-report` artifact.
+- **History:** keeps the run history in the Actions cache, never in git.
+
+The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
+
+### 2. From any AI assistant, through MCP (the whole IT team)
+
+`mcp/server.ts` is a read-only [Model Context Protocol](https://modelcontextprotocol.io) server. Anyone on the team can ask their own assistant about test failures, in the editor or chat they already use:
+
+| Ask your assistant | Tool it uses |
+|---|---|
+| "Why did CI fail on PR 12 in our-org/web?" | `github_ci_report`: the latest CI report for that PR, plus any verified fix PR |
+| "Explain the failing checkout test" | `explain_failure`: root cause, confidence, evidence, history on this commit vs others, next action |
+| "What should I fix first from the last run?" | `triage_board` (SDET) · `pr_impact` (developer) |
+| "Is the test environment broken?" | `environment_report` (DevOps / SRE) |
+| "Can we release?" | `release_readiness` (business / UAT) |
+| "Where is our test suite fragile?" | `quality_report` (senior / principal) · `architecture_report` (architect) · `risk_digest` (lead) |
+
+Setup, after `npm install`:
+
+- **Claude Code** in this repo: [.mcp.json](.mcp.json) is already here, so approve `triage-agent` when asked. From anywhere else, run `claude mcp add triage-agent -- node /path/to/triage-agent/mcp/server.ts`.
+- **Claude Desktop, Cursor, VS Code, and other MCP clients:** add a stdio server with command `node` and args `["/path/to/triage-agent/mcp/server.ts"]`.
+
+`github_ci_report` uses the `gh` CLI login on your machine. The other tools read the datasets under `data/`, and the AI layer uses `OPENAI_API_KEY` from `.env`.
 
 ## How it works
 

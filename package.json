@@ -14,7 +14,8 @@
     "diagnose": "node scripts/diagnose.ts",
     "triage": "node scripts/triage.ts",
     "lab": "node scripts/lab.ts",
-    "test:engine": "node --test engine/test/*.test.ts outlets/test/*.test.ts",
+    "test:engine": "node --test engine/test/*.test.ts outlets/test/*.test.ts mcp/test/*.test.ts",
+    "mcp": "node mcp/server.ts",
     "eval": "node eval/evaluate.ts eval/ground-truth.jsonl --data data/real/gutenberg",
     "eval:holdout": "node eval/evaluate.ts eval/ground-truth.holdout.jsonl --data data/real/gutenberg-holdout",
     "eval:fresh": "node eval/evaluate.ts eval/ground-truth.fresh.jsonl --data data/real/gutenberg-fresh",
@@ -27,5 +28,9 @@
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.5.1",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
   }
 }

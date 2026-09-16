@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["tests", "reporters", "engine", "outlets", "ci", "eval", "scripts", "fixtures", "lab", "playwright.config.ts"]
+  "include": ["tests", "reporters", "engine", "outlets", "ci", "mcp", "eval", "scripts", "fixtures", "lab", "playwright.config.ts"]
 }

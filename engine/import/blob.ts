@@ -60,7 +60,13 @@ function titlesOf(events: BlobEvent[], workspace?: string): Map<string, { id: st
       } else walk(e.entries, [...path, e.title], f, testDir);
     }
   };
-  for (const e of events.filter((x) => x.method === 'onProject')) walk(e.params.project.suites, [e.params.project.name], '', e.params.project.testDir ?? '');
+  // Blob reports store suite paths relative to config.rootDir (absolute) and the project's testDir
+  // relative to that root, often empty.
+  const rootDir: string = events.find((x) => x.method === 'onConfigure')?.params.config.rootDir ?? '';
+  for (const e of events.filter((x) => x.method === 'onProject')) {
+    const testDir: string = e.params.project.testDir ?? '';
+    walk(e.params.project.suites, [e.params.project.name], '', rootDir ? join(rootDir, testDir) : testDir);
+  }
   return out;
 }
 

@@ -1,0 +1,72 @@
+name: triage-agent
+description: Diagnose Playwright test failures, comment on the pull request, group environment failures into one issue, and open verified locator-fix pull requests for review.
+author: hmamut39
+
+inputs:
+  github-token:
+    description: Token used to comment, open issues and fix pull requests. Needs contents, pull-requests and issues write permissions.
+    default: ${{ github.token }}
+  openai-api-key:
+    description: Optional. Turns on the AI layer for failures the rules cannot decide. Without it only the rules run.
+    default: ''
+  blob-report-dir:
+    description: Where Playwright's blob reporter wrote its report.
+    default: blob-report
+  post-pr-comment:
+    description: Post (and keep updating) one diagnosis comment on the pull request.
+    default: 'true'
+  env-issue:
+    description: Collect environment failures in one GitHub issue instead of paging per test.
+    default: 'true'
+  autofix:
+    description: Rewrite drifted locators the deterministic rule matched above 0.85, re-run each test, and open a fix pull request with the ones that pass.
+    default: 'false'
+  verify-command:
+    description: Command that runs Playwright tests; auto-fix appends the spec, a grep for the test title and --reporter=json.
+    default: npx playwright test
+  tests-dir:
+    description: Directory auto-fix may edit. Files outside it are never changed.
+    default: tests
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node for triage-agent
+      uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+
+    - name: Restore triage history
+      uses: actions/cache/restore@v4
+      with:
+        path: .triage-agent/history
+        key: triage-agent-history-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: triage-agent-history-
+
+    - name: Diagnose failures and deliver
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/ci/run.ts"
+      env:
+        TRIAGE_GITHUB_TOKEN: ${{ inputs.github-token }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        TRIAGE_BLOB_DIR: ${{ inputs.blob-report-dir }}
+        TRIAGE_POST_PR_COMMENT: ${{ inputs.post-pr-comment }}
+        TRIAGE_ENV_ISSUE: ${{ inputs.env-issue }}
+        TRIAGE_AUTOFIX: ${{ inputs.autofix }}
+        TRIAGE_VERIFY_COMMAND: ${{ inputs.verify-command }}
+        TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
+
+    - name: Save triage history
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: .triage-agent/history
+        key: triage-agent-history-${{ github.run_id }}-${{ github.run_attempt }}
+
+    - name: Upload every role's view
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: triage-agent-report
+        path: .triage-agent/out
+        if-no-files-found: ignore

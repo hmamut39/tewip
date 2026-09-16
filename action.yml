@@ -3,6 +3,9 @@ description: Diagnose Playwright test failures, comment on the pull request, gro
 author: hmamut39
 
 inputs:
+  mode:
+    description: "triage (default): diagnose this run's failures and deliver. report: build the team report (quality, architecture, risk digest) from the stored history, for scheduled workflows."
+    default: triage
   github-token:
     description: Token used to comment, open issues and fix pull requests. Needs contents, pull-requests and issues write permissions.
     default: ${{ github.token }}
@@ -45,7 +48,7 @@ runs:
 
     - name: Diagnose failures and deliver
       shell: bash
-      run: node "$GITHUB_ACTION_PATH/ci/run.ts"
+      run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || 'run' }}.ts"
       env:
         TRIAGE_GITHUB_TOKEN: ${{ inputs.github-token }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
@@ -57,7 +60,7 @@ runs:
         TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
 
     - name: Save triage history
-      if: always()
+      if: always() && inputs.mode != 'report'
       uses: actions/cache/save@v4
       with:
         path: .triage-agent/history

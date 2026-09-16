@@ -79,12 +79,17 @@ export interface BuildOptions {
   /** Shown next to every diagnosis as its data source. */
   dataset: string;
   llm: LlmClient | null;
+  /** Use the diagnosis stored on a record (e.g. by CI) instead of diagnosing it again. */
+  reuseStoredDiagnoses?: boolean;
 }
 
 /** Diagnoses every failed test of every run in `records` and wraps each as a TriageItem. */
-export async function buildItems(records: TriageRecord[], index: HistoryIndex, { dataset, llm }: BuildOptions): Promise<TriageItem[]> {
+export async function buildItems(records: TriageRecord[], index: HistoryIndex, { dataset, llm, reuseStoredDiagnoses = false }: BuildOptions): Promise<TriageItem[]> {
   const cases = lastFailedAttempts(records);
-  const diagnoses = await diagnosePipeline(cases, index, llm);
+  const stored = reuseStoredDiagnoses ? cases.map((c) => c.diagnosis) : cases.map(() => undefined);
+  const missing = cases.filter((_, i) => !stored[i]);
+  const fresh = await diagnosePipeline(missing, index, llm);
+  const diagnoses = stored.map((d) => d ?? fresh.shift()!);
   const failedAttempts = new Map<string, TriageRecord[]>();
   for (const r of records) failedAttempts.set(`${r.runId} ${r.testId}`, [...(failedAttempts.get(`${r.runId} ${r.testId}`) ?? []), r]);
 

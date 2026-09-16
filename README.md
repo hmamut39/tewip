@@ -42,7 +42,24 @@ On every run, the action:
 - **Every role:** uploads all role views as the `triage-agent-report` artifact.
 - **History:** keeps the run history in the Actions cache, never in git.
 
-The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
+For **senior engineers, architects and leads**, add a scheduled workflow with `mode: report`, for example weekly. It builds the engineering-quality, architecture and risk-digest views from the stored CI history, reusing earlier diagnoses so it makes no repeat AI calls. The views are kept in one GitHub issue that each report updates:
+
+```yaml
+on:
+  schedule: [{ cron: '0 6 * * 1' }]
+  workflow_dispatch:
+permissions: { contents: read, issues: write }
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hmamut39/triage-agent@main
+        with: { mode: report }
+```
+
+The report reads the history cache of the branch it runs on, usually the default branch.
+
+The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. Pull requests opened by the workflow token don't trigger CI themselves; the agent verified each change by re-running the test before opening the PR. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
 
 ### 2. From any AI assistant, through MCP (the whole IT team)
 

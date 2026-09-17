@@ -77,7 +77,7 @@ Pull candidate elements from the DOM snapshot → rank by similarity → generat
 Phase metric: auto-fix success rate, plus false-positive rate (incorrect fixes must be near zero).
 
 ### Beyond Phase 5: Continuous Improvement
-The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example, misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change, and a change that lowers either is reverted.
+The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example, misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

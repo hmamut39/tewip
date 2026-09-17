@@ -10,7 +10,7 @@ import type { PlannedAction } from '../decide.ts';
 import { extractLocator } from '../error-parse.ts';
 import type { SnapshotElement } from '../snapshot.ts';
 import type { Diagnosis, TriageRecord } from '../../reporters/types.ts';
-import { candidatesFor } from './candidates.ts';
+import { candidatesFor, strictCandidates } from './candidates.ts';
 import { failingLine, findLocatorSites, hasAssertionAfter, type LocatorSite } from './locate.ts';
 
 export const MAX_CANDIDATES = 3;
@@ -85,7 +85,7 @@ export async function attemptFix({ record, diagnosis, action, specFile }: FixInp
   if (!hasAssertionAfter(source, site.line)) return stop('no-assertion', 'refused: the test has no expect() after this call, so a passing re-run would not prove the fix');
 
   const snapshot = deps.loadSnapshot(record) ?? [];
-  const candidates = candidatesFor(locator, snapshot, MAX_CANDIDATES);
+  const candidates = [...strictCandidates(diagnosis), ...candidatesFor(locator, snapshot, MAX_CANDIDATES)].slice(0, MAX_CANDIDATES);
   if (candidates.length === 0) return stop('no-candidate', 'no element on the failure-time page is similar enough to the old locator');
 
   for (const c of candidates) {

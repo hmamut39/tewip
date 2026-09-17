@@ -2,9 +2,9 @@
 // A rule returns null when it doesn't apply, or an outcome with category null when it
 // looked and declined; the declined evidence tells phase 3 what was already ruled out.
 import type { Evidence, RootCause, TriageRecord } from '../reporters/types.ts';
-import { extractLocator, isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
+import { isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
+import { locatorDrift, locatorDriftStrict } from './drift-rules.ts';
 import type { RunContext, TestHistory } from './history.ts';
-import { describeElement, rankCandidates } from './similarity.ts';
 import { errorScenarioOf } from './llm/context.ts';
 import { errorShape, truncate } from './signature.ts';
 import type { SnapshotElement } from './snapshot.ts';
@@ -14,9 +14,7 @@ export const MASS_MIN_SHARE = 0.3;
 export const FLAKY_MIN_RATE = 0.2;
 export const FLAKY_MAX_RATE = 0.8;
 export const TIMING_MIN_RUNS = 3;
-export const DRIFT_MIN_SIMILARITY = 0.6;
-/** Best and runner-up drift candidates closer than this are treated as ambiguous. */
-const DRIFT_AMBIGUITY_GAP = 0.05;
+export { DRIFT_MIN_SIMILARITY } from './drift-rules.ts';
 
 export interface RuleInput {
   record: TriageRecord;
@@ -97,38 +95,6 @@ const envNetwork: Rule = {
       confidence: signal.confidence,
       evidence: [{ source: this.id, message: `error shows a ${signal.kind} problem: "${truncate(signal.match, 60)}"`, data: { ...signal } }],
     };
-  },
-};
-
-const locatorDrift: Rule = {
-  id: 'locator-drift',
-  evaluate({ record, loadSnapshot }) {
-    if (!isElementNotFound(record.errorMessage)) return null;
-    const locator = extractLocator(record.errorMessage);
-    if (!locator) return declined(this.id, 'element not found, but the locator could not be read from the error');
-    const snapshot = loadSnapshot();
-    if (!snapshot) return declined(this.id, `${locator} not found; no page snapshot to look for a renamed element`, { locator });
-
-    const [best, second] = rankCandidates(locator, snapshot);
-    if (!best || best.score < DRIFT_MIN_SIMILARITY) {
-      const closest = best ? `closest: ${describeElement(best.element)} at ${best.score.toFixed(2)}` : `none of ${snapshot.length} elements share a word with it`;
-      return declined(this.id, `${locator} not found and nothing similar is on the page (${closest})`, { locator });
-    }
-
-    const candidate = best.element;
-    const evidence: Evidence[] = [
-      {
-        source: this.id,
-        message: `${locator} not found, but the page has ${describeElement(candidate)} (similarity ${best.score.toFixed(2)})`,
-        data: { locator, candidate, similarity: best.score },
-      },
-    ];
-    let confidence = 0.5 + 0.45 * best.score;
-    if (second && best.score - second.score < DRIFT_AMBIGUITY_GAP) {
-      confidence -= 0.1;
-      evidence.push({ source: this.id, message: `ambiguous: ${describeElement(second.element)} is almost as similar (${second.score.toFixed(2)})` });
-    }
-    return { category: 'LOCATOR_DRIFT', confidence, evidence };
   },
 };
 
@@ -251,4 +217,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];

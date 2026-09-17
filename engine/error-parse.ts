@@ -66,3 +66,31 @@ export function networkSignal(message: string): NetworkSignal | null {
   }
   return null;
 }
+
+export interface StrictModeViolation {
+  locator: string;
+  count: number;
+  /** true for an action (click, fill…); false for an expect() assertion. */
+  isAction: boolean;
+  /** The elements Playwright found, with the locator it suggests for each ("aka …"). */
+  elements: Array<{ locator: string; role?: string; name?: string }>;
+}
+
+/** A locator that matched several elements; Playwright lists each one with a unique locator. */
+export function strictModeViolation(message: string): StrictModeViolation | null {
+  const head = headOf(message);
+  const m = head.match(/strict mode violation: (.+) resolved to (\d+) elements/);
+  if (!m) return null;
+  const elements = [...head.matchAll(/^\s*\d+\) .* aka (.+)$/gm)].map(([, locator]) => {
+    const role = locator.match(/^getByRole\('([^']+)'/)?.[1];
+    const name = locator.match(/name: '((?:[^'\\]|\\.)*)'/)?.[1]?.replaceAll("\\'", "'");
+    return { locator: locator.trim(), role, name };
+  });
+  return { locator: m[1].trim(), count: Number(m[2]), isAction: !/^\s*Error: expect\(/.test(head), elements };
+}
+
+/** The accessible name or text a locator looks for, when it names one. */
+export function locatorName(locator: string): string | null {
+  const m = [...locator.matchAll(/(?:name: |getBy(?:Text|Label|Title|Placeholder|AltText)\()'((?:[^'\\]|\\.)*)'/g)].at(-1);
+  return m ? m[1].replaceAll("\\'", "'") : null;
+}

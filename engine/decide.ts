@@ -106,10 +106,12 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
       // On real CI data the AI alone called real bugs "drift" at 0.88-0.96, while every correct
       // lab fix came from the deterministic rule that found the renamed element on the page.
       // So code changes need that rule's match, not just a high confidence.
-      const matched = d.source === 'rules' && d.ruleId === 'locator-drift';
+      const matched = d.source === 'rules' && (d.ruleId === 'locator-drift' || d.ruleId === 'locator-drift-strict');
       const auto = d.confidence > AUTO_FIX_ABOVE && matched;
       // A locator that now matches several elements needs narrowing, not renaming.
-      const fix = hints.strictMatches
+      const fix = hints.strictMatches && hints.suggestedLocator
+        ? `Change the locator${target} to ${hints.suggestedLocator}: it now matches ${hints.strictMatches} elements, and this is the one the test means`
+        : hints.strictMatches
         ? `Make the locator${target} more specific: it now matches ${hints.strictMatches} elements (add the element's name, a parent, or exact: true)`
         : hints.suggestedLocator
           ? `Update the locator${target} to ${hints.suggestedLocator}`

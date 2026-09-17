@@ -1,6 +1,7 @@
 // Replacement locators for a drifted one: the page's most similar elements, written as
 // role-based locators (the robust kind), best first.
-import { DRIFT_MIN_SIMILARITY } from '../rules.ts';
+import type { Diagnosis } from '../../reporters/types.ts';
+import { DRIFT_MIN_SIMILARITY } from '../drift-rules.ts';
 import { rankCandidates } from '../similarity.ts';
 import type { SnapshotElement } from '../snapshot.ts';
 
@@ -30,4 +31,13 @@ export function candidatesFor(printedLocator: string, snapshot: SnapshotElement[
     out.push({ expression, element, score });
   }
   return out;
+}
+
+/** The unique locator Playwright printed for the intended element of a strict-mode violation. */
+export function strictCandidates(d: Diagnosis): Candidate[] {
+  return d.evidence.flatMap((e) => {
+    const { replacement, candidate } = (e.data ?? {}) as { replacement?: unknown; candidate?: { role?: string; name?: string } };
+    if (typeof replacement !== 'string') return [];
+    return [{ expression: replacement, element: { role: candidate?.role ?? '', name: candidate?.name ?? '', text: '' }, score: 1 }];
+  });
 }

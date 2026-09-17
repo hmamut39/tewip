@@ -125,6 +125,10 @@ The first matching rule, in this order, decides the category. If a lower-priorit
 |---|---|---|
 | `env-mass-failure` | ENV | at least 3 tests, making up at least 30% of the run, fail with the **same** error shape. Many failures with different errors don't count. |
 | `env-network` | ENV | the error shows a connection error (`net::ERR_*`, `ECONNREFUSED`, ...), an HTTP 5xx, or an auth failure |
+| `test-data-collision` | TEST_DATA | the error shows the test's data collided with existing data (duplicate key, unique constraint, "already exists") |
+| `env-server-error` | ENV | the app's backend answered a 5xx during the test; declines for tests that provoke errors on purpose, and for errors seen only on this commit |
+| `locator-drift-strict` | LOCATOR_DRIFT | an action's locator now matches several elements, and exactly one of them carries the locator's name as a whole word (`name: 'Edit'` → "Editor canvas", "Edit link"). The fix is the locator Playwright printed for that element. |
+| `timing-retry-pass` | TIMING | another attempt of the same code in the same run passed |
 | `locator-drift` | LOCATOR_DRIFT | the element was never found, but the page snapshot has an element with a similar name (similarity ≥ 0.6) |
 | `timing-flaky` | TIMING | the failure rate is 20%-80% over at least 3 runs, and the error message varies |
 | `real-bug-assertion` | REAL_BUG | a value mismatch on a test whose history is stable: it was clean before and has failed the same way since |
@@ -157,15 +161,15 @@ npm run test:engine   # unit tests for rules, LLM layer, decide step and views (
 
 - It only edits files inside a sandbox directory, never application code.
 - It refuses tests with no `expect()` after the broken call, because a pass there would prove nothing.
-- It acts only on drift diagnosed by the deterministic `locator-drift` rule above 0.85. On real CI data the AI alone called real bugs "drift" at 0.88–0.96, so AI-only drift goes to a person.
+- It acts only on drift diagnosed by a deterministic drift rule (`locator-drift` or `locator-drift-strict`) above 0.85. On real CI data the AI alone called real bugs "drift" at 0.88–0.96, so AI-only drift goes to a person.
 - Every decision is logged with its reason, and it never pushes or merges.
 
 `npm run lab` runs the whole loop against `lab/app`. Version v1 is what the tests were written for. Version v2 is a release with 6 renamed or re-shaped elements and 5 traps: removed features with look-alike elements, a wrong price, a disabled button, a server outage, and a test without assertions. The ground truth is in `lab/cases.json`. The current result is **5/6 drifted locators fixed and verified, 0/5 false fixes**. This is synthetic data and not a product metric. On 590 real labelled Gutenberg failures, the current rules would auto-fix **0**: every high-confidence drift call there came from the AI alone.
 
 ## Known issues (found on real data)
 
-- **Drift and real bugs are hard to tell apart.** With 23 real drift cases mined from the fixes WordPress developers actually made, the pipeline gets **14/23 (61%)**, and 5 of 29 real bugs are called drift. On those same 216 labelled failures the agent would have made **0 automatic code changes**, because auto-fix also requires the deterministic rule to match an element on the page. Safe, but not yet autonomous on real projects.
-- **Playwright does not always write a page snapshot.** For some failures (timeouts inside frames) `error-context.md` holds only the error and the test source, so the drift rule is blind. Rebuilding the page from the trace DOM was tried: it raised drift recall on the fresh set (14→16 of 23) but lowered held-out accuracy from 86.1% to 81.3%, because the AI reasoned worse from the noisier element list, so it was reverted per the roadmap rule.
+- **Drift and real bugs are hard to tell apart (improving).** 23 real drift cases were mined from the fixes WordPress developers actually made. Rules-5 reads Playwright's strict-mode errors: when a locator like `name: 'Edit'` starts matching several elements, the error already lists them, and the one named with the whole word is the element the test means. Result on that fresh set: **16/23 drift (70%, was 61%)**, real bugs called drift **3 of 29 (was 5)**, and **15 drift cases would now be auto-fixed (was 0), each suggestion identical to the developers' own fix**. The rule was designed while looking at these cases, so these numbers are optimistic until confirmed on unseen data. The 7 misses have no usable page data: 4 are preview tests whose error names no locator, and 3 wait for a button that is absent from the page at failure time.
+- **Playwright does not always write a page snapshot.** For some failures (timeouts inside frames) `error-context.md` holds only the error and the test source, so the similarity rule is blind. Rebuilding the page from the trace DOM does not help: on real data, real bugs score as similar as drift (0.80–0.96), so it gives the AI noise rather than signal (it lowered held-out accuracy from 86.1% to 81.3% when tried).
 - **Expected server errors (partly fixed).** Tests that deliberately provoke server errors used to be read as ENV. The model is now told when a test's name says it exercises error handling (prompt llm-4).
 - **Views can't tell pull-request branches from the main branch yet.** Records don't store the branch, so regressions inside unmerged PRs count as product bugs in the architecture view and the digest.
 - **Some recurring flakes are misread.** Flaky tests that also fail on other branches are misclassified (0/22 on the held-out set), and TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.

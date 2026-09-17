@@ -70,6 +70,8 @@ export function sourceOf(d: Diagnosis, dataset: string): string {
 }
 
 function suggestedLocator(d: Diagnosis): string | undefined {
+  const replacement = d.evidence.map((e) => e.data?.replacement).find((r): r is string => typeof r === 'string');
+  if (replacement) return replacement;
   const candidate = d.evidence.map((e) => e.data?.candidate as { role?: string; name?: string } | undefined).find(Boolean);
   if (!candidate?.role) return undefined;
   return candidate.name ? `getByRole('${candidate.role}', { name: '${candidate.name.replaceAll("'", "\\'")}' })` : `getByRole('${candidate.role}')`;

@@ -11,6 +11,18 @@ const groupBy = <T>(xs: T[], key: (x: T) => string) => {
   return [...m.entries()];
 };
 const wasted = (xs: TriageItem[]) => xs.reduce((sum, i) => sum + i.wastedMs, 0);
+/** Separate runs a test must have flaked in before it is worth naming for quarantine. */
+const QUARANTINE_MIN_RUNS = 2;
+
+/** The shortest tail of a test's name that no other listed test shares, so rows stay telling apart. */
+function name(testId: string, others: Array<{ testId: string }>): string {
+  const parts = testId.split(' > ');
+  for (let take = 1; take < parts.length; take++) {
+    const tail = parts.slice(-take).join(' > ');
+    if (others.filter((o) => o.testId.endsWith(tail)).length === 1) return tail;
+  }
+  return testId;
+}
 
 export function qualityView(items: TriageItem[], dataset: string): View {
   const shown: TriageItem[] = [];
@@ -24,6 +36,14 @@ export function qualityView(items: TriageItem[], dataset: string): View {
     .map(([component, xs]) => ({ component, xs, tests: new Set(xs.map((i) => i.testId)).size }))
     .sort((a, b) => wasted(b.xs) - wasted(a.xs))
     .slice(0, 8);
+
+  // The flaky tests that cost the most, named one by one: a hotspot per component tells a lead
+  // where to look, but an SDET needs the list of tests to quarantine this morning.
+  const quarantine = groupBy(items.filter((i) => i.diagnosis.category === 'TIMING'), (i) => i.testId)
+    .map(([testId, xs]) => ({ testId, xs, runs: new Set(xs.map((i) => i.runId)).size }))
+    .filter((q) => q.runs >= QUARANTINE_MIN_RUNS)
+    .sort((a, b) => wasted(b.xs) - wasted(a.xs))
+    .slice(0, 5);
 
   const patterns = groupBy(items, (i) => `${i.diagnosis.category} ${truncate(errorShape(i.errorHead), 90)}`)
     .filter(([, xs]) => xs.length >= 3)
@@ -56,6 +76,21 @@ export function qualityView(items: TriageItem[], dataset: string): View {
           example(h.xs),
           '',
         ])),
+    '## Quarantine candidates: flaky tests ranked by CI time lost',
+    '',
+    ...(quarantine.length === 0
+      ? [`None: no test was diagnosed TIMING in ${QUARANTINE_MIN_RUNS} or more separate runs.`, '']
+      : [
+          `| Test | File | Failed runs | CI time lost | Next action |`,
+          `|---|---|---:|---:|---|`,
+          ...quarantine.map((q) => {
+            const first = q.xs[0];
+            return `| ${clean(name(q.testId, quarantine))} | \`${first.file}\` | ${q.runs} | ${minutes(wasted(q.xs))} | Quarantine it (\`test.fixme\`) and open one issue to fix the race; it is costing this much every window |`;
+          }),
+          '',
+          'Quarantining stops a flaky test from blocking other people while the race is fixed. It is a decision for a person: the agent never edits a test to skip it.',
+          '',
+        ]),
     '## Recurring root-cause patterns (3+ occurrences)',
     '',
     ...(patterns.length === 0

@@ -55,7 +55,7 @@ Phase metric: overall classification accuracy ≥ 80%.
 > The metric checks routing and completeness of the views, which the code controls, so meeting it says nothing about usefulness. Usefulness needs real users (Definition of Success). Reading the real views exposed a classifier weakness: expected server errors inside error-handling tests are read as ENV.
 The engine emits one unified diagnosis object. Every view renders that same object, and each one shows the diagnosis's confidence and data source and ends in a concrete next action, not just a status:
 - PR comment (developers): does this failure relate to your change, with the evidence and the suggested fix
-- Engineering-quality view (senior / principal engineers): recurring root-cause patterns, flakiness hotspots by component, test-design debt (hard waits, brittle selectors) ranked by cost
+- Engineering-quality view (senior / principal engineers): recurring root-cause patterns, flakiness hotspots by component, a quarantine shortlist naming the flaky tests that cost the most CI time (added 2026-09-17), and test-design debt (hard waits, brittle selectors) ranked by cost
 - Architecture view (architects): cross-cutting fragility, i.e. which modules, shared components and service dependencies cause the most REAL_BUG / ENV failures, and changes that break many suites at once
 - Infrastructure view (senior DevOps / SRE): ENV failures grouped by dependency, runner or service, with the re-run result and a single grouped alert
 - CLI triage board (SDETs): classification + evidence + suggested fix

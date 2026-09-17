@@ -9,6 +9,7 @@ import { missingFromView } from '../view.ts';
 import { prCommentView } from '../views/developer.ts';
 import { groupEnv, infraView } from '../views/infra.ts';
 import { releaseView } from '../views/release.ts';
+import { qualityView } from '../views/quality.ts';
 import { sdetBoardView } from '../views/sdet.ts';
 
 function diagnosis(category: DiagnosisCategory, confidence = 0.8, extra: Partial<Diagnosis> = {}): Diagnosis {
@@ -116,5 +117,40 @@ describe('decide: strict-mode locators', () => {
   it('asks to narrow a locator that now matches several elements instead of renaming it', () => {
     const a = decide(diagnosis('LOCATOR_DRIFT', 0.95, { source: 'llm' }), { locator: "getByRole('status')", strictMatches: 2 });
     assert.match(a.summary, /more specific: it now matches 2 elements/);
+  });
+});
+
+describe('quality view: quarantine candidates', () => {
+  const flaky = (testId: string, runId: string, wastedMs: number) => item('TIMING', { testId, runId, wastedMs, file: 'a.spec.ts' });
+
+  it('names the flaky tests that cost the most, once they flaked in more than one run', () => {
+    const md = qualityView(
+      [
+        flaky('chromium > a.spec.ts > slow one', 'r1', 120_000),
+        flaky('chromium > a.spec.ts > slow one', 'r2', 120_000),
+        flaky('chromium > a.spec.ts > cheap one', 'r1', 1_000),
+        flaky('chromium > a.spec.ts > cheap one', 'r2', 1_000),
+        flaky('chromium > a.spec.ts > only once', 'r1', 500_000),
+      ],
+      'test',
+    ).markdown;
+    const rows = md.split('## Quarantine candidates')[1].split('## Recurring')[0];
+    assert.match(rows, /slow one.*\| 2 \| 4\.0 CI min/);
+    assert.ok(rows.indexOf('slow one') < rows.indexOf('cheap one'), 'ranked by CI time lost');
+    assert.ok(!rows.includes('only once'), 'a test that flaked in one run only is not listed');
+  });
+
+  it('keeps rows telling apart when two tests share a name', () => {
+    const md = qualityView(
+      [
+        flaky('firefox > a.spec.ts > Replicator', 'r1', 2_000),
+        flaky('firefox > a.spec.ts > Replicator', 'r2', 2_000),
+        flaky('chromium > a.spec.ts > Replicator', 'r1', 1_000),
+        flaky('chromium > a.spec.ts > Replicator', 'r2', 1_000),
+      ],
+      'test',
+    ).markdown;
+    assert.match(md, /firefox > a\.spec\.ts > Replicator/);
+    assert.match(md, /chromium > a\.spec\.ts > Replicator/);
   });
 });

@@ -64,7 +64,10 @@ export const locatorDriftStrict: Rule = {
     const { locator, count, isAction, elements } = violation;
     const name = locatorName(locator);
     if (!name) return declined(this.id, `${locator} matched ${count} elements, and it names no element to pick among them`, { locator });
-    const exact = elements.filter((e) => e.name?.toLowerCase() === name.toLowerCase());
+    // Playwright shortens long names in its suggestions ("64966a11-b3fa-4c41-b5bd-"), so a long
+    // prefix of the name counts as the same name.
+    const sameName = (n: string) => n.toLowerCase() === name.toLowerCase() || (n.length >= 20 && name.toLowerCase().startsWith(n.toLowerCase()));
+    const exact = elements.filter((e) => e.name && sameName(e.name));
     const word = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(name)}($|[^\\p{L}\\p{N}])`, 'iu');
     const matches = exact.length > 0 ? exact : elements.filter((e) => e.name && word.test(e.name));
     const names = elements.map((e) => `"${e.name ?? e.locator}"`).join(', ');

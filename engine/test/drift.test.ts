@@ -75,6 +75,14 @@ describe('locator-drift-strict rule', () => {
     assert.notEqual(run(message).category, 'LOCATOR_DRIFT');
   });
 
+  it('treats names Playwright shortened as the same name: two identical items are not drift', () => {
+    const id = "getByRole('checkbox', { name: '64966a11-b3fa-4c41-b5bd-851a097bec81' })";
+    const item = (n: number) => `    ${n}) <input type="checkbox"> aka getByRole('checkbox', { name: '64966a11-b3fa-4c41-b5bd-' }).nth(${n - 1})`;
+    const d = run(clickStrict(id, [item(1), item(2)]));
+    assert.notEqual(d.category, 'LOCATOR_DRIFT');
+    assert.ok(d.evidence.some((e) => e.source === 'locator-drift-strict' && /2 of them are named/.test(e.message)));
+  });
+
   it('declines when several elements carry the name', () => {
     const code = `    2) <button>Edit code</button> aka getByRole('button', { name: 'Edit code' })`;
     assert.notEqual(run(clickStrict(EDIT, [EDIT_LINK, code])).category, 'LOCATOR_DRIFT');

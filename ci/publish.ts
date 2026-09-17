@@ -7,6 +7,8 @@ import { prCommentView } from '../outlets/views/developer.ts';
 import { groupEnv, infraView } from '../outlets/views/infra.ts';
 import { usageLine } from '../engine/llm/usage.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
+import type { TriageRecord } from '../reporters/types.ts';
+import { CORRECTION_HINT, renderBoardMap } from './corrections.ts';
 import type { CiContext } from './context.ts';
 import type { GitHub, IssueRef } from './github.ts';
 
@@ -18,14 +20,16 @@ const MAX_BODY = 60_000;
 const fit = (body: string, runUrl: string) =>
   body.length <= MAX_BODY ? body : `${body.slice(0, MAX_BODY)}\n\n…truncated: the full report is in the \`triage-agent-report\` artifact of [this run](${runUrl}).`;
 
-export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[]): string {
+export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[], records: TriageRecord[] = []): string {
   const footer = `<sub>[CI run](${ctx.runUrl}) · every role's view is in the \`triage-agent-report\` artifact · triage-agent never merges and never edits application code</sub>`;
   if (items.length === 0) return `## triage-agent: all tests passed on \`${ctx.sha.slice(0, 8)}\`\n\n${footer}`;
   const accepted = fixes.filter((f) => f.applied).length;
   const fixLine = fixPr
     ? `\n\n**Verified locator fixes: ${fixPr.html_url}** (${accepted} test(s) re-run and passing with the new locator). Review before merging: an intended UI change and a regression can look alike.`
     : '';
-  return fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}\n\n${footer}`, ctx.runUrl);
+  // The hidden map keeps "#3" meaning the same failure in later runs; the hint tells people how.
+  const learn = `\n\n${CORRECTION_HINT}\n${renderBoardMap(items, records)}`;
+  return fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}${learn}\n\n${footer}`, ctx.runUrl);
 }
 
 export async function postPrComment(ctx: CiContext, github: GitHub, body: string): Promise<string | null> {

@@ -15,7 +15,9 @@ import { releaseView } from '../outlets/views/release.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 import type { FixResult } from '../engine/autofix/autofix.ts';
+import { loadCorrections, saveCorrections } from '../engine/corrections.ts';
 import { readCiContext } from './context.ts';
+import { readCorrections } from './corrections.ts';
 import { autofixAndOpenPr } from './fix-pr.ts';
 import { GitHub, type IssueRef } from './github.ts';
 import { postEnvIssue, postPrComment, prCommentBody, writeStepSummary } from './publish.ts';
@@ -49,10 +51,19 @@ async function main(): Promise<void> {
   const index = new HistoryIndex([...pastRecords, ...imported.records], [...pastRuns, imported.summary]);
   log(`imported ${imported.records.length} failed attempt(s); history: ${pastRuns.length} earlier run(s)`);
 
-  const llm = llmFromEnv();
-  const items = await buildItems(imported.records, index, { dataset: `${ctx.repo} CI`, llm });
-
   const github = ctx.token ? new GitHub(ctx.token, ctx.repo, ctx.apiUrl) : null;
+  // LEARN, first half: pick up what people wrote under the agent's own comments since last time,
+  // store it with the history, and let it decide the category for the failures it covers.
+  if (github && ctx.pr) {
+    const written = await step('read corrections', () => readCorrections(github, ctx.pr!.number, `PR #${ctx.pr!.number}`));
+    const saved = saveCorrections(ctx.historyDir, written ?? []);
+    if (saved.length > 0) log(`${saved.length} new correction(s) from people: ${saved.map((c) => `${c.testId.split(' > ').at(-1)} -> ${c.category}`).join(', ')}`);
+  }
+  const corrections = loadCorrections(ctx.historyDir);
+  if (corrections.length > 0) log(`${corrections.length} correction(s) on record`);
+
+  const llm = llmFromEnv();
+  const items = await buildItems(imported.records, index, { dataset: `${ctx.repo} CI`, llm, corrections });
   let fixes: FixResult[] = [];
   let fixPr: IssueRef | null = null;
   if (github && ctx.autofix && items.some((i) => i.action.kind === 'fix-locator')) {
@@ -66,7 +77,7 @@ async function main(): Promise<void> {
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes)));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records)));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);

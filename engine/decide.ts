@@ -123,9 +123,13 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
         summary: `${fix}, re-run the test, and open a PR only if it passes.`,
         reason: auto
           ? `${conf} is above ${AUTO_FIX_ABOVE} and the page has a matching renamed element: auto-fix eligible`
-          : !matched
-            ? `${conf}, but no deterministic match of a renamed element on the page: an SDET reviews the fix`
-            : `${conf} is below ${AUTO_FIX_ABOVE}: an SDET reviews the fix`,
+          : d.source === 'human'
+            ? // A person's category is authoritative, but it does not name a replacement locator
+              // that a re-run has proved, which is what the agent needs before editing test code.
+              'a person corrected this to LOCATOR_DRIFT, which settles the cause but not the new locator: an SDET writes the fix'
+            : !matched
+              ? `${conf}, but no deterministic match of a renamed element on the page: an SDET reviews the fix`
+              : `${conf} is below ${AUTO_FIX_ABOVE}: an SDET reviews the fix`,
       };
     }
     case 'TIMING': {

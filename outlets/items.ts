@@ -6,6 +6,7 @@ import { lastFailedAttempts } from '../engine/dataset.ts';
 import type { HistoryIndex, TestHistory } from '../engine/history.ts';
 import type { LlmClient } from '../engine/llm/client.ts';
 import { failingCodeOf } from '../engine/llm/context.ts';
+import type { Correction } from '../engine/corrections.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
 import { truncate } from '../engine/signature.ts';
 import type { Diagnosis, TriageRecord } from '../reporters/types.ts';
@@ -65,7 +66,7 @@ function relationOf(d: Diagnosis, h: TestHistory): TriageItem['relation'] {
 }
 
 export function sourceOf(d: Diagnosis, dataset: string): string {
-  const who = d.source === 'llm' ? `AI ${d.model ?? 'model'}` : `rules ${d.engineVersion}`;
+  const who = d.source === 'human' ? 'corrected by a person' : d.source === 'llm' ? `AI ${d.model ?? 'model'}` : `rules ${d.engineVersion}`;
   return `${who} · data: ${dataset}`;
 }
 
@@ -83,14 +84,16 @@ export interface BuildOptions {
   llm: LlmClient | null;
   /** Use the diagnosis stored on a record (e.g. by CI) instead of diagnosing it again. */
   reuseStoredDiagnoses?: boolean;
+  /** Corrections people wrote; they decide the category for the failures they cover. */
+  corrections?: readonly Correction[];
 }
 
 /** Diagnoses every failed test of every run in `records` and wraps each as a TriageItem. */
-export async function buildItems(records: TriageRecord[], index: HistoryIndex, { dataset, llm, reuseStoredDiagnoses = false }: BuildOptions): Promise<TriageItem[]> {
+export async function buildItems(records: TriageRecord[], index: HistoryIndex, { dataset, llm, reuseStoredDiagnoses = false, corrections = [] }: BuildOptions): Promise<TriageItem[]> {
   const cases = lastFailedAttempts(records);
   const stored = reuseStoredDiagnoses ? cases.map((c) => c.diagnosis) : cases.map(() => undefined);
   const missing = cases.filter((_, i) => !stored[i]);
-  const fresh = await diagnosePipeline(missing, index, llm);
+  const fresh = await diagnosePipeline(missing, index, llm, { corrections });
   const diagnoses = stored.map((d) => d ?? fresh.shift()!);
   const failedAttempts = new Map<string, TriageRecord[]>();
   for (const r of records) failedAttempts.set(`${r.runId} ${r.testId}`, [...(failedAttempts.get(`${r.runId} ${r.testId}`) ?? []), r]);

@@ -34,7 +34,8 @@ export interface Diagnosis {
   ruleId?: string;
   /** For a decision: why. For UNKNOWN: what each rule saw and why it declined. */
   evidence: Evidence[];
-  source: 'rules' | 'llm';
+  /** 'human' when a person corrected the agent; their category wins over rules and model. */
+  source: 'rules' | 'llm' | 'human';
   /** Rule-set version (phase 2) so stale diagnoses can be recomputed. */
   engineVersion: string;
   /** Model identifier, set only by the LLM layer. */

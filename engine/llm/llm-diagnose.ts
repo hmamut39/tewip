@@ -1,5 +1,6 @@
 // Phase-3 step for one failure the rules left UNKNOWN: ask the model, validate its answer
 // against the fixed taxonomy, and return a diagnosis. Any failure keeps the rules' UNKNOWN.
+import { recordFailure } from './usage.ts';
 import { ROOT_CAUSES, type Diagnosis, type RootCause } from '../../reporters/types.ts';
 import { truncate } from '../signature.ts';
 import type { LlmClient } from './client.ts';
@@ -47,6 +48,7 @@ export async function llmDiagnose(context: FailureContext, rules: Diagnosis, cli
       ],
     };
   } catch (error) {
+    recordFailure();
     return { ...rules, evidence: [...rules.evidence, { source: 'llm', message: `LLM layer failed, left UNKNOWN: ${truncate(String(error), 200)}` }] };
   }
 }

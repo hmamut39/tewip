@@ -5,6 +5,7 @@ import type { FixResult } from '../engine/autofix/autofix.ts';
 import type { TriageItem } from '../outlets/items.ts';
 import { prCommentView } from '../outlets/views/developer.ts';
 import { groupEnv, infraView } from '../outlets/views/infra.ts';
+import { usageLine } from '../engine/llm/usage.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import type { CiContext } from './context.ts';
 import type { GitHub, IssueRef } from './github.ts';
@@ -52,5 +53,5 @@ export async function postEnvIssue(ctx: CiContext, github: GitHub, items: Triage
 export function writeStepSummary(ctx: CiContext, items: TriageItem[]): void {
   if (!ctx.stepSummary) return;
   const body = items.length === 0 ? '## triage-agent\n\nNo failing tests.' : sdetBoardView(items, ctx.runId, ctx.repo).markdown;
-  appendFileSync(ctx.stepSummary, `${body.slice(0, 900_000)}\n`, 'utf8');
+  appendFileSync(ctx.stepSummary, `${body.slice(0, 900_000)}\n\n_${usageLine()}_\n`, 'utf8');
 }

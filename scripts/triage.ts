@@ -10,6 +10,7 @@ import { basename, join, relative } from 'node:path';
 import { loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
+import { usageLine } from '../engine/llm/usage.ts';
 import { buildItems, type TriageItem } from '../outlets/items.ts';
 import { missingFromView, ROUTES, type View } from '../outlets/view.ts';
 import { architectureView } from '../outlets/views/architecture.ts';
@@ -95,6 +96,7 @@ async function main(): Promise<void> {
     `\nPhase 4 metric, over ${runs.length} failed run(s) of ${dataset.label}: ${routed}/${total} = ${(ratio * 100).toFixed(1)}% of failures ` +
       `reach every view their category routes to, complete (target >= ${METRIC_TARGET * 100}%: ${ratio >= METRIC_TARGET ? 'MET' : 'MISSED'})`,
   );
+  console.log(usageLine());
   console.log(`Diagnoses shown without confidence, source, action or evidence: ${problems.length}`);
   for (const p of problems.slice(0, 10)) console.log(`  - ${p}`);
 }

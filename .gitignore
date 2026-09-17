@@ -20,3 +20,6 @@ eval/ground-truth.aug2.jsonl
 # Secrets (API keys) never leave this machine.
 .env
 .env.*
+eval/ground-truth.jupyterlab.jsonl
+eval/ground-truth.lxdui.jsonl
+eval/ground-truth.nextcloud.jsonl

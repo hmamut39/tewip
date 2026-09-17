@@ -39,6 +39,8 @@ export async function diagnosePipeline(
   const final = [...rules];
   await mapLimit(unknown, concurrency, async ({ record, i }) => {
     const context = buildFailureContext(record, index.historyAsOf(record.testId, record.runId), index.runContext(record.runId), rules[i]);
+    // A call that fails or is refused (budget, outage, bad response) keeps the rules' answer
+    // and records why: one bad call must never lose the whole run's triage.
     final[i] = await llmDiagnose(context, rules[i], llm, now);
   });
   return final;

@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { appendJsonl, DATA_DIR, PROJECT_ROOT, readJsonl } from '../../reporters/store.ts';
 import { truncate } from '../signature.ts';
+import { recordCacheHit, recordCall, recordRefusal } from './usage.ts';
 
 export interface LlmRequest {
   system: string;
@@ -57,6 +58,7 @@ export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https:
         ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       });
 
+      const startedAt = Date.now();
       for (let attempt = 1; ; attempt++) {
         let res: Response;
         try {
@@ -72,7 +74,11 @@ export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https:
           continue;
         }
         if (res.ok) {
-          const json = (await res.json()) as { choices?: Array<{ message?: { content?: string | null; refusal?: string | null } }> };
+          const json = (await res.json()) as {
+            choices?: Array<{ message?: { content?: string | null; refusal?: string | null } }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          };
+          recordCall(Date.now() - startedAt, { prompt: json.usage?.prompt_tokens, completion: json.usage?.completion_tokens });
           const message = json.choices?.[0]?.message;
           if (message?.refusal) throw new Error(`model refused: ${truncate(message.refusal, 200)}`);
           if (typeof message?.content !== 'string') throw new Error('model returned no content');
@@ -107,7 +113,10 @@ export function cachedClient(inner: LlmClient, file = CACHE_FILE): LlmClient {
     async complete(request) {
       const key = createHash('sha256').update(JSON.stringify([inner.model, request])).digest('hex');
       const hit = entries().get(key);
-      if (hit !== undefined) return hit;
+      if (hit !== undefined) {
+        recordCacheHit();
+        return hit;
+      }
       const response = await inner.complete(request);
       entries().set(key, response);
       appendJsonl(file, [{ key, model: inner.model, response, at: new Date().toISOString() } satisfies CacheEntry]);
@@ -130,5 +139,31 @@ export function llmFromEnv(): LlmClient | null {
     reasoningEffort: process.env.TRIAGE_LLM_REASONING || DEFAULT_REASONING,
     baseUrl: process.env.OPENAI_BASE_URL || undefined,
   });
-  return process.env.TRIAGE_LLM_CACHE === 'off' ? client : cachedClient(client);
+  const cached = process.env.TRIAGE_LLM_CACHE === 'off' ? client : cachedClient(client);
+  const budget = Number(process.env.TRIAGE_LLM_MAX_CALLS);
+  return Number.isFinite(budget) && budget > 0 ? budgetedClient(cached, budget) : cached;
+}
+
+/** Raised when the per-process call budget is used up; the pipeline keeps the rules' answer. */
+export class LlmBudgetError extends Error {}
+
+/**
+ * A cap on how many model calls one process may make (TRIAGE_LLM_MAX_CALLS). Cache hits are
+ * free and do not count. A guardrail for CI: a huge failed run cannot run up an unbounded bill.
+ */
+export function budgetedClient(inner: LlmClient, maxCalls: number): LlmClient {
+  // Counted when the call starts, not when it returns: several requests run in parallel, and a
+  // budget that only counts finished calls would let a burst overshoot it.
+  let started = 0;
+  return {
+    model: inner.model,
+    async complete(request) {
+      if (started >= maxCalls) {
+        recordRefusal();
+        throw new LlmBudgetError(`AI call budget reached (TRIAGE_LLM_MAX_CALLS=${maxCalls}); keeping the rules' answer`);
+      }
+      started++;
+      return inner.complete(request);
+    },
+  };
 }

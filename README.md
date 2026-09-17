@@ -166,6 +166,10 @@ npm run test:engine   # unit tests for rules, LLM layer, decide step and views (
 
 `npm run lab` runs the whole loop against `lab/app`. Version v1 is what the tests were written for. Version v2 is a release with 6 renamed or re-shaped elements and 5 traps: removed features with look-alike elements, a wrong price, a disabled button, a server outage, and a test without assertions. The ground truth is in `lab/cases.json`. The current result is **6/7 drifted locators fixed and verified, 0/6 false fixes**. This is synthetic data and not a product metric. On real labelled Gutenberg failures the rules now reach **15 auto-fix-eligible drift cases with 0 wrong**, each suggesting exactly the locator the developers themselves wrote.
 
+## What a run costs
+
+Every triage run, the CLI, the eval and the CI job summary end with one line: how many model calls were made, how long they took, how many came free from the cache, the tokens used, and the cost when prices are configured. A run is cheap because the deterministic rules answer most failures and only what they cannot settle reaches the model. Measured example (JupyterLab, 41 real failures): the rules decided 34 of them, 6 went to the model, and those 6 calls took 30 seconds and about 31,000 tokens in total.
+
 ## Known issues (found on real data)
 
 - **Drift and real bugs are hard to tell apart (improving).** Rules-5 reads Playwright's strict-mode errors: when a locator like `name: 'Edit'` starts matching several elements, the error already lists them, and the one named with the whole word is the element the test means. On the fresh set (Sep 1–3) drift is **16/20 = 80%** (**16/23 = 70%** on the labels before a labelling flaw was corrected, see [eval/README.md](eval/README.md)), real bugs called drift **1 of 29**, and **15 drift cases would now be auto-fixed, each suggestion identical to the developers' own fix**. On an unseen week (Aug 20–26, 473 labels) drift is **3/3** and the agent would still have made **0 automatic changes**. The remaining misses have no usable page data: the error names no locator at all.
@@ -180,6 +184,8 @@ Environment variables (you can put them in `.env`, which is gitignored):
 - `TRIAGE_LLM=off`: turns the LLM layer off even when a key is set.
 - `TRIAGE_LLM_MODEL` (default `gpt-5.4-mini`) and `TRIAGE_LLM_REASONING` (default `low`): choose the model and its reasoning effort.
 - `TRIAGE_LLM_CACHE=off`: skips the response cache in `data/llm-cache.jsonl`. With the cache on, an unchanged request is answered from the cache for free.
+- `TRIAGE_LLM_MAX_CALLS`: at most this many model calls per run. Further failures keep the rules' answer and say so, instead of running up an unbounded bill on a huge failed run.
+- `TRIAGE_LLM_PRICE_IN` / `TRIAGE_LLM_PRICE_OUT`: your price per million input / output tokens. Set them and every run prints what it cost; leave them unset and it prints tokens only, never a guessed price.
 - `CI_RUN_ID`: used as the run id. If it is not set, the run id is based on a timestamp.
 - `GIT_SHA` or `GITHUB_SHA`: stored as the record's `gitSha`. If neither is set, `gitSha` is left empty.
 

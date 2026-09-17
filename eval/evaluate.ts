@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { lastFailedAttempts, loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
+import { usageLine } from '../engine/llm/usage.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
 import { readJsonl } from '../reporters/store.ts';
 import { ROOT_CAUSES, type Diagnosis, type RootCause, type TriageRecord } from '../reporters/types.ts';
@@ -133,6 +134,7 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
   console.log(`Rules layer:  ${byRules.length} decided, ${byRules.filter(correct).length} correct (${percent(byRules.filter(correct).length, byRules.length)})`);
   console.log(`LLM layer:    ${byLlm.length} decided, ${byLlm.filter(correct).length} correct (${percent(byLlm.filter(correct).length, byLlm.length)})`);
   console.log(`Still UNKNOWN: ${unknown.length} (counted as wrong)`);
+  console.log(usageLine());
   console.log(
     `Phase 3 metric, overall accuracy: ${right}/${cases.length} = ${percent(right, cases.length)}  ` +
       `(target >= ${ACCURACY_TARGET * 100}%: ${cases.length > 0 && right / cases.length >= ACCURACY_TARGET ? 'MET' : 'MISSED'})`,

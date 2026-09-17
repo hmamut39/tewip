@@ -17,6 +17,12 @@ export const SOURCES: Record<string, { repo: string; workflow: string; artifact:
   penpot: { repo: 'penpot/penpot', workflow: 'tests-integration.yml', artifact: 'integration-blob-report-' },
   // Ghost uploads blob reports for failed runs only, so its history has no passing runs.
   ghost: { repo: 'TryGhost/Ghost', workflow: 'ci.yml', artifact: 'blob-report-Main-' },
+  // JupyterLab's Galata UI tests: every run merges its shards into one artifact.
+  jupyterlab: { repo: 'jupyterlab/jupyterlab', workflow: 'galata.yml', artifact: 'galata-blobs-merged' },
+  // LXD UI: one artifact per browser and cluster mode.
+  lxdui: { repo: 'canonical/lxd-ui', workflow: 'pr.yaml', artifact: 'test-blob-report-' },
+  // Nextcloud server's Playwright suite.
+  nextcloud: { repo: 'nextcloud/server', workflow: 'playwright.yml', artifact: 'blob-report' },
 };
 
 export interface RunMeta {

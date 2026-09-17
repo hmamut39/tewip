@@ -39,6 +39,17 @@
     <button type="button" id="delete-address">Delete address</button>
   </section>
 
+  <section id="address">
+    <h2>Shipping address</h2>
+    <p id="address-line">12 Old Road</p>
+    <div role="button" tabindex="0" aria-label="Editor panel" id="editor-panel"></div>
+    <button type="button" id="edit-address">Edit address</button>
+    <p id="address-status">saved</p>
+    <button type="button" id="gifting">Gifting options</button>
+    <button type="button" id="giftable">Giftable extras</button>
+    <p id="gift-status">plain</p>
+  </section>
+
   <script>
     let count = 0;
     const $ = (id) => document.getElementById(id);
@@ -47,6 +58,7 @@
     $('checkout-btn').onclick = () => ($('order-status').textContent = 'checking out');
     $('place-order').onclick = () => ($('order-status').textContent = 'placed');
     $('save').onclick = () => ($('save-status').textContent = 'saved');
+    $('edit-address').onclick = () => ($('address-status').textContent = 'editing');
     $('load-orders').onclick = async () => {
       const res = await fetch('/api/orders');
       $('orders').textContent = res.ok ? 'loaded' : `error ${res.status}`;

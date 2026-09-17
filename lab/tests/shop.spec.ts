@@ -58,3 +58,13 @@ test('loads past orders', async ({ page }) => {
 test('deletes the account', async ({ page }) => {
   await page.getByRole('button', { name: 'Delete account' }).click();
 });
+
+test('edits the shipping address', async ({ page }) => {
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.locator('#address-status')).toHaveText('editing');
+});
+
+test('wraps a gift', async ({ page }) => {
+  await page.getByRole('button', { name: 'Gift' }).click();
+  await expect(page.locator('#gift-status')).toHaveText('wrapped');
+});

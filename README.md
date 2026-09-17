@@ -41,6 +41,7 @@ On every run, the action:
 - **Fixes (`autofix: true`):** for drifted locators that the deterministic rule matched to a renamed element, it rewrites the locator, re-runs that test, and opens a separate pull request with the changes that passed. It never merges and never edits application code.
 - **Every role:** uploads all role views as the `triage-agent-report` artifact.
 - **History:** keeps the run history in the Actions cache, never in git.
+- **Corrections:** reply to the agent's comment with `/triage CATEGORY #n reason` (e.g. `/triage TIMING #2 flaky on CI`). It stores that with the history and, next time that test fails the same way, gives the person's answer instead of its own, naming them and their reason. A corrected failure also costs nothing: it never goes to the model again.
 
 For **senior engineers, architects and leads**, add a scheduled workflow with `mode: report`, for example weekly. It builds the engineering-quality, architecture and risk-digest views from the stored CI history, reusing earlier diagnoses so it makes no repeat AI calls. The views are kept in one GitHub issue that each report updates:
 
@@ -165,6 +166,14 @@ npm run test:engine   # unit tests for rules, LLM layer, decide step and views (
 - Every decision is logged with its reason, and it never pushes or merges.
 
 `npm run lab` runs the whole loop against `lab/app`. Version v1 is what the tests were written for. Version v2 is a release with 6 renamed or re-shaped elements and 5 traps: removed features with look-alike elements, a wrong price, a disabled button, a server outage, and a test without assertions. The ground truth is in `lab/cases.json`. The current result is **6/7 drifted locators fixed and verified, 0/6 false fixes**. This is synthetic data and not a product metric. On real labelled Gutenberg failures the rules now reach **15 auto-fix-eligible drift cases with 0 wrong**, each suggesting exactly the locator the developers themselves wrote.
+
+## Learning from people (LEARN)
+
+The agent's PR comment ends with one line telling people how to correct it. A reply like `/triage TEST_DATA #1 the fixture user has no saved card` is read on the next run, stored with the run history, and applied to every later failure of that test that fails the same way. The view then shows the category as **corrected by a person**, with their name and reason as the evidence, and keeps what the agent had said next to it, so a disagreement stays visible rather than being quietly overwritten.
+
+Two limits are deliberate:
+- A correction settles the **category**, never a code change. Someone writing `LOCATOR_DRIFT` has not given the agent a replacement locator that a re-run has proved, so an SDET still writes that fix.
+- It applies to the same test failing **the same way**. A different failure of that test is a different question, and the agent answers it itself.
 
 ## What a run costs
 

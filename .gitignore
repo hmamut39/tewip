@@ -15,6 +15,7 @@ eval/ground-truth.supabase.jsonl
 eval/ground-truth.penpot.jsonl
 eval/ground-truth.ghost.jsonl
 eval/ground-truth.aug.jsonl
+eval/ground-truth.aug2.jsonl
 
 # Secrets (API keys) never leave this machine.
 .env

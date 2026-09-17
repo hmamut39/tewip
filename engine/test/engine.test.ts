@@ -140,6 +140,13 @@ describe('LOCATOR_DRIFT rule', () => {
     assert.match(d.evidence[0].message, /nothing similar/);
   });
 
+  it('declines when the test has no passing run: nothing shows the element ever matched', () => {
+    const script = { a: [NOT_FOUND("locator('#checkout-button')"), NOT_FOUND("locator('#checkout-button')")] };
+    const d = diagnoseLast(script, 'a', SHOP_SNAPSHOT);
+    assert.notEqual(d.category, 'LOCATOR_DRIFT');
+    assert.match(d.evidence[0].message, /no recorded passing run/);
+  });
+
   it('an element that resolved (actionability problem) is not treated as missing', () => {
     const msg = "TimeoutError: locator.click: Timeout 2000ms exceeded.\nCall log:\n  - waiting for locator('#add')\n    - locator resolved to <button>\n    - element is not enabled\n";
     const d = diagnoseLast({ a: [msg] }, 'a', SHOP_SNAPSHOT);

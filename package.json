@@ -20,6 +20,7 @@
     "eval:holdout": "node eval/evaluate.ts eval/ground-truth.holdout.jsonl --data data/real/gutenberg-holdout",
     "eval:fresh": "node eval/evaluate.ts eval/ground-truth.fresh.jsonl --data data/real/gutenberg-fresh",
     "eval:aug": "node eval/evaluate.ts eval/ground-truth.aug.jsonl --data data/real/gutenberg-aug",
+    "eval:aug2": "node eval/evaluate.ts eval/ground-truth.aug2.jsonl --data data/real/gutenberg-aug2",
     "eval:supabase": "node eval/evaluate.ts eval/ground-truth.supabase.jsonl --data data/real/supabase",
     "shadow": "node scripts/shadow.ts",
     "harvest": "node eval/harvest/harvest.ts",

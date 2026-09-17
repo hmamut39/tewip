@@ -81,7 +81,7 @@ const squash = (s: string) => s.replaceAll('"', "'").replace(/\s+/g, '');
  * { name: 'Edit link' }. A step removed without a replacement (an outdated test) does not count,
  * nor does a replacement that only shares a role word such as "button".
  */
-function renamedLocator(e: Evidence, record: TriageRecord | undefined): { from: string; to: string } | null {
+function renamedLocator(e: Evidence, record: TriageRecord | undefined): { from: string; to: string } | { caseOnly: string } | null {
   const printed = record ? extractLocator(record.errorMessage) : null;
   if (!e.specPatch || !printed) return null;
   const failing = lastCall(printed);
@@ -95,7 +95,14 @@ function renamedLocator(e: Evidence, record: TriageRecord | undefined): { from: 
   const old = contentWords(failing);
   for (const line of addedLines) {
     for (const [call] of line.matchAll(LOCATOR_CALL)) {
-      if ([...contentWords(call)].some((w) => old.has(w))) return { from: failing, to: call.replace(/\s+/g, ' ') };
+      if (![...contentWords(call)].some((w) => old.has(w))) continue;
+      // Label rule v5: Playwright matches accessible names case-insensitively unless the locator
+      // asks for exact matching, so a replacement that differs only in letter case cannot be what
+      // fixed the failure; something else in the fix did. Not drift, and not ours to guess.
+      if (!/exact:\s*true/.test(failing) && squash(call).toLowerCase() === squash(failing).toLowerCase()) {
+        return { caseOnly: `${failing} -> ${call.replace(/\s+/g, ' ')}` };
+      }
+      return { from: failing, to: call.replace(/\s+/g, ' ') };
     }
   }
   return null;
@@ -125,6 +132,9 @@ function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCau
     const manual = MANUAL.find((m) => m.test.test(e.testId));
     if (manual) return manual.label ? { label: manual.label, note: manual.note } : { excluded: manual.note };
     const renamed = renamedLocator(e, record);
+    if (renamed && 'caseOnly' in renamed) {
+      return { excluded: `the fix only changed the letter case of the failing locator (${renamed.caseOnly}), which Playwright matches case-insensitively: the real cause is elsewhere` };
+    }
     if (renamed) return { label: 'LOCATOR_DRIFT', note: `the fix replaced the failing locator ${renamed.from} with ${renamed.to}, a locator for the same element` };
   }
   if (e.basis === 'fixed-by-test-change') {

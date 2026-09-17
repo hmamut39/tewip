@@ -13,12 +13,19 @@ function declined(source: string, message: string, data?: Record<string, unknown
   return { category: null, confidence: 0, evidence: [{ source, message, data }] };
 }
 
+
 export const locatorDrift: Rule = {
   id: 'locator-drift',
-  evaluate({ record, loadSnapshot }) {
+  evaluate({ record, history, loadSnapshot }) {
     if (!isElementNotFound(record.errorMessage)) return null;
     const locator = extractLocator(record.errorMessage);
     if (!locator) return declined(this.id, 'element not found, but the locator could not be read from the error');
+    // Drift means the element used to match and stopped: that needs a run where this test passed.
+    // Without one, a similar name on the page is a coincidence as easily as a rename, and these
+    // were the rule's false drift calls on an unseen Gutenberg week (rules-5).
+    if (history.runs >= 2 && history.passesOnOtherCommits === 0 && history.passesBeforeStreak === 0) {
+      return declined(this.id, `${locator} not found, and this test has no recorded passing run (${history.failures} failures in ${history.runs} runs), so nothing shows the element ever matched`, { locator });
+    }
     const snapshot = loadSnapshot();
     if (!snapshot) return declined(this.id, `${locator} not found; no page snapshot to look for a renamed element`, { locator });
 

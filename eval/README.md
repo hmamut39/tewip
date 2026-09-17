@@ -61,6 +61,12 @@ These came from reading Supabase's failure clusters before looking at any predic
 
 Supabase moved 99.7% -> 99.6%: one REAL_BUG was answered TIMING. That is **model sampling noise, not the change**: asked again five times with the new prompt and five times with the old one, the same case came back REAL_BUG all ten times. Each eval stores one answer per case, so single-case differences of this size are within the noise of the method.
 
+**Label rule v5 (2026-09-17): a case-only rename cannot be the cause.** Three fresh-set cases were labelled LOCATOR_DRIFT because the fix replaced `getByRole('button', { name: 'Browse All' })` with `{ name: 'Browse all' }`. Playwright matches accessible names case-insensitively unless the locator asks for `exact`, so that rename cannot be what fixed the failure; something else in the same pull request did (it also rewrote the test's hover logic and changed 127 app files). Those cases are now excluded as unlabellable, in every dataset.
+
+This raises fresh-set drift from **16/23 = 70%** to **16/20 = 80%**, so the 80% target is met on corrected labels but not on the original ones. **Both numbers belong together:** the flaw was found while reading the pipeline's misses, so the correction was made after seeing predictions. Its justification is documented Playwright behaviour rather than the outcome, but the risk of label bias is real and is why the pre-correction number is kept here.
+
+**Third unseen window `data/real/gutenberg-aug2` (Aug 20–26, 934 runs, `npm run eval:aug2`),** harvested and labelled after rules-5 and llm-5 were frozen: **86.3%** on 473 labels (TIMING 271/331, ENV, REAL_BUG 17/21) and **LOCATOR_DRIFT 3/3**. Those three are drift the rule had never seen, and of a different kind than the strict-mode rule handles: the test asked for an `exact` name and the button's label changed, which the similarity rule caught at 0.80, below the auto-fix threshold. The agent would have made **0 automatic changes** in that whole week.
+
 **Other projects.** `data/real/penpot` (21 runs; most had expired) yields only 5 labelled cases, because Penpot's tests wrap locators in helpers, so the v4 rule cannot read its fixes. Ghost could not be harvested at all from outside: it uploads blob reports only for failed runs and keeps them roughly a day (3 of 255 runs survived). A project has to run the agent **inside** its own CI to get reliable data.
 
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.

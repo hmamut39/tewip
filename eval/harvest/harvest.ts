@@ -5,11 +5,14 @@
 // Usage: node eval/harvest/harvest.ts <source> --from YYYY-MM-DD --to YYYY-MM-DD [--dataset name] [--max-runs N] [--concurrency 4]
 import { join } from 'node:path';
 import { appendJsonl, datasetFiles, readJsonl } from '../../reporters/store.ts';
-import { importBlobArtifact } from '../../engine/import/blob.ts';
+import { importBlobArtifacts } from '../../engine/import/blob.ts';
 import { downloadArtifact, ghApi } from './gh.ts';
 
+/** artifact: name prefix; every live artifact of a run starting with it is merged into that run. */
 export const SOURCES: Record<string, { repo: string; workflow: string; artifact: string }> = {
   gutenberg: { repo: 'WordPress/gutenberg', workflow: 'end2end-test.yml', artifact: 'blob-reports-merged' },
+  // Supabase Studio: one blob-report-next-N artifact per shard (the TanStack build runs the same tests and is left out).
+  supabase: { repo: 'supabase/supabase', workflow: 'studio-e2e-test.yml', artifact: 'blob-report-next-' },
 };
 
 export interface RunMeta {
@@ -99,13 +102,14 @@ async function main(): Promise<void> {
     };
     try {
       const { artifacts } = await ghApi<{ artifacts: Array<{ id: number; name: string; expired: boolean }> }>(`repos/${config.repo}/actions/runs/${run.id}/artifacts?per_page=100`);
-      const artifact = artifacts.find((a) => a.name === config.artifact && !a.expired);
-      if (!artifact) {
+      const matching = artifacts.filter((a) => a.name.startsWith(config.artifact) && !a.expired);
+      if (matching.length === 0) {
         appendJsonl(metaFile(dataset), [{ ...meta, skipReason: `no live ${config.artifact} artifact` }]);
         return;
       }
-      const zip = await downloadArtifact(config.repo, artifact.id);
-      const result = importBlobArtifact(zip, { runId, gitSha: run.head_sha, branch: run.head_branch }, join(files.dir, 'files', String(run.id)));
+      const zips: Array<[string, Buffer]> = [];
+      for (const a of matching) zips.push([a.name, await downloadArtifact(config.repo, a.id)]);
+      const result = importBlobArtifacts(zips, { runId, gitSha: run.head_sha, branch: run.head_branch }, join(files.dir, 'files', String(run.id)));
       appendJsonl(files.triage, result.records);
       appendJsonl(files.runs, [result.summary]);
       appendJsonl(metaFile(dataset), [

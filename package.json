@@ -19,6 +19,8 @@
     "eval": "node eval/evaluate.ts eval/ground-truth.jsonl --data data/real/gutenberg",
     "eval:holdout": "node eval/evaluate.ts eval/ground-truth.holdout.jsonl --data data/real/gutenberg-holdout",
     "eval:fresh": "node eval/evaluate.ts eval/ground-truth.fresh.jsonl --data data/real/gutenberg-fresh",
+    "eval:supabase": "node eval/evaluate.ts eval/ground-truth.supabase.jsonl --data data/real/supabase",
+    "shadow": "node scripts/shadow.ts",
     "harvest": "node eval/harvest/harvest.ts",
     "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
     "typecheck": "tsc --noEmit"

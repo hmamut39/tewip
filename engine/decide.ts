@@ -28,6 +28,8 @@ export interface ActionHints {
   /** e.g. getByRole('button', { name: 'Reset' }) from the LOCATOR_DRIFT candidate. */
   suggestedLocator?: string;
   hardWait?: string;
+  /** How many elements the locator matched in a strict-mode violation, when that was the error. */
+  strictMatches?: number;
   component?: string;
   commit?: string;
   tracePath?: string;
@@ -106,7 +108,12 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
       // So code changes need that rule's match, not just a high confidence.
       const matched = d.source === 'rules' && d.ruleId === 'locator-drift';
       const auto = d.confidence > AUTO_FIX_ABOVE && matched;
-      const fix = hints.suggestedLocator ? `Update the locator${target} to ${hints.suggestedLocator}` : `Update the locator${target} to match the renamed element`;
+      // A locator that now matches several elements needs narrowing, not renaming.
+      const fix = hints.strictMatches
+        ? `Make the locator${target} more specific: it now matches ${hints.strictMatches} elements (add the element's name, a parent, or exact: true)`
+        : hints.suggestedLocator
+          ? `Update the locator${target} to ${hints.suggestedLocator}`
+          : `Update the locator${target} to match the renamed element`;
       return {
         kind: 'fix-locator',
         owner: 'sdet',

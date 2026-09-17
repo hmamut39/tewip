@@ -120,6 +120,7 @@ export async function buildItems(records: TriageRecord[], index: HistoryIndex, {
         locator,
         suggestedLocator: suggestedLocator(d),
         hardWait,
+        strictMatches: Number(record.errorMessage.match(/strict mode violation: .* resolved to (\d+) elements/)?.[1]) || undefined,
         component,
         commit: record.gitSha,
         tracePath: record.attachments.find((a) => a.name === 'trace')?.path,

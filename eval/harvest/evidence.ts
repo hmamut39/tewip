@@ -51,8 +51,10 @@ interface Outcome {
   failures: number;
 }
 
-const TEST_PATH = /(^|\/)test\/e2e\/|\.spec\.[jt]sx?$|(^|\/)packages\/e2e-test-utils/;
-const APP_PATH = /^(packages|lib|src|phpunit|backport-changelog)\/|\.php$/;
+/** Test code in most layouts: e2e / tests / playwright folders, *.spec / *.test files, e2e utils. */
+const TEST_PATH = /(^|\/)(e2e|tests?|__tests__|playwright|specs?|e2e-test-utils[\w-]*)\/|\.(spec|test)\.[cm]?[jt]sx?$/;
+/** Application code: source files in any language, excluding docs, config and lockfiles. */
+const APP_PATH = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|php|go|py|rb|java|kt|cs|clj[sc]?|rs|css|scss|html)$/;
 
 async function changedFiles(repo: string, base: string, head: string) {
   const cmp = await ghApi<{ files?: Array<{ filename: string; patch?: string }>; status: string }>(`repos/${repo}/compare/${base}...${head}`);

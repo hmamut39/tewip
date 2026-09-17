@@ -27,20 +27,29 @@ node eval/harvest/evidence.ts gutenberg                          # labelling evi
   - What changed before the test passed again on the branch: app code, the failing spec, or both?
 
   Labels are set from this evidence **before** the pipeline's answers are looked at.
-- `label-gutenberg.ts` turns the evidence into labels using explicit rules. Anything the evidence can't settle is excluded, with the reason counted, rather than guessed.
+- `label.ts` turns the evidence into labels using explicit rules. Anything the evidence can't settle is excluded, with the reason counted, rather than guessed.
 
 **Dev set and held-out set.** `data/real/gutenberg` (Sep 8–11) was used to find and fix mistakes, so its score is optimistic. `data/real/gutenberg-holdout` (Sep 4–7) is labelled by the same script and was never used for tuning: **its score is the one to trust.**
 
 ```bash
 npm run harvest -- gutenberg --from 2026-09-04 --to 2026-09-07 --dataset gutenberg-holdout
 node eval/harvest/evidence.ts gutenberg gutenberg-holdout
-node eval/harvest/label-gutenberg.ts gutenberg-holdout eval/ground-truth.holdout.jsonl 2026-09-04T01:00:00Z
+node eval/harvest/label.ts gutenberg-holdout eval/ground-truth.holdout.jsonl 2026-09-04T01:00:00Z
 npm run eval:holdout
 ```
 
 **Fresh set.** `data/real/gutenberg-fresh` (Sep 1–3) was labelled after the prompt-llm-4 change, and nothing was tuned on it. On it the frozen pipeline scored **89.9%** (189 cases). Run it with `npm run eval:fresh`.
 
 **Label rule v2 (2026-09-14).** After reviewing disagreements, one rule was added and applied to every dataset: a non-deterministic failure whose own trace shows a failed request to a third-party host is ENV. It came from failures of the external Openverse API, which v1 had labelled TIMING. The scores before and after the change are kept in the commit history.
+
+**Second project: Supabase Studio.** `data/real/supabase` holds 623 runs of `supabase/supabase` `studio-e2e-test.yml` (Sep 10–16). They were harvested with `npm run harvest -- supabase`, which merges the per-shard `blob-report-next-N` artifacts into one run. Nothing was posted to that repository. With rules-4 it scores **99.7%** on 743 labels, but 731 of those are TIMING cases where the label and the retry rule share the same signal. The independent part is **REAL_BUG 6/6 and TEST_DATA 6/6**. `node scripts/shadow.ts supabase` renders the PR comments the agent would have posted; its report went to a private issue in the practice repo only.
+
+**Label rules v3 (2026-09-17)**, applied to every dataset. For failures that passed on a retry:
+- a data collision (duplicate key, unique constraint, "already exists") is TEST_DATA;
+- a 5xx from the app's own backend in the trace is ENV;
+- a test-level timeout or an assertion with a custom message is TIMING.
+
+These came from reading Supabase's failure clusters before looking at any predictions. Rules-4 then added the matching `test-data-collision` and `env-server-error` rules ahead of the retry rule, so the rules-4 scores (dev 96.0%, held-out 86.1%, fresh 89.8%) are measured on data that was seen while designing them.
 
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.
 - For "passed on retry" cases, the label and the `timing-retry-pass` rule use the same fact, so agreement between them is partly built in.

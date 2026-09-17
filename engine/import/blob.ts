@@ -80,9 +80,20 @@ function parseEvents(buf: Buffer): BlobEvent[] {
 
 /** A CI artifact zip: one report-N.zip per shard, or a single shard's report.jsonl directly. */
 export function importBlobArtifact(artifact: Buffer, meta: ImportMeta, filesDir: string): ImportResult {
+  return importShards(shardsOf(artifact, 'artifact'), meta, filesDir);
+}
+
+/**
+ * Several CI artifacts that belong to one run, e.g. one blob-report-N per shard (Supabase,
+ * Penpot) instead of one merged artifact (Gutenberg): imported as a single run.
+ */
+export function importBlobArtifacts(artifacts: Array<[string, Buffer]>, meta: ImportMeta, filesDir: string): ImportResult {
+  return importShards(artifacts.flatMap(([name, buf]) => shardsOf(buf, name)), meta, filesDir);
+}
+
+function shardsOf(artifact: Buffer, name: string): Array<[string, Buffer]> {
   const outer = readZipBuffer(artifact, (n) => n.endsWith('.zip') || n === 'report.jsonl');
-  const shards: Array<[string, Buffer]> = outer.has('report.jsonl') ? [['artifact', artifact]] : [...outer.entries()].filter(([n]) => n.endsWith('.zip'));
-  return importShards(shards, meta, filesDir);
+  return outer.has('report.jsonl') ? [[name, artifact]] : [...outer.entries()].filter(([n]) => n.endsWith('.zip')).map(([n, b]): [string, Buffer] => [`${name}/${n}`, b]);
 }
 
 /** A local blob-report/ directory as the blob reporter writes it (report*.zip per shard). */

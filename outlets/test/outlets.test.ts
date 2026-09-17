@@ -111,3 +111,10 @@ describe('componentOf', () => {
     assert.equal(componentOf('tests/network.spec.ts'), 'network');
   });
 });
+
+describe('decide: strict-mode locators', () => {
+  it('asks to narrow a locator that now matches several elements instead of renaming it', () => {
+    const a = decide(diagnosis('LOCATOR_DRIFT', 0.95, { source: 'llm' }), { locator: "getByRole('status')", strictMatches: 2 });
+    assert.match(a.summary, /more specific: it now matches 2 elements/);
+  });
+});

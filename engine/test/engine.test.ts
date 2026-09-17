@@ -198,3 +198,35 @@ describe('REAL_BUG rule', () => {
     assert.notEqual(d.category, 'REAL_BUG');
   });
 });
+
+describe('rules-4: data collisions and server errors come before the retry rule', () => {
+  const run = (attempts: number) => {
+    const at = '2026-01-01T00:00:00.000Z';
+    return (msg: string, testId = 'suite > creates a table') => {
+      const r = record(testId, 'run-1', msg);
+      const s: RunSummary = { schemaVersion: 1, runId: 'run-1', gitSha: '', startedAt: at, finishedAt: at, status: 'passed', attempts: { [testId]: attempts } };
+      const index = new HistoryIndex([r], [s]);
+      return { r, index, testId };
+    };
+  };
+
+  it('a duplicate-key error that passed on retry is TEST_DATA, not TIMING', () => {
+    const { r, index, testId } = run(2)('Error: Database query failed: duplicate key value violates unique constraint "pg_extension_name_index"');
+    const d = diagnose({ record: r, history: index.historyAsOf(testId, 'run-1'), run: index.runContext('run-1'), loadSnapshot: () => null });
+    assert.equal(d.category, 'TEST_DATA');
+  });
+
+  it('a backend 5xx during a test that passed on retry is ENV, not TIMING', () => {
+    const { r, index, testId } = run(2)('Error: expect(locator).toBeVisible() failed');
+    const d = diagnose({ record: r, history: index.historyAsOf(testId, 'run-1'), run: index.runContext('run-1'), loadSnapshot: () => null, loadFailedRequests: () => [{ url: 'http://localhost:8000/api/tables', status: 502 }] });
+    assert.equal(d.category, 'ENV');
+    assert.equal(d.ruleId, 'env-server-error');
+  });
+
+  it('a 5xx in a test that provokes server errors on purpose is not called ENV by the rules', () => {
+    const { r, index, testId } = run(1)('Error: expect(locator).toBeVisible() failed', 'suite > reports a server failure in plain language');
+    const d = diagnose({ record: r, history: index.historyAsOf(testId, 'run-1'), run: index.runContext('run-1'), loadSnapshot: () => null, loadFailedRequests: () => [{ url: 'http://localhost/api/media', status: 500 }] });
+    assert.notEqual(d.category, 'ENV');
+    assert.ok(d.evidence.some((e) => /exercises error handling/.test(e.message)));
+  });
+});

@@ -5,6 +5,7 @@ import type { Evidence, RootCause, TriageRecord } from '../reporters/types.ts';
 import { extractLocator, isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
 import type { RunContext, TestHistory } from './history.ts';
 import { describeElement, rankCandidates } from './similarity.ts';
+import { errorScenarioOf } from './llm/context.ts';
 import { errorShape, truncate } from './signature.ts';
 import type { SnapshotElement } from './snapshot.ts';
 
@@ -131,6 +132,45 @@ const locatorDrift: Rule = {
   },
 };
 
+const DATA_COLLISION = /duplicate key value violates unique constraint|UNIQUE constraint failed|already exists/i;
+
+/**
+ * Tests colliding on shared data (two tests creating the same record, leftovers from another
+ * test). Checked before the retry rule: a retry passing only means the collision did not
+ * happen again. Found on Supabase CI (rules-4).
+ */
+const testDataCollision: Rule = {
+  id: 'test-data-collision',
+  evaluate({ record }) {
+    const match = record.errorMessage.match(DATA_COLLISION)?.[0];
+    if (!match) return null;
+    return {
+      category: 'TEST_DATA',
+      confidence: 0.8,
+      evidence: [{ source: this.id, message: `the test's data collided with data that already existed: "${truncate(match, 60)}"`, data: { match } }],
+    };
+  },
+};
+
+/**
+ * The app's backend answered a server error (5xx) during the test. Checked before the retry
+ * rule, which used to call these races. Declines when the test provokes errors on purpose, and
+ * when the error is specific to this commit (possibly a backend bug the change introduced).
+ */
+const envServerError: Rule = {
+  id: 'env-server-error',
+  evaluate({ record, history, loadFailedRequests }) {
+    const failure = (loadFailedRequests?.() ?? []).find((r) => r.status !== null && r.status >= 500);
+    if (!failure) return null;
+    const what = `${failure.url} returned ${failure.status} during the test`;
+    if (errorScenarioOf(record.testId)) return declined(this.id, `${what}, but the test's name says it exercises error handling`);
+    if (history.sameCommitAttempts > 0 && history.sameCommitFailures === history.sameCommitAttempts && history.passesOnOtherCommits > 0) {
+      return declined(this.id, `${what}, but only on this commit while other commits pass: possibly a backend bug the change introduced`);
+    }
+    return { category: 'ENV', confidence: 0.7, evidence: [{ source: this.id, message: what, data: { ...failure } }] };
+  },
+};
+
 /**
  * The test failed but another attempt of the same code in the same run passed: Playwright's
  * own "flaky" signal. A deterministic cause (real bug, drifted locator) would fail every
@@ -211,4 +251,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];

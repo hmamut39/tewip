@@ -1,7 +1,8 @@
-// Turns data/real/gutenberg/evidence.jsonl into eval/ground-truth.jsonl using explicit,
+// Turns data/real/<dataset>/evidence.jsonl into ground-truth labels using explicit,
 // evidence-based rules. Written BEFORE looking at the pipeline's answers on this data.
 // Anything the evidence can't settle is excluded (and counted), never guessed.
-// Usage: node eval/harvest/label-gutenberg.ts [dataset] [labels out] [warm-up end]
+// Usage: node eval/harvest/label.ts [dataset] [labels out] [warm-up end]
+// The EXCLUDED and MANUAL lists hold project-specific decisions (so far from Gutenberg).
 //   defaults: gutenberg  eval/ground-truth.jsonl  2026-09-08T01:00:00Z
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,16 +48,26 @@ const MANUAL: Array<{ test: RegExp; label: RootCause | null; note: string }> = [
  * a third-party service the test depends on failed during the test, per its own trace.
  * v1 labelled these TIMING because it never looked at the trace.
  */
-function externalFailure(record: TriageRecord | undefined): string | null {
+function traceFailures(record: TriageRecord | undefined): { external: string | null; serverError: string | null } {
   const trace = record?.attachments.find((a) => a.name === 'trace')?.path;
-  if (!trace) return null;
+  if (!trace) return { external: null, serverError: null };
   try {
-    const failed = summarizeTrace(join(PROJECT_ROOT, trace)).network.failed.find((f) => !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(f.url));
-    return failed ? `${failed.method} ${failed.url} ${failed.status ?? 'no response'}` : null;
+    const failed = summarizeTrace(join(PROJECT_ROOT, trace)).network.failed;
+    const show = (f: { method: string; url: string; status: number | null } | undefined) => (f ? `${f.method} ${f.url} ${f.status ?? 'no response'}` : null);
+    return {
+      external: show(failed.find((f) => !/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(f.url))),
+      // Label rule v3 (2026-09-17): the app's own backend answered with a server error.
+      serverError: show(failed.find((f) => f.status !== null && f.status >= 500)),
+    };
   } catch {
-    return null;
+    return { external: null, serverError: null };
   }
 }
+
+/** Label rule v3: tests colliding on shared data (e.g. two tests creating the same record). */
+const DATA_COLLISION = /duplicate key value violates unique constraint|UNIQUE constraint failed|already exists/i;
+/** Label rule v3: a test-level timeout, i.e. the awaited state did not arrive in time on this attempt. */
+const TEST_TIMEOUT = /^Test timeout of \d+ms exceeded/;
 
 function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCause; note: string } | { excluded: string } {
   const error = e.errorHead.split(' | ')[0];
@@ -65,10 +76,17 @@ function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCau
   if (e.basis === 'passed-on-retry' || e.basis === 'recurs-on-unrelated-branches') {
     const why = e.basis === 'passed-on-retry' ? 'passed on a retry of the same code' : 'fails on unrelated branches and passes elsewhere';
     if (NETWORK.test(e.errorHead)) return { label: 'ENV', note: `${why}; the test lost its connection to the WordPress test server (${error.slice(0, 60)})` };
-    const external = externalFailure(record);
-    if (external) return { label: 'ENV', note: `${why}; a third-party service the test depends on failed during the test (${external})` };
+    const trace = traceFailures(record);
+    if (trace.external) return { label: 'ENV', note: `${why}; a third-party service the test depends on failed during the test (${trace.external})` };
+    if (record && DATA_COLLISION.test(record.errorMessage)) {
+      return { label: 'TEST_DATA', note: `${why}; tests collided on shared data (${record.errorMessage.match(DATA_COLLISION)?.[0]})` };
+    }
+    if (trace.serverError) return { label: 'ENV', note: `${why}; the backend returned a server error during the test (${trace.serverError})` };
     if (excluded) return { excluded: excluded.reason };
-    if (UI_RACE.test(error)) return { label: 'TIMING', note: `${why}; UI wait/assertion that succeeds on another attempt: a race` };
+    const assertion = record ? /expect\((locator|received|page)\)/.test(record.errorMessage) : false;
+    if (UI_RACE.test(error) || TEST_TIMEOUT.test(error) || assertion) {
+      return { label: 'TIMING', note: `${why}; a wait or assertion that succeeds on another attempt: a race` };
+    }
     return { excluded: `non-deterministic, error type not covered by a labelling rule: ${error.slice(0, 60) || '(empty error)'}` };
   }
   if (e.basis === 'fixed-by-test-change') {

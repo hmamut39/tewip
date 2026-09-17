@@ -29,6 +29,14 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci --omit=optional
+      # Public projects delete their CI reports within days, so the only way to build a real
+      # dataset is to keep each week's harvest and add to it. The cache carries it forward.
+      - name: Restore what earlier weeks harvested
+        uses: actions/cache/restore@v4
+        with:
+          path: data/real
+          key: shadow-data-${{ inputs.source || 'supabase' }}-${{ github.run_id }}
+          restore-keys: shadow-data-${{ inputs.source || 'supabase' }}-
       - name: Harvest the public project's CI
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,3 +52,26 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SOURCE: ${{ inputs.source || 'supabase' }}
         run: node scripts/shadow.ts "$SOURCE" --dataset "$SOURCE-weekly" --publish ${{ github.repository }}
+      # Label the accumulated data from CI evidence and score the agent against it, so the
+      # numbers in the README keep being checked on data nobody tuned anything on.
+      - name: Label and score the accumulated data
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SOURCE: ${{ inputs.source || 'supabase' }}
+        run: |
+          node eval/harvest/evidence.ts "$SOURCE" "$SOURCE-weekly"
+          node eval/harvest/label.ts "$SOURCE-weekly" "eval/ground-truth.$SOURCE-weekly.jsonl" 2020-01-01T00:00:00Z
+          {
+            echo "## Accuracy on \`$SOURCE\` this week"
+            echo '```'
+            node eval/evaluate.ts "eval/ground-truth.$SOURCE-weekly.jsonl" --data "data/real/$SOURCE-weekly" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep this week's data for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/real
+          key: shadow-data-${{ inputs.source || 'supabase' }}-${{ github.run_id }}

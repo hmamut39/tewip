@@ -57,6 +57,10 @@ These came from reading Supabase's failure clusters before looking at any predic
 
 **Unseen window `data/real/gutenberg-aug` (Aug 27–31),** harvested and labelled after rules-5 was frozen (`npm run eval:aug`): **97.6%** on 335 labels (TIMING 243/248, ENV 81/83, REAL_BUG 3/4). It contains no drift cases, so drift recall could not be confirmed there. What it does confirm is precision: the strict rule met 12 strict-mode errors (duplicate media items, duplicate taxonomy checkboxes) and called none of them drift. Reading them exposed one flaw, now fixed: Playwright shortens long names in its suggestions, which made identical items look like different ones in the rule's note.
 
+**Prompt llm-5 (2026-09-17): substring matches.** Playwright matches accessible names by substring, so a locator can match several elements without the intended one being there. The model is now told that this is only LOCATOR_DRIFT when one match carries the name as a whole word. Re-measured on every dataset: dev 95.6% -> **96.0%**, fresh 90.3% -> **91.2%** with real bugs called drift **3 -> 1 of 29**, held-out 86.1% unchanged (real bugs called drift 3 -> 2), unseen Aug window 97.6% -> **97.9%**, Penpot 5/5, drift lab 10/13 -> **11/13** with 0 false fixes.
+
+Supabase moved 99.7% -> 99.6%: one REAL_BUG was answered TIMING. That is **model sampling noise, not the change**: asked again five times with the new prompt and five times with the old one, the same case came back REAL_BUG all ten times. Each eval stores one answer per case, so single-case differences of this size are within the noise of the method.
+
 **Other projects.** `data/real/penpot` (21 runs; most had expired) yields only 5 labelled cases, because Penpot's tests wrap locators in helpers, so the v4 rule cannot read its fixes. Ghost could not be harvested at all from outside: it uploads blob reports only for failed runs and keeps them roughly a day (3 of 255 runs survived). A project has to run the agent **inside** its own CI to get reliable data.
 
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.

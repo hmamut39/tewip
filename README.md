@@ -88,6 +88,8 @@ Setup, after `npm install`:
 | [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) (private practice repo) | Live GitHub Action on a release PR with 11 planted failures | Diagnosis comment, one environment issue, and a fix PR whose 5 locator changes pass when checked out. Traps left alone. Synthetic. |
 | WordPress Gutenberg (public) | Offline, from 3 windows of real CI blob reports | 86–96% accuracy on labelled real failures (see [eval/README.md](eval/README.md) for caveats) |
 | Supabase Studio (public) | Shadow run: real CI blob reports, nothing posted to the project | REAL_BUG 6/6, TEST_DATA 6/6; the TIMING majority shares its signal with the labels |
+| Penpot (public) | Shadow run over 21 runs that were still downloadable | Works on a third project; only 5 labelled cases, too few to score |
+| Ghost (public) | Attempted | **Not usable from outside**: Ghost uploads blob reports only for failed runs and keeps them about a day, so 3 of 255 runs survived |
 
 Shadow runs are how the agent is tried on public projects without touching them: `npm run harvest -- <source>`, then `node scripts/shadow.ts <source> [--publish your/private-repo]`.
 
@@ -162,7 +164,8 @@ npm run test:engine   # unit tests for rules, LLM layer, decide step and views (
 
 ## Known issues (found on real data)
 
-- **Drift and real bugs are hard to tell apart.** Measured on the held-out and fresh real sets, real LOCATOR_DRIFT was classified correctly in 1 of 7 cases, and a few real bugs were called drift. The auto-fix safety rule above keeps that from turning into code changes.
+- **Drift and real bugs are hard to tell apart.** With 23 real drift cases mined from the fixes WordPress developers actually made, the pipeline gets **14/23 (61%)**, and 5 of 29 real bugs are called drift. On those same 216 labelled failures the agent would have made **0 automatic code changes**, because auto-fix also requires the deterministic rule to match an element on the page. Safe, but not yet autonomous on real projects.
+- **Playwright does not always write a page snapshot.** For some failures (timeouts inside frames) `error-context.md` holds only the error and the test source, so the drift rule is blind. Rebuilding the page from the trace DOM was tried: it raised drift recall on the fresh set (14→16 of 23) but lowered held-out accuracy from 86.1% to 81.3%, because the AI reasoned worse from the noisier element list, so it was reverted per the roadmap rule.
 - **Expected server errors (partly fixed).** Tests that deliberately provoke server errors used to be read as ENV. The model is now told when a test's name says it exercises error handling (prompt llm-4).
 - **Views can't tell pull-request branches from the main branch yet.** Records don't store the branch, so regressions inside unmerged PRs count as product bugs in the architecture view and the digest.
 - **Some recurring flakes are misread.** Flaky tests that also fail on other branches are misclassified (0/22 on the held-out set), and TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.

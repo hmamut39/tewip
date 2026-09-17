@@ -14,7 +14,7 @@ const SYNONYMS: Record<string, string> = {
   dropdown: 'combobox',
   select: 'combobox',
 };
-const ROLE_WORDS = new Set(['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'heading', 'img', 'listitem', 'tab', 'menuitem', 'option', 'dialog', 'searchbox', 'switch', 'slider']);
+export const ROLE_WORDS = new Set(['button', 'link', 'textbox', 'checkbox', 'radio', 'combobox', 'heading', 'img', 'listitem', 'tab', 'menuitem', 'option', 'dialog', 'searchbox', 'switch', 'slider']);
 
 export function tokenize(text: string): string[] {
   return text

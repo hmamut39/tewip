@@ -13,6 +13,10 @@ export const SOURCES: Record<string, { repo: string; workflow: string; artifact:
   gutenberg: { repo: 'WordPress/gutenberg', workflow: 'end2end-test.yml', artifact: 'blob-reports-merged' },
   // Supabase Studio: one blob-report-next-N artifact per shard (the TanStack build runs the same tests and is left out).
   supabase: { repo: 'supabase/supabase', workflow: 'studio-e2e-test.yml', artifact: 'blob-report-next-' },
+  // Penpot integration tests: one integration-blob-report-N per shard, kept a few days.
+  penpot: { repo: 'penpot/penpot', workflow: 'tests-integration.yml', artifact: 'integration-blob-report-' },
+  // Ghost uploads blob reports for failed runs only, so its history has no passing runs.
+  ghost: { repo: 'TryGhost/Ghost', workflow: 'ci.yml', artifact: 'blob-report-Main-' },
 };
 
 export interface RunMeta {

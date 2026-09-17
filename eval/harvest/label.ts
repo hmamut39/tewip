@@ -6,6 +6,9 @@
 //   defaults: gutenberg  eval/ground-truth.jsonl  2026-09-08T01:00:00Z
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { lastCall } from '../../engine/autofix/locate.ts';
+import { extractLocator } from '../../engine/error-parse.ts';
+import { locatorWords, ROLE_WORDS } from '../../engine/similarity.ts';
 import { summarizeTrace } from '../../engine/trace/trace-summary.ts';
 import { PROJECT_ROOT, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RootCause, TriageRecord } from '../../reporters/types.ts';
@@ -69,6 +72,35 @@ const DATA_COLLISION = /duplicate key value violates unique constraint|UNIQUE co
 /** Label rule v3: a test-level timeout, i.e. the awaited state did not arrive in time on this attempt. */
 const TEST_TIMEOUT = /^Test timeout of \d+ms exceeded/;
 
+const LOCATOR_CALL = /(?:locator|getBy(?:Role|Text|Label|TestId|Placeholder|Title|AltText))\((?:[^()]|\([^()]*\))*\)/g;
+const squash = (s: string) => s.replaceAll('"', "'").replace(/\s+/g, '');
+
+/**
+ * Label rule v4 (2026-09-17): the fix removed the failing locator and added a locator for the
+ * same element: the two share a content word, e.g. getByRole('button', { name: 'Edit' }) became
+ * { name: 'Edit link' }. A step removed without a replacement (an outdated test) does not count,
+ * nor does a replacement that only shares a role word such as "button".
+ */
+function renamedLocator(e: Evidence, record: TriageRecord | undefined): { from: string; to: string } | null {
+  const printed = record ? extractLocator(record.errorMessage) : null;
+  if (!e.specPatch || !printed) return null;
+  const failing = lastCall(printed);
+  const key = squash(failing).replace(/^(?:locator|getBy\w+)\(/, '').replace(/\)$/, '').slice(0, 40);
+  const lines = e.specPatch.split('\n');
+  const removed = squash(lines.filter((l) => l.startsWith('-')).join(''));
+  const addedLines = lines.filter((l) => l.startsWith('+'));
+  if (!key || !removed.includes(key) || squash(addedLines.join('')).includes(key)) return null;
+
+  const contentWords = (call: string) => new Set(locatorWords(call).tokens.filter((t) => !ROLE_WORDS.has(t)));
+  const old = contentWords(failing);
+  for (const line of addedLines) {
+    for (const [call] of line.matchAll(LOCATOR_CALL)) {
+      if ([...contentWords(call)].some((w) => old.has(w))) return { from: failing, to: call.replace(/\s+/g, ' ') };
+    }
+  }
+  return null;
+}
+
 function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCause; note: string } | { excluded: string } {
   const error = e.errorHead.split(' | ')[0];
   const excluded = EXCLUDED.find((x) => x.test.test(e.testId) && (!x.error || x.error.test(e.errorHead)));
@@ -88,6 +120,12 @@ function decide(e: Evidence, record: TriageRecord | undefined): { label: RootCau
       return { label: 'TIMING', note: `${why}; a wait or assertion that succeeds on another attempt: a race` };
     }
     return { excluded: `non-deterministic, error type not covered by a labelling rule: ${error.slice(0, 60) || '(empty error)'}` };
+  }
+  if (e.basis === 'fixed-by-test-change' || e.basis === 'fixed-by-mixed-change') {
+    const manual = MANUAL.find((m) => m.test.test(e.testId));
+    if (manual) return manual.label ? { label: manual.label, note: manual.note } : { excluded: manual.note };
+    const renamed = renamedLocator(e, record);
+    if (renamed) return { label: 'LOCATOR_DRIFT', note: `the fix replaced the failing locator ${renamed.from} with ${renamed.to}, a locator for the same element` };
   }
   if (e.basis === 'fixed-by-test-change') {
     const manual = MANUAL.find((m) => m.test.test(e.testId));

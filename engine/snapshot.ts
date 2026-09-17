@@ -29,8 +29,7 @@ export function errorContextPath(record: TriageRecord): string | null {
 
 export function readPageSnapshot(record: TriageRecord): SnapshotElement[] | null {
   const file = errorContextPath(record);
-  if (!file) return null;
-  return extractPageSnapshot(readFileSync(file, 'utf8'));
+  return file ? extractPageSnapshot(readFileSync(file, 'utf8')) : null;
 }
 
 /**

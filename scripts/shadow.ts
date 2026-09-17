@@ -5,10 +5,11 @@
 // code formatting so GitHub creates no "mentioned in" links on it.
 // Usage: node scripts/shadow.ts <source> [--dataset name] [--publish owner/repo] [--max-runs 25]
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { join } from 'node:path';
 import { ghRaw } from '../eval/harvest/gh.ts';
 import { metaFile, SOURCES, type RunMeta } from '../eval/harvest/harvest.ts';
-import { GitHub } from '../ci/github.ts';
+
 import { loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
@@ -82,9 +83,21 @@ async function main(): Promise<void> {
 
   const target = arg('publish');
   if (!target) return;
-  const github = new GitHub((await ghRaw(['auth', 'token'])).toString('utf8').trim(), target);
-  const issue = await github.request<{ number: number; html_url: string }>('POST', '/repos/{repo}/issues', { title: `Shadow run: triage-agent on ${config.repo} (${days[0]} to ${days.at(-1)})`, body: summary });
-  for (const c of comments) await github.request('POST', `/repos/{repo}/issues/${issue.number}/comments`, { body: c });
+  // Posted through the gh CLI (same login as the harvester), one request at a time: GitHub's
+  // secondary rate limit rejects issues and comments created back to back.
+  const post = async <T>(path: string, body: Record<string, string>): Promise<T> => {
+    const file = join(out, 'post.json');
+    writeFileSync(file, JSON.stringify(body), 'utf8');
+    return JSON.parse((await ghRaw(['api', path, '-X', 'POST', '--input', file])).toString('utf8')) as T;
+  };
+  const issue = await post<{ number: number; html_url: string }>(`repos/${target}/issues`, {
+    title: `Shadow run: triage-agent on ${config.repo} (${days[0]} to ${days.at(-1)})`,
+    body: summary,
+  });
+  for (const c of comments) {
+    await sleep(3_000);
+    await post(`repos/${target}/issues/${issue.number}/comments`, { body: c });
+  }
   console.log(`\npublished: ${issue.html_url}`);
 }
 

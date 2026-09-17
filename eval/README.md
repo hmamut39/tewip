@@ -51,6 +51,10 @@ npm run eval:holdout
 
 These came from reading Supabase's failure clusters before looking at any predictions. Rules-4 then added the matching `test-data-collision` and `env-server-error` rules ahead of the retry rule, so the rules-4 scores (dev 96.0%, held-out 86.1%, fresh 89.8%) are measured on data that was seen while designing them.
 
+**Label rule v4 (2026-09-17): real "UI changed" examples.** When a fix removed the failing locator and added another locator for the same element (the two share a content word, e.g. `getByRole('button', { name: 'Edit' })` → `{ name: 'Edit link' }`), the case is labelled LOCATOR_DRIFT. A step removed without a replacement (an outdated test) and a replacement sharing only a role word are still excluded. This lifted the fresh set from 4 to **23 real drift cases**, the first sample large enough to measure the category the auto-fix loop acts on: **14/23 = 61%**.
+
+**Other projects.** `data/real/penpot` (21 runs; most had expired) yields only 5 labelled cases, because Penpot's tests wrap locators in helpers, so the v4 rule cannot read its fixes. Ghost could not be harvested at all from outside: it uploads blob reports only for failed runs and keeps them roughly a day (3 of 255 runs survived). A project has to run the agent **inside** its own CI to get reliable data.
+
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.
 - For "passed on retry" cases, the label and the `timing-retry-pass` rule use the same fact, so agreement between them is partly built in.
 - TEST_DATA has no labelled cases, and LOCATOR_DRIFT has almost none.

@@ -117,3 +117,4 @@ describe('trace DOM reconstruction', () => {
     assert.deepEqual(notableElements(dom.root).elements, ['<button id="buy">Buy</button>']);
   });
 });
+

@@ -160,9 +160,13 @@ describe('TIMING rule', () => {
     assert.equal(d.category, 'TIMING');
   });
 
-  it('intermittent failures with one repeating error are left UNKNOWN', () => {
+  // Until rules-6 this was left UNKNOWN for the LLM, which read repeated identical failures as a
+  // real bug. A test that keeps flipping between passing and failing is not deterministically
+  // broken, whatever its error says.
+  it('a test that keeps flipping between passing and failing → TIMING, even with one repeating error', () => {
     const d = diagnoseLast({ a: ['P', 'Error: same', 'P', 'Error: same', 'P', 'Error: same'] }, 'a');
-    assert.equal(d.category, 'UNKNOWN');
+    assert.equal(d.category, 'TIMING');
+    assert.ok(d.confidence < 0.85, 'stays below the auto-fix threshold');
   });
 });
 

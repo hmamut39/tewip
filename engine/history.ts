@@ -33,6 +33,11 @@ export interface TestHistory {
   passesOnOtherCommits: number;
   /** Runs on other commits in the window where this test failed at least once. */
   failingRunsOnOtherCommits: number;
+  /**
+   * How often the test switched between passing and failing on this run's own branch, in time
+   * order. A test broken by one change flips once; a flaky test keeps flipping.
+   */
+  alternations: number;
 }
 
 export interface RunContext {
@@ -104,7 +109,7 @@ export class HistoryIndex {
       .slice(0, until + 1)
       .filter((e) => (e.attempts[testId] ?? 0) > 0)
       .slice(-HISTORY_WINDOW)
-      .map((e) => ({ sha: e.sha, attempts: e.attempts[testId], failures: e.failures.filter((f) => f.testId === testId) }));
+      .map((e) => ({ sha: e.sha, branch: e.branch, attempts: e.attempts[testId], failures: e.failures.filter((f) => f.testId === testId) }));
     const sha = this.runs[until].sha;
     const sameCommit = sha ? entries.filter((e) => e.sha === sha) : [];
     const otherCommits = sha ? entries.filter((e) => e.sha !== sha) : [];
@@ -135,6 +140,17 @@ export class HistoryIndex {
       streakDistinctErrors: distinct(streak.flatMap((e) => e.failures)),
       failuresBeforeStreak,
       passesBeforeStreak: before.reduce((sum, e) => sum + e.attempts, 0) - failuresBeforeStreak,
+      // Counted within this run's own branch. Across branches the same test legitimately passes on
+      // one line of work and fails on another, which looks like flipping but is not.
+      alternations: entries
+        .filter((e) => e.branch === this.runs[until].branch)
+        .reduce<{ count: number; last: boolean | null }>(
+          (acc, e) => {
+            const failed = e.failures.length > 0;
+            return { count: acc.count + (acc.last !== null && acc.last !== failed ? 1 : 0), last: failed };
+          },
+          { count: 0, last: null },
+        ).count,
     };
   }
 

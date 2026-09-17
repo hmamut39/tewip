@@ -67,6 +67,14 @@ This raises fresh-set drift from **16/23 = 70%** to **16/20 = 80%**, so the 80% 
 
 **Third unseen window `data/real/gutenberg-aug2` (Aug 20–26, 934 runs, `npm run eval:aug2`),** harvested and labelled after rules-5 and llm-5 were frozen: **86.3%** on 473 labels (TIMING 271/331, ENV, REAL_BUG 17/21) and **LOCATOR_DRIFT 3/3**. Those three are drift the rule had never seen, and of a different kind than the strict-mode rule handles: the test asked for an `exact` name and the button's label changed, which the similarity rule caught at 0.80, below the auto-fix threshold. The agent would have made **0 automatic changes** in that whole week.
 
+**Rules-6 (2026-09-17): tests that come and go.** The biggest error class left was flaky tests read as real bugs. History now counts how often a test switched between passing and failing **on its own branch** (counting across branches was tried first and was wrong: the same test legitimately passes on one line of work and fails on another, which cost the fresh set 9 points before the mistake was found). A test that keeps flipping is TIMING at 0.7, well below the auto-fix line; it declines when a request failed during the test, because a dependency that fails now and then is ENV. The rules also read **every attempt's** trace for failed requests now, not only the last one.
+
+Result across nine datasets: JupyterLab 87.8% -> **90.2%**, and dev 96.0%, held-out 86.1%, fresh 92.5%, Aug 27-31 97.9%, Aug 20-26 86.3%, Supabase 99.6%, Penpot 5/5, LXD UI 91.3% all unchanged. Lab unchanged (11/13, 0 false fixes).
+
+One finding worth keeping: an earlier wording of that rule's decline note ("a flaky dependency, **not necessarily a race**") moved two held-out cases from ENV to TIMING, costing 1.2 points, while the rule itself never fired on them. The notes rules write are read by the model as checked facts, so their wording is part of the system and is measured like code.
+
+**New projects.** `data/real/jupyterlab` (Galata UI suite, 91 failures, 41 labels, **90.2%**) and `data/real/lxdui` (`canonical/lxd-ui` pull-request suite, 352 failures, 69 labels, **91.3%**) are the fourth and fifth public projects. On both, the deterministic rules were right on every case they decided (34/34 and 63/63); every miss is an AI answer on a cross-branch flake. Nextcloud harvests fine but only 1 case in the window had the evidence to label.
+
 **Other projects.** `data/real/penpot` (21 runs; most had expired) yields only 5 labelled cases, because Penpot's tests wrap locators in helpers, so the v4 rule cannot read its fixes. Ghost could not be harvested at all from outside: it uploads blob reports only for failed runs and keeps them roughly a day (3 of 255 runs survived). A project has to run the agent **inside** its own CI to get reliable data.
 
 **Known limits of these labels.** The labels are written by Claude from CI evidence, not by a human.

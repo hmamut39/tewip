@@ -87,9 +87,12 @@ Setup, after `npm install`:
 | Project | How | Result |
 |---|---|---|
 | [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) (private practice repo) | Live GitHub Action on a release PR with 11 planted failures | Diagnosis comment, one environment issue, and a fix PR whose 5 locator changes pass when checked out. Traps left alone. Synthetic. |
-| WordPress Gutenberg (public) | Offline, from 3 windows of real CI blob reports | 86–96% accuracy on labelled real failures (see [eval/README.md](eval/README.md) for caveats) |
+| WordPress Gutenberg (public) | Offline, from 5 windows of real CI blob reports, two of them harvested after the pipeline was frozen | 84–98% accuracy on 1,441 labelled real failures; the only project with enough drift cases to measure that category (see [eval/README.md](eval/README.md) for caveats) |
+| JupyterLab (public) | Offline, from its Galata UI suite | 87.8% on 41 labelled failures; the deterministic rules alone were right on 34 of 34 they decided |
+| LXD UI (public) | Offline, from its pull-request suite | 91.3% on 69 labelled failures; rules right on 63 of 63. All 6 misses are cross-branch flakes read as real bugs |
 | Supabase Studio (public) | Shadow run: real CI blob reports, nothing posted to the project | REAL_BUG 6/6, TEST_DATA 6/6; the TIMING majority shares its signal with the labels |
 | Penpot (public) | Shadow run over 21 runs that were still downloadable | Works on a third project; only 5 labelled cases, too few to score |
+| Nextcloud server (public) | Attempted | Harvests fine (45 failures) but only 1 case had the evidence to label in the window: too sparse to score |
 | Ghost (public) | Attempted | **Not usable from outside**: Ghost uploads blob reports only for failed runs and keeps them about a day, so 3 of 255 runs survived |
 
 Shadow runs are how the agent is tried on public projects without touching them: `npm run harvest -- <source>`, then `node scripts/shadow.ts <source> [--publish your/private-repo]`.

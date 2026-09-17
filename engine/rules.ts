@@ -175,6 +175,42 @@ const timingFlaky: Rule = {
   },
 };
 
+/** Flips between passing and failing needed before a test counts as intermittent, not broken. */
+export const INTERMITTENT_MIN_ALTERNATIONS = 3;
+
+/**
+ * A test that keeps switching between passing and failing across commits. A change that breaks a
+ * test flips it once and it stays broken; a race flips it again and again. The deterministic
+ * rules above (drift on the page, data collisions, server errors) are checked first, so this only
+ * catches what none of them explains. Confidence stays well below the auto-fix threshold: the
+ * rule knows the failure is not deterministic, not where the race is (rules-6, from misreading
+ * cross-branch flakes as real bugs on real CI data).
+ */
+const timingIntermittent: Rule = {
+  id: 'timing-intermittent',
+  evaluate({ history, loadFailedRequests }) {
+    const { alternations, runs, failures } = history;
+    if (alternations < INTERMITTENT_MIN_ALTERNATIONS) return null;
+    // A dependency that fails now and then also makes a test come and go, and that is ENV, not a
+    // race in the test. Seen on held-out data, where an external media API broke this test.
+    const failed = (loadFailedRequests?.() ?? [])[0];
+    if (failed) {
+      return declined(this.id, `this test comes and goes on this branch (${alternations} switches in ${runs} runs) and ${failed.url} failed during it (${failed.status ?? 'no response'}): a dependency failing now and then is an environment problem, not a race inside the test`);
+    }
+    return {
+      category: 'TIMING',
+      confidence: 0.7,
+      evidence: [
+        {
+          source: 'timing-intermittent',
+          message: `this test switched between passing and failing ${alternations} times across the last ${runs} runs (${failures} failed): it comes and goes rather than staying broken`,
+          data: { alternations, runs, failures },
+        },
+      ],
+    };
+  },
+};
+
 /**
  * A value mismatch on a test that was reliable until it started failing the same way.
  * Declines when the server failed during the test: the wrong value may come from the
@@ -217,4 +253,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingRetryPass, locatorDrift, timingFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, realBugAssertion];

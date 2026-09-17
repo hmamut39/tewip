@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { PROJECT_ROOT } from '../reporters/store.ts';
 
 /** Bump whenever a rule or threshold changes, so stored diagnoses can be recomputed. */
-export const ENGINE_VERSION = 'rules-5';
+export const ENGINE_VERSION = 'rules-6';
 
 /** Subtracted when rules disagree on the category, so the decision is less likely to trigger an autonomous action. */
 const CONFLICT_PENALTY = 0.1;
@@ -57,8 +57,8 @@ export function diagnose(input: RuleInput, now = new Date()): Diagnosis {
   return { ...base, category: winner.outcome.category!, confidence: round2(confidence), ruleId: winner.rule.id, evidence };
 }
 
-/** Requests that failed during the record's test, from its trace; [] when there is no readable trace. */
-function failedRequestsOf(record: TriageRecord): Array<{ url: string; status: number | null }> {
+/** Requests that failed during one attempt, from its trace; [] when there is no readable trace. */
+function failedRequestsOfAttempt(record: TriageRecord): Array<{ url: string; status: number | null }> {
   const rel = record.attachments.find((a) => a.name === 'trace')?.path;
   if (!rel || !existsSync(join(PROJECT_ROOT, rel))) return [];
   try {
@@ -66,6 +66,16 @@ function failedRequestsOf(record: TriageRecord): Array<{ url: string; status: nu
   } catch {
     return [];
   }
+}
+
+/**
+ * Requests that failed during this test in this run, across every attempt. A retry often
+ * succeeds in reaching a dependency that failed the first time, and only one attempt's trace
+ * carries the failure; a person triaging looks at all of them, so the rules do too.
+ */
+function failedRequestsOf(record: TriageRecord, attempts: readonly TriageRecord[] = []): Array<{ url: string; status: number | null }> {
+  const all = [record, ...attempts.filter((a) => a !== record)];
+  return all.flatMap(failedRequestsOfAttempt);
 }
 
 /** Diagnoses `targets` using the point-in-time history held by `index`. */
@@ -77,7 +87,7 @@ export function diagnoseRecords(targets: TriageRecord[], index: HistoryIndex, no
         history: index.historyAsOf(record.testId, record.runId),
         run: index.runContext(record.runId),
         loadSnapshot: () => readPageSnapshot(record),
-        loadFailedRequests: () => failedRequestsOf(record),
+        loadFailedRequests: () => failedRequestsOf(record, index.runContext(record.runId).failures.filter((f) => f.testId === record.testId)),
       },
       now,
     ),

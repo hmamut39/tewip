@@ -1,5 +1,6 @@
 // What the MCP server answers. Each function returns markdown built by the same engine and
 // role views as the CLI and the GitHub Action (one engine, many outlets). Read-only.
+import { loadCorrections } from '../engine/corrections.ts';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { lastFailedAttempts, loadDataset, type Dataset } from '../engine/dataset.ts';
@@ -61,7 +62,10 @@ function itemsFor(dir: string | undefined, dataset: Dataset, index: HistoryIndex
   const key = `${dir ?? ''}|${runId ?? '*'}|${ai}`;
   if (!memo.has(key)) {
     const records = runId ? dataset.records.filter((r) => r.runId === runId) : dataset.records;
-    memo.set(key, buildItems(records, index, { dataset: dataset.label, llm: ai ? llmFromEnv() : null }));
+    // Corrections people made are part of what the agent knows, so an assistant asking "why did
+    // CI fail?" is told the answer a person settled, not the one the agent had first.
+    const corrections = loadCorrections(dir ?? DATA_DIR);
+    memo.set(key, buildItems(records, index, { dataset: dataset.label, llm: ai ? llmFromEnv() : null, corrections }));
   }
   return memo.get(key)!;
 }

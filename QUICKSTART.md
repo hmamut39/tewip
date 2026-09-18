@@ -1,0 +1,119 @@
+# Quickstart: putting triage-agent on one repository
+
+For an engineer adding the agent to a project that already runs Playwright tests in GitHub Actions. It takes about ten minutes, and the first useful output arrives with the next failing run.
+
+Start with **one** repository whose tests fail sometimes. A repository whose suite is always green has nothing to triage.
+
+## What the agent does once it is installed
+
+Every CI run, for every failed test, it decides the root cause — application bug, changed selector, race, environment, or test data — with a confidence, the evidence it used, and one concrete next action. It then delivers that to the people who need it: a comment on the pull request, the board in the job summary, one grouped issue for environment failures, and optionally a separate pull request with locator fixes that it re-ran and verified.
+
+It never merges anything, never edits application code, and never opens a fix pull request for a change it has not proved by re-running the test.
+
+## Step 1: make Playwright leave the evidence behind
+
+The agent reads Playwright's own blob report and traces, so nothing from this project goes into your test config:
+
+```ts
+// playwright.config.ts
+reporter: process.env.CI ? [['list'], ['blob']] : 'list',
+use: { trace: 'retain-on-failure' },
+```
+
+If your config already uses a reporter list in CI, add `['blob']` to it.
+
+## Step 2: add one step to the workflow that runs the tests
+
+```yaml
+permissions:
+  pull-requests: write     # the diagnosis comment
+  issues: write            # the grouped environment issue
+  contents: write          # only if you turn autofix on
+
+steps:
+  # ... your existing checkout, install, and `npx playwright test` steps ...
+
+  - name: triage-agent
+    if: always()           # it must run even though the test step failed
+    uses: hmamut39/triage-agent@main
+    with:
+      openai-api-key: ${{ secrets.OPENAI_API_KEY }}   # optional, see step 3
+      autofix: 'false'                                # start with this off
+```
+
+`if: always()` matters: without it the step is skipped exactly when there is something to triage.
+
+Keep `autofix: 'false'` for the first week. Read what the agent says, decide whether you trust it, and turn fixing on afterwards.
+
+## Step 3: decide whether to give it an API key
+
+| Without a key | With `OPENAI_API_KEY` |
+|---|---|
+| Only the deterministic rules run | The rules run first, and only what they cannot settle goes to the model |
+| Every answer is explainable from the error, the trace and the test's history | Adds a judgement on the rest, with its reasoning and evidence shown |
+| Free | A few cents per run in practice, because the rules answer most failures |
+
+On real projects the rules alone decide most failures and are right on 96–98% of what they decide, so starting without a key is a reasonable first week. To add one later: repository **Settings → Secrets and variables → Actions → New repository secret**, named `OPENAI_API_KEY`.
+
+Two guards worth setting once the key is in place:
+
+```yaml
+env:
+  TRIAGE_LLM_MAX_CALLS: '80'     # hard cap on model calls per run
+  TRIAGE_LLM_PRICE_IN: '0.25'    # your price per million input tokens
+  TRIAGE_LLM_PRICE_OUT: '2'      # per million output tokens, so every run prints what it cost
+```
+
+## What you will see on the next failing run
+
+- **On the pull request:** one comment listing each failing test, grouped by whether your change likely caused it, each with a cause, a confidence, the evidence and the next action. It updates in place rather than adding a comment per run.
+- **In the job summary:** the same failures as a triage board.
+- **As an issue:** environment failures (5xx responses, connection resets, outages) grouped into one issue instead of one per test.
+- **As an artifact** named `triage-agent-report`: every role's view, including the engineering-quality view with the flaky tests ranked by the CI minutes they cost.
+
+## Correcting it
+
+When it gets one wrong, reply to its comment:
+
+```
+/triage TIMING #2 this one is flaky on our CI runners, not a bug
+```
+
+From the next run on, that failure of that test gets your answer, shown as "corrected by a person" with your name and reason. A correction settles the cause; it never makes the agent change code.
+
+## Asking it questions from your editor
+
+Any editor with MCP support (VS Code Copilot agent mode, Cursor, JetBrains 2025.2+, Claude Code, Windsurf) can query the agent. Add one entry, pointing at a checkout of this repository:
+
+```json
+{
+  "mcpServers": {
+    "triage-agent": { "command": "node", "args": ["/absolute/path/to/triage-agent/mcp/server.ts"] }
+  }
+}
+```
+
+Then ask, in plain language: "why did CI fail on my PR?", "which tests are flaky in checkout?", "is main safe to release?". Every tool is read-only, and it reads the report the Action already uploaded, so you do not need the other repository cloned.
+
+## Turning fixing on, once you trust it
+
+```yaml
+      autofix: 'true'
+```
+
+It then rewrites a drifted locator, re-runs that single test, and opens a **separate** pull request only with the changes that passed. Review it like any other pull request: an intended UI change and a regression can look identical from the outside, which is exactly why a human merges it.
+
+On real WordPress CI data it would have fixed 14 drifted locators with none wrong, and every locator it suggested matched what the developers themselves wrote.
+
+## If something does not appear
+
+| Symptom | Cause |
+|---|---|
+| The step ran but says "no blob report" | The blob reporter is not on in CI, or the tests step did not run |
+| No comment on the pull request | The run was not triggered by a pull request, or `pull-requests: write` is missing |
+| "Resource not accessible by integration" | The workflow's permissions block is missing an entry |
+| Diagnoses look thin on the first day | The agent judges each failure against that test's history, which it builds from your runs; it gets better as runs accumulate |
+
+## What it costs, and what it keeps
+
+The agent stores the run history in the Actions cache, never in your repository. Collected failure data and traces stay in CI. The only thing it writes to your repository is a pull request branch, and only when you turn fixing on.

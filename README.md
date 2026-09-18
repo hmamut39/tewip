@@ -6,6 +6,8 @@ A triage agent for Playwright test failures. See [ROADMAP.md](ROADMAP.md) for th
 
 ## Use it in your project
 
+**Putting it on a real repository: [QUICKSTART.md](QUICKSTART.md)** — ten minutes, copy-paste, and what to check on the first failing run.
+
 ### 1. In GitHub CI (developers, SDETs, DevOps)
 
 Tell Playwright to write a blob report in CI. It's a built-in reporter, so there's no triage-agent code in your config:

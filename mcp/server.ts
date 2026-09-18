@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // MCP server for triage-agent: lets any MCP-capable AI assistant (Claude Code, Claude Desktop,
 // Cursor, VS Code agent mode, ...) ask about Playwright test failures and get the same
 // diagnoses, next actions and role views the agent produces in CI.

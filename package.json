@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=22.18"
   },
+  "bin": {
+    "triage-agent-mcp": "mcp/server.ts"
+  },
   "scripts": {
     "test": "playwright test",
     "test:loop": "node scripts/test-loop.ts 5",

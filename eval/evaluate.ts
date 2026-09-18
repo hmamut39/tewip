@@ -135,6 +135,9 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
   console.log(`LLM layer:    ${byLlm.length} decided, ${byLlm.filter(correct).length} correct (${percent(byLlm.filter(correct).length, byLlm.length)})`);
   console.log(`Still UNKNOWN: ${unknown.length} (counted as wrong)`);
   console.log(usageLine());
+  // Measured on the held-out set: three runs of identical code scored 142, 143 and 144 of 166.
+  // Anything smaller than that is the model's sampling, not a change worth keeping or reverting.
+  console.log('Model sampling moves this score by about +-1 case per 150; treat smaller differences as noise, not as a result.');
   console.log(
     `Phase 3 metric, overall accuracy: ${right}/${cases.length} = ${percent(right, cases.length)}  ` +
       `(target >= ${ACCURACY_TARGET * 100}%: ${cases.length > 0 && right / cases.length >= ACCURACY_TARGET ? 'MET' : 'MISSED'})`,

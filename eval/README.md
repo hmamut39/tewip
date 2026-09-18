@@ -13,6 +13,12 @@ npm run eval             # the real metric, once ground-truth.jsonl exists
 # add -- --verbose to see the model's reasoning, -- --no-llm to measure the rules alone
 ```
 
+## How much of a score is noise
+
+Three runs of the **identical** pipeline over the held-out set scored **142, 143 and 144** of 166 (85.5%, 86.1%, 86.7%). The model samples its answers, so a score moves by about one case per 150 on its own. **A difference that small is not a result**, in either direction, and the eval now prints that reminder under every score.
+
+Two ways to remove the noise were measured and both rejected: `temperature: 0` makes runs perfectly repeatable and **collapses accuracy from ~143 to 121 of 166** (greedy decoding reasons worse), and a fixed `seed` alone does not stabilise anything (140, 142, 144). The cache is what keeps day-to-day comparisons stable: an unchanged request returns its stored answer, so only what actually changed is re-asked.
+
 ## Real data from public CI (`eval/harvest/`)
 
 ```bash

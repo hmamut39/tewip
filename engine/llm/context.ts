@@ -28,6 +28,8 @@ export interface FailureContext {
     sameCommitAttempts: number;
     sameCommitFailures: number;
     passesOnOtherCommits: number;
+    /** Runs on other commits where this test also failed: a test that fails all over is not this commit's fault. */
+    failingRunsOnOtherCommits: number;
     runs: number;
     failures: number;
     failureRatePct: number;
@@ -123,8 +125,14 @@ export function historyPattern(h: TestHistory): string {
   if (h.sameCommitFailures < h.sameCommitAttempts) {
     return `this commit both failed and passed (${h.sameCommitFailures}/${h.sameCommitAttempts} attempts failed): the failure is not deterministic`;
   }
+  if (h.passesOnOtherCommits > 0 && h.failingRunsOnOtherCommits >= 2) {
+    // Saying only "it passed on other commits" invited REAL_BUG for tests that fail on and off
+    // all over the project, which was the AI layer's commonest mistake on real CI data (llm-6).
+    return `every attempt on this commit failed (${h.sameCommitFailures}/${h.sameCommitAttempts}); the test also failed in ${h.failingRunsOnOtherCommits} run(s) on other commits and passed ${h.passesOnOtherCommits} time(s) there`;
+  }
   if (h.passesOnOtherCommits > 0) {
-    return `every attempt on this commit failed (${h.sameCommitFailures}/${h.sameCommitAttempts}) while the test passed ${h.passesOnOtherCommits} time(s) on other commits: something in this commit likely changed behaviour`;
+    const alsoFailed = h.failingRunsOnOtherCommits > 0 ? `, though it also failed in ${h.failingRunsOnOtherCommits} run on another commit` : ' and never failed there';
+    return `every attempt on this commit failed (${h.sameCommitFailures}/${h.sameCommitAttempts}) while the test passed ${h.passesOnOtherCommits} time(s) on other commits${alsoFailed}: something in this commit likely changed behaviour`;
   }
   return `every recorded attempt failed (${h.sameCommitFailures}/${h.sameCommitAttempts}) and there is no passing run to compare with`;
 }
@@ -155,6 +163,7 @@ export function buildFailureContext(record: TriageRecord, history: TestHistory, 
       sameCommitAttempts: history.sameCommitAttempts,
       sameCommitFailures: history.sameCommitFailures,
       passesOnOtherCommits: history.passesOnOtherCommits,
+      failingRunsOnOtherCommits: history.failingRunsOnOtherCommits,
       runs: history.runs,
       failures: history.failures,
       failureRatePct: Math.round(history.failureRate * 100),

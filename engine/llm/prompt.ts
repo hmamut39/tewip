@@ -3,7 +3,7 @@
 import { ROOT_CAUSES } from '../../reporters/types.ts';
 
 /** Bump whenever the prompt, schema or context format changes; it is part of the cache key. */
-export const PROMPT_VERSION = 'llm-5';
+export const PROMPT_VERSION = 'llm-6';
 
 export const SYSTEM_PROMPT = `You are the root-cause classifier of a Playwright test-failure triage agent.
 You receive a structured summary of ONE failed test: the error, the test's run history, what the deterministic rules already checked, the test steps, the page at failure time (accessibility snapshot + notable DOM elements), failed network requests and console errors.

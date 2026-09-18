@@ -2,7 +2,7 @@
 
 A triage agent for Playwright test failures. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 91.2%; the caveats are in [eval/README.md](eval/README.md).
+**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.0%; the caveats are in [eval/README.md](eval/README.md).
 
 ## Use it in your project
 
@@ -88,7 +88,7 @@ Setup, after `npm install`:
 |---|---|---|
 | [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) (private practice repo) | Live GitHub Action on a release PR with 11 planted failures | Diagnosis comment, one environment issue, and a fix PR whose 5 locator changes pass when checked out. Traps left alone. Synthetic. |
 | WordPress Gutenberg (public) | Offline, from 5 windows of real CI blob reports, two of them harvested after the pipeline was frozen | 84–98% accuracy on 1,441 labelled real failures; the only project with enough drift cases to measure that category (see [eval/README.md](eval/README.md) for caveats) |
-| JupyterLab (public) | Offline, from its Galata UI suite | 87.8% on 41 labelled failures; the deterministic rules alone were right on 34 of 34 they decided |
+| JupyterLab (public) | Offline, from its Galata UI suite | 90.2% on 41 labelled failures; the deterministic rules alone were right on 34 of 34 they decided |
 | LXD UI (public) | Offline, from its pull-request suite | 91.3% on 69 labelled failures; rules right on 63 of 63. All 6 misses are cross-branch flakes read as real bugs |
 | Supabase Studio (public) | Shadow run: real CI blob reports, nothing posted to the project | REAL_BUG 6/6, TEST_DATA 6/6; the TIMING majority shares its signal with the labels |
 | Penpot (public) | Shadow run over 21 runs that were still downloadable | Works on a third project; only 5 labelled cases, too few to score |

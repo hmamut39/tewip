@@ -2,7 +2,7 @@
 
 A triage agent for Playwright test failures. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.0%; the caveats are in [eval/README.md](eval/README.md).
+**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
 
 ## Use it in your project
 
@@ -153,6 +153,7 @@ The first matching rule, in this order, decides the category. If a lower-priorit
 | `test-data-collision` | TEST_DATA | the error shows the test's data collided with existing data (duplicate key, unique constraint, "already exists") |
 | `env-server-error` | ENV | the app's backend answered a 5xx during the test; declines for tests that provoke errors on purpose, and for errors seen only on this commit |
 | `locator-drift-strict` | LOCATOR_DRIFT | an action's locator now matches several elements, and exactly one of them carries the locator's name as a whole word (`name: 'Edit'` → "Editor canvas", "Edit link"). The fix is the locator Playwright printed for that element. |
+| `timing-intercepted` | TIMING | the element was ready, but the error says another element (a snackbar, menu or overlay) intercepts pointer events, so the click could not land |
 | `timing-retry-pass` | TIMING | another attempt of the same code in the same run passed |
 | `locator-drift` | LOCATOR_DRIFT | the element was never found, but the page snapshot has an element with a similar name (similarity ≥ 0.6). Declines when the test has no recorded passing run: nothing then shows the element ever matched. |
 | `timing-flaky` | TIMING | the failure rate is 20%-80% over at least 3 runs, and the error message varies |

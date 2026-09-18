@@ -88,3 +88,24 @@ describe('locator-drift-strict rule', () => {
     assert.notEqual(run(clickStrict(EDIT, [EDIT_LINK, code])).category, 'LOCATOR_DRIFT');
   });
 });
+
+describe('timing-intercepted rule', () => {
+  it('a ready element whose click is blocked by something on top is TIMING, not a broken feature', () => {
+    const message = [
+      'TimeoutError: locator.click: Timeout 10000ms exceeded.',
+      'Call log:',
+      "  - waiting for getByRole('button', { name: 'Publish' })",
+      '    - locator resolved to <button id="publish">Publish</button>',
+      '    - attempting click action',
+      '    - waiting for element to be visible, enabled and stable',
+      '    - element is visible, enabled and stable',
+      '    - <div class="components-snackbar">…</div> from <div class="snackbar-list">…</div> subtree intercepts pointer events',
+      '',
+    ].join('\n');
+    const d = run(message);
+    assert.equal(d.category, 'TIMING');
+    assert.equal(d.ruleId, 'timing-intercepted');
+    assert.ok(d.confidence < 0.85, 'stays below the auto-fix threshold');
+    assert.match(d.evidence[0].message, /still on top of it/);
+  });
+});

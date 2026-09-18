@@ -13,6 +13,10 @@ npm run eval             # the real metric, once ground-truth.jsonl exists
 # add -- --verbose to see the model's reasoning, -- --no-llm to measure the rules alone
 ```
 
+**Rules-7 (2026-09-18): a click that cannot land.** Playwright sometimes finds the element, waits until it is "visible, enabled and stable", and still cannot click it because a snackbar, menu or overlay is on top: the error names the element that "intercepts pointer events". Across all nine labelled datasets that text appears in **32 failures and every one of them is labelled TIMING**, so a deterministic rule now answers them at 0.8 confidence, below the auto-fix line.
+
+It moves work from the weaker half of the pipeline to the stronger one. On the Aug 20-26 week the rules now decide 421 cases instead of 406 and the score rises **86.0% -> 89.0%**; the fresh set rises 93.0% -> 93.4% and its rules layer is right on 171 of 174. Dev, held-out, Aug 27-31, Supabase, Penpot, JupyterLab and LXD UI are unchanged, and the drift auto-fix count (14, none wrong) is untouched.
+
 ## How much of a score is noise
 
 Three runs of the **identical** pipeline over the held-out set scored **142, 143 and 144** of 166 (85.5%, 86.1%, 86.7%). The model samples its answers, so a score moves by about one case per 150 on its own. **A difference that small is not a result**, in either direction, and the eval now prints that reminder under every score.

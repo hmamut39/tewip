@@ -175,6 +175,28 @@ const timingFlaky: Rule = {
   },
 };
 
+/**
+ * Playwright found the element, waited until it was visible, enabled and stable, and then the
+ * click still could not land because another element was on top of it: an overlay, a toast or a
+ * menu that had not gone away yet. That is a race in the page, not a broken feature and not a
+ * renamed element. On every labelled dataset (32 cases across five projects) each failure with
+ * this text is a TIMING failure. Confidence stays below the auto-fix line: the agent knows a
+ * race happened, not which wait to add (rules-7).
+ */
+const timingIntercepted: Rule = {
+  id: 'timing-intercepted',
+  evaluate({ record }) {
+    const match = record.errorMessage.match(/<[^>]+>[^\n]*intercepts pointer events/);
+    if (!match) return null;
+    const what = truncate(match[0].replace(/\s+/g, ' ').trim(), 100);
+    return {
+      category: 'TIMING',
+      confidence: 0.8,
+      evidence: [{ source: 'timing-intercepted', message: `the element was ready but the click could not land: ${what}, so something was still on top of it`, data: { intercepted: what } }],
+    };
+  },
+};
+
 /** Flips between passing and failing needed before a test counts as intermittent, not broken. */
 export const INTERMITTENT_MIN_ALTERNATIONS = 3;
 
@@ -253,4 +275,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, realBugAssertion];

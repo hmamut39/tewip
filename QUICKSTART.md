@@ -64,6 +64,32 @@ env:
   TRIAGE_LLM_PRICE_OUT: '2'      # per million output tokens, so every run prints what it cost
 ```
 
+## Not using Playwright? Any language or framework works
+
+Point the agent at a **JUnit XML** report instead of a Playwright blob report. Almost every test runner writes one:
+
+| Runner | Flag or plugin |
+|---|---|
+| pytest (also runs `unittest` tests) | `pytest --junitxml=report.xml` |
+| Jest / Vitest | `jest-junit` reporter / `--reporter=junit` |
+| Maven / Gradle (JUnit, TestNG) | written by default under `target/surefire-reports` / `build/test-results` |
+| Go | `go test -v 2>&1 \| go-junit-report > report.xml` |
+| .NET | `dotnet test --logger junit` (JunitXml.TestLogger) |
+| Cypress | `mocha-junit-reporter` |
+
+```yaml
+      - name: triage-agent
+        if: always()
+        uses: hmamut39/triage-agent@main
+        with:
+          junit-report: report.xml     # a file, or a directory of them
+          suite: unit                  # only needed when one workflow triages several suites
+```
+
+It reads the failure text, retries and each test's history exactly as for Playwright, and gives the same comment, board, grouped environment issue, corrections and editor queries. What it cannot do without Playwright's traces is look at the page, so it does not diagnose renamed selectors or fix them.
+
+When one workflow triages several suites (say `unit` and `e2e`), give each a `suite` name: each then keeps its own history and its own comment, and corrections name the suite, as in `/triage TIMING unit#2 flaky on CI`.
+
 ## What you will see on the next failing run
 
 - **On the pull request:** one comment listing each failing test, grouped by whether your change likely caused it, each with a cause, a confidence, the evidence and the next action. It updates in place rather than adding a comment per run.

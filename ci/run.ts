@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HistoryIndex } from '../engine/history.ts';
 import { importBlobReportDir } from '../engine/import/blob.ts';
+import { importJunit } from '../engine/import/junit.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
 import { buildItems } from '../outlets/items.ts';
 import { prCommentView } from '../outlets/views/developer.ts';
@@ -39,12 +40,22 @@ async function main(): Promise<void> {
   const ctx = readCiContext();
   mkdirSync(ctx.outDir, { recursive: true });
   mkdirSync(ctx.historyDir, { recursive: true });
-  if (!existsSync(ctx.blobDir)) {
-    log(`no blob report at ${ctx.blobDir}. Add Playwright's blob reporter: reporter: [['list'], ['blob']]`);
-    return;
+  const meta = { runId: ctx.runId, gitSha: ctx.sha, branch: ctx.branch, workspace: ctx.workspace };
+  let imported;
+  if (ctx.junitReport) {
+    // Any other framework: a JUnit XML report. No traces, so no page evidence and no selector fixes.
+    if (!existsSync(ctx.junitReport)) {
+      log(`no JUnit report at ${ctx.junitReport}. Point junit-report at the file your test runner writes (e.g. pytest --junitxml=report.xml)`);
+      return;
+    }
+    imported = importJunit(ctx.junitReport, meta);
+  } else {
+    if (!existsSync(ctx.blobDir)) {
+      log(`no blob report at ${ctx.blobDir}. Add Playwright's blob reporter: reporter: [['list'], ['blob']], or set junit-report for other frameworks`);
+      return;
+    }
+    imported = importBlobReportDir(ctx.blobDir, meta, join(ctx.outDir, 'files'));
   }
-
-  const imported = importBlobReportDir(ctx.blobDir, { runId: ctx.runId, gitSha: ctx.sha, branch: ctx.branch, workspace: ctx.workspace }, join(ctx.outDir, 'files'));
   const history = datasetFiles(ctx.historyDir);
   const pastRecords = readTriageRecords(history.triage).filter((r) => r.runId !== ctx.runId);
   const pastRuns = readRunSummaries(history.runs).filter((s) => s.runId !== ctx.runId);
@@ -55,7 +66,7 @@ async function main(): Promise<void> {
   // LEARN, first half: pick up what people wrote under the agent's own comments since last time,
   // store it with the history, and let it decide the category for the failures it covers.
   if (github && ctx.pr) {
-    const written = await step('read corrections', () => readCorrections(github, ctx.pr!.number, `PR #${ctx.pr!.number}`));
+    const written = await step('read corrections', () => readCorrections(github, ctx.pr!.number, `PR #${ctx.pr!.number}`, ctx.suite));
     const saved = saveCorrections(ctx.historyDir, written ?? []);
     if (saved.length > 0) log(`${saved.length} new correction(s) from people: ${saved.map((c) => `${c.testId.split(' > ').at(-1)} -> ${c.category}`).join(', ')}`);
   }

@@ -7,6 +7,7 @@ import { cap } from './tools.ts';
 
 interface Artifact {
   id: number;
+  name: string;
   expired: boolean;
   created_at: string;
   workflow_run?: { id: number; head_branch: string; head_sha: string };
@@ -14,9 +15,10 @@ interface Artifact {
 
 export async function githubCiReport(repo: string, pr?: number, branch?: string): Promise<string> {
   const head = pr ? (await ghApi<{ head: { ref: string } }>(`repos/${repo}/pulls/${pr}`)).head.ref : branch;
-  const { artifacts } = await ghApi<{ artifacts: Artifact[] }>(`repos/${repo}/actions/artifacts?name=triage-agent-report&per_page=100`);
+  // "triage-agent-report", or "triage-agent-report-<suite>" when a workflow triages several suites.
+  const { artifacts } = await ghApi<{ artifacts: Artifact[] }>(`repos/${repo}/actions/artifacts?per_page=100`);
   const latest = artifacts
-    .filter((a) => !a.expired && (!head || a.workflow_run?.head_branch === head))
+    .filter((a) => a.name.startsWith('triage-agent-report') && !a.expired && (!head || a.workflow_run?.head_branch === head))
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const target = pr ? `PR #${pr} (${head})` : head ? `branch ${head}` : 'any branch';
   if (!latest) return `No triage-agent report for ${repo}, ${target}. Is the triage-agent action installed in that repository's CI workflow, and has it run since?`;

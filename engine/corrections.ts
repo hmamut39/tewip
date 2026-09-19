@@ -77,6 +77,8 @@ export interface ParsedCorrection {
   reason?: string;
   /** The board number the person referred to ("#3"), when they gave one. */
   item?: number;
+  /** The suite named before the number ("unit#3"), when a workflow triages several suites. */
+  suite?: string;
 }
 
 /**
@@ -88,9 +90,9 @@ export function parseCorrectionCommands(body: string): ParsedCorrection[] {
   for (const [, word, rest] of body.matchAll(COMMAND)) {
     const category = ROOT_CAUSES.find((c) => c === word.toUpperCase());
     if (!category) continue;
-    const item = rest.match(/#(\d+)/)?.[1];
-    const reason = rest.replace(/#\d+/, '').trim();
-    out.push({ category, reason: reason || undefined, item: item ? Number(item) : undefined });
+    const ref = rest.match(/(?:^|\s)([\w.-]+)?#(\d+)/);
+    const reason = (ref ? rest.replace(ref[0], ' ') : rest).trim();
+    out.push({ category, reason: reason || undefined, item: ref ? Number(ref[2]) : undefined, ...(ref?.[1] ? { suite: ref[1] } : {}) });
   }
   return out;
 }

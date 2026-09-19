@@ -8,11 +8,12 @@ import { groupEnv, infraView } from '../outlets/views/infra.ts';
 import { usageLine } from '../engine/llm/usage.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import type { TriageRecord } from '../reporters/types.ts';
-import { CORRECTION_HINT, renderBoardMap } from './corrections.ts';
+import { commentMarker, correctionHint, renderBoardMap } from './corrections.ts';
 import type { CiContext } from './context.ts';
 import type { GitHub, IssueRef } from './github.ts';
 
-export const COMMENT_MARKER = '<!-- triage-agent:pr-comment -->';
+/** "triage-agent" or "triage-agent · unit tests", at the start of the comment's title. */
+const titled = (body: string, suite: string) => (suite ? body.replace(/^## triage-agent/m, `## triage-agent · ${suite}`) : body);
 export const ENV_MARKER = '<!-- triage-agent:env-issue -->';
 /** GitHub rejects comment bodies over 65,536 characters. */
 const MAX_BODY = 60_000;
@@ -28,13 +29,13 @@ export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueR
     ? `\n\n**Verified locator fixes: ${fixPr.html_url}** (${accepted} test(s) re-run and passing with the new locator). Review before merging: an intended UI change and a regression can look alike.`
     : '';
   // The hidden map keeps "#3" meaning the same failure in later runs; the hint tells people how.
-  const learn = `\n\n${CORRECTION_HINT}\n${renderBoardMap(items, records)}`;
+  const learn = `\n\n${correctionHint(ctx.suite)}\n${renderBoardMap(items, records)}`;
   return fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}${learn}\n\n${footer}`, ctx.runUrl);
 }
 
 export async function postPrComment(ctx: CiContext, github: GitHub, body: string): Promise<string | null> {
   if (!ctx.pr || !ctx.postPrComment) return null;
-  return github.upsertComment(ctx.pr.number, COMMENT_MARKER, body);
+  return github.upsertComment(ctx.pr.number, commentMarker(ctx.suite), titled(body, ctx.suite));
 }
 
 /** One open issue collects environment failures; each run adds one grouped alert to it. */

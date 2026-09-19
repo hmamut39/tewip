@@ -5,7 +5,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { parseBoardMap, readCorrections, renderBoardMap } from '../../ci/corrections.ts';
+import { commentMarker, parseBoardMap, readCorrections, renderBoardMap } from '../../ci/corrections.ts';
 import type { GitHub } from '../../ci/github.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { applyCorrection, correctionFor, loadCorrections, parseCorrectionCommands, saveCorrections, type Correction } from '../corrections.ts';
@@ -121,7 +121,7 @@ describe('the hidden board map in the agent comment', () => {
 
   it('turns a human reply into a correction for the right failure', async () => {
     const comments = [
-      { id: 1, body: `## triage-agent\n${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 1, body: `${commentMarker('')}\n## triage-agent\n${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
       { id: 2, body: 'no, this is our test data\n/triage TEST_DATA #1 the fixture user has no card', user: { login: 'amina', type: 'User' }, created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
@@ -130,5 +130,22 @@ describe('the hidden board map in the agent comment', () => {
     assert.equal(c.category, 'TEST_DATA');
     assert.equal(c.by, 'amina');
     assert.equal(c.wasCategory, 'ENV');
+  });
+
+  it('keeps two suites apart: "unit#1" and "e2e#1" mean different failures', async () => {
+    const unitRecords = [record('tests.test_cart > test_total', 'AssertionError: 3 != 4')];
+    const unitItems = [{ runId: 'r1', testId: 'tests.test_cart > test_total', diagnosis: { category: 'REAL_BUG' } }] as never as Parameters<typeof renderBoardMap>[0];
+    const comments = [
+      { id: 1, body: `${commentMarker('e2e')}\n${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 2, body: `${commentMarker('unit')}\n${renderBoardMap(unitItems, unitRecords)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:01Z', html_url: '' },
+      { id: 3, body: '/triage TIMING unit#1 flaky on CI\n/triage TEST_DATA e2e#1 no card on file', user: { login: 'amina', type: 'User' }, created_at: '2026-01-01T11:00:00Z', html_url: '' },
+    ];
+    const github = { request: async () => comments } as unknown as GitHub;
+    const [unit] = await readCorrections(github, 7, 'PR #7', 'unit');
+    const [e2e] = await readCorrections(github, 7, 'PR #7', 'e2e');
+    assert.equal(unit.testId, 'tests.test_cart > test_total');
+    assert.equal(unit.category, 'TIMING');
+    assert.equal(e2e.testId, TEST);
+    assert.equal(e2e.category, 'TEST_DATA');
   });
 });

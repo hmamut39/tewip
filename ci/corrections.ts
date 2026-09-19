@@ -52,10 +52,11 @@ export function parseBoardMap(body: string): Map<number, MappedFailure> {
  * failures, used to turn "#3" into the test it means; a comment that names no number corrects
  * the only failure, and is ignored when there are several.
  */
-export async function readCorrections(github: GitHub, issueNumber: number, where: string): Promise<Correction[]> {
+export async function readCorrections(github: GitHub, issueNumber: number, where: string, suite = ''): Promise<Correction[]> {
   const comments = await github.request<Comment[]>('GET', `/repos/{repo}/issues/${issueNumber}/comments?per_page=100`);
+  // This suite's own comment holds the map its numbers refer to.
   const map = comments
-    .filter((c) => c.body?.includes(MAP_START))
+    .filter((c) => c.body?.includes(commentMarker(suite)) && c.body.includes(MAP_START))
     .map((c) => parseBoardMap(c.body ?? ''))
     .at(-1);
   if (!map || map.size === 0) return [];
@@ -63,6 +64,7 @@ export async function readCorrections(github: GitHub, issueNumber: number, where
   for (const comment of comments) {
     if (!comment.body || comment.user?.type === 'Bot' || comment.body.includes(MAP_START)) continue;
     for (const parsed of parseCorrectionCommands(comment.body)) {
+      if ((parsed.suite ?? '') !== suite) continue;
       const failure = map.get(parsed.item ?? (map.size === 1 ? 1 : -1));
       if (!failure) continue;
       out.push({
@@ -81,6 +83,12 @@ export async function readCorrections(github: GitHub, issueNumber: number, where
   return out;
 }
 
+export const COMMENT_MARKER = '<!-- triage-agent:pr-comment -->';
+/** One comment per suite: a named suite gets its own marker so suites do not overwrite each other. */
+export const commentMarker = (suite: string) => (suite ? `<!-- triage-agent:pr-comment:${suite} -->` : COMMENT_MARKER);
+
 /** The one line the agent adds to its comment so people know how to correct it. */
-export const CORRECTION_HINT =
-  '_Wrong? Reply `/triage CATEGORY #n reason` (e.g. `/triage TIMING #2 flaky on CI`) and the agent will use your answer for this failure from now on. Categories: REAL_BUG, LOCATOR_DRIFT, TIMING, ENV, TEST_DATA._';
+export function correctionHint(suite = ''): string {
+  const ref = `${suite}#`;
+  return `_Wrong? Reply \`/triage CATEGORY ${ref}n reason\` (e.g. \`/triage TIMING ${ref}2 flaky on CI\`) and the agent will use your answer for this failure from now on. Categories: REAL_BUG, LOCATOR_DRIFT, TIMING, ENV, TEST_DATA._`;
+}

@@ -25,6 +25,10 @@ export interface CiContext {
   token: string;
   apiUrl: string;
   blobDir: string;
+  /** A JUnit XML report (file or directory), for frameworks other than Playwright; null when unset. */
+  junitReport: string | null;
+  /** Name of this test suite when a workflow triages several; '' for a single suite. */
+  suite: string;
   historyDir: string;
   outDir: string;
   postPrComment: boolean;
@@ -59,6 +63,8 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     token: env.TRIAGE_GITHUB_TOKEN ?? env.GITHUB_TOKEN ?? '',
     apiUrl: env.GITHUB_API_URL ?? 'https://api.github.com',
     blobDir: inWorkspace(env.TRIAGE_BLOB_DIR || 'blob-report'),
+    junitReport: env.TRIAGE_JUNIT_REPORT ? inWorkspace(env.TRIAGE_JUNIT_REPORT) : null,
+    suite: (env.TRIAGE_SUITE ?? '').trim(),
     historyDir: inWorkspace(env.TRIAGE_HISTORY_DIR || '.triage-agent/history'),
     outDir: inWorkspace(env.TRIAGE_OUT_DIR || '.triage-agent/out'),
     postPrComment: flag(env.TRIAGE_POST_PR_COMMENT, true),

@@ -15,6 +15,13 @@ inputs:
   blob-report-dir:
     description: Where Playwright's blob reporter wrote its report.
     default: blob-report
+  junit-report:
+    description: >-
+      For any other language or framework: a JUnit XML report, or a directory of them (pytest
+      --junitxml, jest-junit, Maven Surefire, Gradle, go-junit-report, .NET JunitXml, Cypress).
+      When set, it is read instead of a Playwright blob report. Root-cause triage, history,
+      comments and corrections work as for Playwright; there are no traces, so no selector fixes.
+    default: ''
   post-pr-comment:
     description: Post (and keep updating) one diagnosis comment on the pull request.
     default: 'true'
@@ -30,6 +37,12 @@ inputs:
   tests-dir:
     description: Directory auto-fix may edit. Files outside it are never changed.
     default: tests
+  suite:
+    description: >-
+      A short name for this test suite, when one workflow triages more than one (e.g. "unit" and
+      "e2e"). Each suite then keeps its own history, its own pull request comment and its own
+      report artifact instead of overwriting the other's.
+    default: ''
 
 runs:
   using: composite
@@ -43,8 +56,8 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: .triage-agent/history
-        key: triage-agent-history-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: triage-agent-history-
+        key: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}
 
     - name: Diagnose failures and deliver
       shell: bash
@@ -53,23 +66,25 @@ runs:
         TRIAGE_GITHUB_TOKEN: ${{ inputs.github-token }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
         TRIAGE_BLOB_DIR: ${{ inputs.blob-report-dir }}
+        TRIAGE_JUNIT_REPORT: ${{ inputs.junit-report }}
         TRIAGE_POST_PR_COMMENT: ${{ inputs.post-pr-comment }}
         TRIAGE_ENV_ISSUE: ${{ inputs.env-issue }}
         TRIAGE_AUTOFIX: ${{ inputs.autofix }}
         TRIAGE_VERIFY_COMMAND: ${{ inputs.verify-command }}
         TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
+        TRIAGE_SUITE: ${{ inputs.suite }}
 
     - name: Save triage history
       if: always() && inputs.mode != 'report'
       uses: actions/cache/save@v4
       with:
         path: .triage-agent/history
-        key: triage-agent-history-${{ github.run_id }}-${{ github.run_attempt }}
+        key: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}${{ github.run_id }}-${{ github.run_attempt }}
 
     - name: Upload every role's view
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: triage-agent-report
+        name: triage-agent-report${{ inputs.suite && '-' || '' }}${{ inputs.suite }}
         path: .triage-agent/out
         if-no-files-found: ignore

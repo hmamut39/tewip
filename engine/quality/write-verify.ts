@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
-import { draftTest, failureHead, mutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
+import { brittleChecks, draftTest, failureHead, mutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
 
 export interface RunResult {
   passed: boolean;
@@ -44,7 +44,7 @@ export function runTest(framework: Framework, file: string, timeoutMs = 180_000)
 const DID_NOT_RUN = /SyntaxError|error TS\d{4}|IndentationError|NameError|ReferenceError|Unexpected token|compilation (?:error|failure)|cannot find symbol|error CS\d{4}/;
 
 export type Outcome =
-  | { kind: 'kept'; runs: number; checks: string; repairs: number; mutation: string }
+  | { kind: 'kept'; runs: number; checks: string; repairs: number; mutation: string; watch: string[] }
   | { kind: 'possible-bug'; reason: string; repairs: number; lastError: string }
   | { kind: 'rejected'; reason: string; repairs: number; lastError?: string; passedReliably: boolean };
 
@@ -93,5 +93,5 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   if (broken.skipped) return { draft, outcome: { kind: 'rejected', reason: 'the broken version was skipped, so the check was not proven', repairs, passedReliably: true } };
   if (broken.passed) return { draft, outcome: { kind: 'rejected', reason: `still passes with its check broken (${draft.mutation.find} → ${draft.mutation.replace}): it could not catch the bug it is for`, repairs, passedReliably: true } };
   if (DID_NOT_RUN.test(broken.output)) return { draft, outcome: { kind: 'rejected', reason: 'the broken version did not even run, so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
-  return { draft, outcome: { kind: 'kept', runs: opts.runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}` } };
+  return { draft, outcome: { kind: 'kept', runs: opts.runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: brittleChecks(draft.code) } };
 }

@@ -149,3 +149,16 @@ describe('a run where every test skipped', () => {
     assert.match((outcome as { reason: string }).reason, /broken version was skipped/);
   });
 });
+
+describe('checks that may break when the data changes', () => {
+  it('flags a hard-coded count in an expected text, not a timeout or a status', async () => {
+    const { brittleChecks } = await import('../quality/write.ts');
+    const code = [
+      "await expect(page.getByText('21 books · 7236 passages searchable')).toBeVisible();",
+      "await expect(page.getByText(/\d+ books/)).toBeVisible({ timeout: 10000 });",
+      'expect(response.status()).toBeLessThan(500);',
+      "await expect(page.getByText('page 12')).toBeVisible();",
+    ].join('\n');
+    assert.deepEqual(brittleChecks(code), ["await expect(page.getByText('21 books · 7236 passages searchable')).toBeVisible();"]);
+  });
+});

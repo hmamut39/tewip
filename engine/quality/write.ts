@@ -9,7 +9,7 @@ import type { Framework } from './frameworks.ts';
 import type { PageFacts } from './grounding.ts';
 import type { Plan } from './plan.ts';
 
-export const WRITE_PROMPT_VERSION = 'write-3';
+export const WRITE_PROMPT_VERSION = 'write-4';
 
 export type Scenario = Plan['scenarios'][number];
 
@@ -32,6 +32,7 @@ const RULES = `Rules:
 - Find elements only by what the accessibility snapshots show: role and accessible name, label, placeholder or visible text. Never invent ids, classes or test ids that no snapshot shows.
 - Check the scenario's expected result specifically. A check that is always true (a page merely loads, a list merely exists) is not a test.
 - Wait for conditions, never for fixed times.
+- Do not hard-code values that change as the app's content grows (counts, totals, dates, ids) unless the scenario is about that exact value: check their shape instead (a number of books, a date), so the test does not break the day a record is added.
 - One test file, complete, runnable as is, no placeholders. It must actually run here: Tewip runs it against the app now, and a skipped test proves nothing. A guard like the example's (skip where the app lacks something) is fine, as long as it does not skip here.
 - mutation.find must be an exact substring of your code that appears once, inside the main assertion (the value or condition it expects); mutation.replace is what to put there instead so that the test must fail if it is a real check. Keep the code valid: change an expected value, not the syntax.`;
 
@@ -109,4 +110,16 @@ export function mutate(draft: Draft): { code: string } | { problem: string } {
   const line = draft.code.slice(draft.code.lastIndexOf('\n', at) + 1, end < 0 ? undefined : end);
   if (!/expect|assert|should|verify|Assert|toHave|toBe|toEqual|toContain|toMatch|contains|Equal/.test(line)) return { problem: `the piece to change is not in a check: ${line.trim().slice(0, 100)}` };
   return { code: draft.code.slice(0, at) + replace + draft.code.slice(at + find.length) };
+}
+
+/**
+ * Checks that may break when the app's data changes rather than when it breaks: a number of three
+ * or more digits written into an expected text or value. Shown to the reviewer, not a reason to drop
+ * the test, since some scenarios are about an exact figure.
+ */
+export function brittleChecks(code: string): string[] {
+  return code
+    .split('\n')
+    .filter((line) => /expect|assert|should|Assert/.test(line) && /(['"`])[^'"`\n]*\b\d{3,}\b[^'"`\n]*\1/.test(line) && !/timeout|status|toBeLessThan|toBeGreaterThan/i.test(line))
+    .map((line) => line.trim().slice(0, 140));
 }

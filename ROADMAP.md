@@ -81,15 +81,17 @@ Phase metric: auto-fix success rate, plus false-positive rate (incorrect fixes m
 
 > Direction changed 2026-09-19 at the owner's request: Tewip grows from failure triage into a full software-quality agent covering the whole testing and security lifecycle. It is built on top of general models instead of competing with general coding agents, and every output is verified. Application feature code stays with general coding agents, so Tewip keeps its promise never to edit application code.
 
-### Phase 6: Test Plans (`tewip plan`)
+### Phase 6: Test Plans (`tewip plan`) (BUILT — metric not yet measurable: no real PRs with later-found bugs yet)
 From a feature description, a pull request's diff, and the running app's pages, write a test plan: scope, risks, scenarios with priorities, which test types apply (functional, accessibility, security, performance) and which to automate. Grounded in facts Tewip reads, never invented: the changed files, the tests that already exist, the pages as they are.
 
 Phase metric: on real pull requests with later-found bugs, the share of those bugs whose scenario the plan named before the bug was found. Until that data exists, plans are shown as drafts.
 
-### Phase 7: Test Writing (`tewip write`)
+### Phase 7: Test Writing (`tewip write`) (BUILT — first measurement on one real app, see status)
 Write automated tests for a scenario (Playwright first, then pytest and Jest), using locators read from the real page. Run each one; keep it only if it passes against the working app. Repair a failing draft a bounded number of times from the actual error, then give up and say so.
 
 Phase metric: the share of kept tests that fail when the behaviour they check is broken on purpose (mutation check), plus the share of drafts kept. A test that cannot fail is worse than no test.
+
+Status (2026-09-19, dataset: Til-AI library search, one real app, scenarios from Tewip's own plan, gpt-5.5): 11 drafts for 10 scenarios, 9 kept (82% of drafts). Mutation check: 9 of 9 drafts that passed 3 of 3 runs failed when their main check was broken; none was dropped by it, so on this data it has not yet caught a weak test. The broken-on-purpose change is chosen by the model, which is weaker than independent mutation of the app. One scenario (Chinese search) was never kept: its check found a result without the searched word, which is a possible app issue the repair step did not flag. Review found one kept test with a hard-coded count that would break when data grows; the report now flags such checks. Cost: about $2.46 for all 11 drafts ($0.27 per kept test).
 
 ### Phase 8: Broader Verified Fixes (`tewip fix`)
 Extend auto-fix beyond renamed selectors to races (replace a fixed wait with a condition) and test-data setup, each verified by re-running, each opened as a PR, never merged.

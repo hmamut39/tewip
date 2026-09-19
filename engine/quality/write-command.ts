@@ -119,13 +119,16 @@ export function renderWriteReport(results: Array<{ id: string; title: string; fi
   const kept = results.filter((r) => r.outcome.kind === 'kept');
   const bugs = results.filter((r) => r.outcome.kind === 'possible-bug');
   const reliable = results.filter((r) => r.outcome.kind === 'kept' || (r.outcome.kind === 'rejected' && r.outcome.passedReliably));
+  const reason = (r: (typeof results)[number]) => (r.outcome.kind === 'rejected' ? r.outcome.reason : '');
+  const cannotFail = reliable.filter((r) => reason(r).startsWith('still passes')).length;
+  const unproven = reliable.length - kept.length - cannotFail;
   const lines = [
     '# Tewip: tests written',
     '',
     `From ${relative(meta.root, meta.planPath)}, in ${meta.framework}, by ${meta.model}. A test is kept only if it passed ${meta.runs} of ${meta.runs} runs against the working app **and** failed once its main check was broken on purpose.`,
     '',
     `- **Kept: ${kept.length} of ${results.length} drafts.**`,
-    `- Mutation check: ${kept.length} of ${reliable.length} test(s) that passed reliably also failed when their check was broken${reliable.length > kept.length ? `; the other ${reliable.length - kept.length} could not catch a break and were dropped` : ''}.`,
+    `- Mutation check: ${kept.length} of ${reliable.length} test(s) that passed reliably also failed when their check was broken.${cannotFail ? ` ${cannotFail} still passed with it broken, so they could not catch the bug and were dropped.` : ''}${unproven ? ` ${unproven} could not be checked (the break could not be applied or did not run) and were dropped unproven.` : ''}`,
     ...(bugs.length ? [`- **Possible bugs: ${bugs.length}.** The test looked right and the app did something else; a person should look.`] : []),
     '',
     '| Scenario | Result | Why |',

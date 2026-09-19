@@ -3,7 +3,7 @@
 ## Product Purpose
 Compress a QA engineer's morning triage (200 failed cases, ~3 hours of manual root-cause judgment) down to under 20 minutes.
 
-Input: one failed Playwright CI run
+Input: one failed CI test run (Playwright in depth; any framework that emits JUnit XML since 2026-09-19)
 Output: root cause classification + confidence + evidence for each failure; auto-fixable ones become a PR
 
 ## Core Design Principles
@@ -129,7 +129,7 @@ Never report a metric computed on synthetic test data as if it were a product me
 ## Anti-Scope-Creep Rules
 
 - Do not add a web UI, dashboard, authentication, or database before Phase 4 (Multi-Role Outlets)
-- Do not add support for other test frameworks (Cypress, Selenium, Jest) — Playwright only
+- ~~Do not add support for other test frameworks (Cypress, Selenium, Jest) — Playwright only~~ Changed 2026-09-19 at the owner's request: the agent must work across languages and frameworks. Any framework that emits JUnit XML (pytest, Jest, Vitest, JUnit/Maven/Gradle, Go, .NET, Cypress, Selenium) gets root-cause triage, PR comments, history, corrections and MCP. Playwright keeps the deep features: traces, page snapshots, selector drift and verified auto-fix. Deep support for another framework (reading its own artifacts, auto-fixing its selectors) is still a deliberate decision, and needs real data for that framework before any fix is trusted
 - Do not add multi-tenancy, billing, or user accounts at any phase in this repo
 - If I ask for something outside the current phase, remind me which phase it belongs to and ask whether I want to reorder deliberately
 

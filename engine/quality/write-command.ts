@@ -54,9 +54,13 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   // Only a test this framework runs: a browser framework runs what is in its test folder; a unit
   // framework runs tests anywhere in its project.
   const within = detected.browser ? detected.testDir : detected.cwd;
-  const sameKind = (f: string) => detected.example !== null && extname(f) === extname(detected.example) && f.startsWith(within);
+  // .ts and .tsx (or .js and .jsx) are the same language; the x only allows JSX, which component tests need.
+  const family = (f: string) => extname(f).replace(/x$/, '');
+  const sameKind = (f: string) => detected.example !== null && family(f) === family(detected.example) && f.startsWith(within);
   const closest = relatedTestSources(cmd.root, saved.feature, 10).map((t) => join(cmd.root, t.file)).find(sameKind);
-  const framework = closest ? { ...detected, example: closest, testDir: dirname(closest) } : detected;
+  // New tests take the example's own extension, so a component test gets .tsx when its neighbours do.
+  const fileFor = (id: string) => (closest ? detected.fileFor(id).replace(/\.[^.]+$/, extname(closest)) : detected.fileFor(id));
+  const framework = closest ? { ...detected, example: closest, testDir: dirname(closest), fileFor } : detected;
 
   const wanted = new Set(cmd.only.map((s) => s.toUpperCase()));
   const scenarios = saved.plan.scenarios.filter((s) => (wanted.size ? wanted.has(s.id.toUpperCase()) : s.automate && !s.covered_by)).slice(0, cmd.max);

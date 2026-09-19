@@ -69,11 +69,22 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
       continue;
     }
     console.error(`  ${scenario.id} ${scenario.title}`);
+    // Stopped part-way (Ctrl+C), a draft that was never verified must not stay in the project.
+    const leaveNothing = () => {
+      if (existsSync(file)) {
+        mkdirSync(drafts, { recursive: true });
+        renameSync(file, join(drafts, fileName));
+      }
+      process.exit(130);
+    };
+    process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing);
     let outcome: Outcome;
     try {
       ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, log: (l) => console.error(l) }));
     } catch (error) {
       outcome = { kind: 'rejected', reason: `stopped: ${(error as Error).message}`, repairs: 0, passedReliably: false };
+    } finally {
+      process.off('SIGINT', leaveNothing).off('SIGTERM', leaveNothing);
     }
     if (outcome.kind !== 'kept' && existsSync(file)) {
       mkdirSync(drafts, { recursive: true });

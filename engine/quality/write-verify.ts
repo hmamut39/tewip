@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
-import { draftTest, mutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
+import { draftTest, failureHead, mutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
 
 export interface RunResult {
   passed: boolean;
@@ -61,6 +61,7 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   let draft = await draftTest(model, ctx, scenario);
   let repairs = 0;
   let result: RunResult;
+  const earlier: string[] = [];
   for (;;) {
     writeFileSync(file, draft.code, 'utf8');
     result = run(ctx.framework, file);
@@ -68,7 +69,8 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
     if (repairs >= opts.repairs) return { draft, outcome: { kind: 'rejected', reason: `still failing after ${repairs} repair(s)`, repairs, lastError: result.output, passedReliably: false } };
     repairs++;
     log(`    failed; repair ${repairs} of ${opts.repairs} from the real error`);
-    const repaired = await repairTest(model, ctx, scenario, draft, result.output);
+    const repaired = await repairTest(model, ctx, scenario, draft, result.output, earlier);
+    earlier.push(failureHead(result.output));
     if (repaired.fault === 'app') return { draft, outcome: { kind: 'possible-bug', reason: repaired.reason, repairs, lastError: result.output } };
     draft = repaired;
   }

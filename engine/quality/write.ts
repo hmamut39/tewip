@@ -9,7 +9,7 @@ import type { Framework } from './frameworks.ts';
 import type { PageFacts } from './grounding.ts';
 import type { Plan } from './plan.ts';
 
-export const WRITE_PROMPT_VERSION = 'write-2';
+export const WRITE_PROMPT_VERSION = 'write-3';
 
 export type Scenario = Plan['scenarios'][number];
 
@@ -81,8 +81,17 @@ export async function draftTest(model: LlmClient, ctx: WriteContext, scenario: S
   return JSON.parse(raw) as Draft;
 }
 
-export async function repairTest(model: LlmClient, ctx: WriteContext, scenario: Scenario, draft: Draft, error: string): Promise<Repair> {
-  const user = JSON.stringify({ ...contextFor(ctx, scenario), yourTest: draft.code, realError: error.slice(-10000) });
+/** The first lines of a failure: which check failed and how, without the page or the call log. */
+export function failureHead(error: string): string {
+  const start = error.search(/\b(?:\w*Error|FAILED|AssertionError|Exception)\b/);
+  return error.slice(Math.max(0, start)).split(/\n\s*(?:Call log:|at |The page when)/)[0].trim().slice(0, 800);
+}
+
+export async function repairTest(model: LlmClient, ctx: WriteContext, scenario: Scenario, draft: Draft, error: string, earlier: string[] = []): Promise<Repair> {
+  // A check that keeps failing the same way after repairs is what the app consistently does: say so,
+  // so the model weighs "the app is wrong" instead of reshaping the test around the app.
+  const repeated = earlier.length > 0 ? { earlierFailures: earlier, note: 'Your earlier repairs failed too. If the same check keeps failing because the page does something other than the scenario expects, the fault is "app".' } : {};
+  const user = JSON.stringify({ ...contextFor(ctx, scenario), yourTest: draft.code, realError: error.slice(-10000), ...repeated });
   const raw = await model.complete({ system: REPAIR_SYSTEM, user, schemaName: 'tewip_test_repair', schema: REPAIR_SCHEMA });
   return JSON.parse(raw) as Repair;
 }

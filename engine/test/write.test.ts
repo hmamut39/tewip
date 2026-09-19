@@ -239,3 +239,17 @@ describe('a project with both e2e and unit tests', () => {
     assert.equal(chooseFramework(found, undefined, false)!.id, 'vitest');
   });
 });
+
+describe('when the test runner itself breaks', () => {
+  it('names the environment instead of calling the test flaky', async () => {
+    const answers = [draft({ find: "'3 results'", replace: "'4 results'" })];
+    const model = { model: 'fake', complete: async () => JSON.stringify(answers.shift()) } as LlmClient;
+    const file = join(mkdtempSync(join(tmpdir(), 'tewip-run-')), 't.spec.ts');
+    let n = 0;
+    const run = (): RunResult => (++n === 1 ? { passed: true, output: '1 passed' } : { passed: false, environment: true, output: 'WARN [launcher]: ChromeHeadless has not captured in 60000 ms, killing.' });
+    const { outcome } = await writeAndVerify(model, { framework: FRAMEWORK, fileName: 'x', pages: [], feature: 'f' }, SCENARIO, file, { runs: 3, repairs: 0, run });
+    assert.equal(outcome.kind, 'rejected');
+    assert.match((outcome as { reason: string }).reason, /environment/);
+    assert.doesNotMatch((outcome as { reason: string }).reason, /flaky/);
+  });
+});

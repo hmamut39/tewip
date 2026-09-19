@@ -12,6 +12,8 @@ export interface RunResult {
   passed: boolean;
   /** Every test was skipped: neither a pass nor a failure, since nothing was checked. */
   skipped?: boolean;
+  /** The runner broke (no browser, no server, port taken) on every try: the environment, not the test. */
+  environment?: boolean;
   output: string;
 }
 
@@ -35,10 +37,24 @@ function pageAtFailure(output: string, cwd: string): string {
   return existsSync(full) ? `\n\nThe page when the test failed:\n${readFileSync(full, 'utf8').slice(0, 5000)}` : '';
 }
 
+/**
+ * The runner itself broke before or around the test: the browser never started, a port was taken,
+ * the app's server did not come up, the run was cut off. That says nothing about the test, so the
+ * run is tried again, and if it keeps breaking, the environment is named, never the test.
+ */
+const RUNNER_BROKE = /has not captured in \d+ ?ms|failed \d+ times \(timeout\)\. Giving up|Disconnected[, ].{0,40}because no message|No captured browser|EADDRINUSE|Timed out waiting \d+ms from config\.webServer|webServer.{0,60}(?:exited|timed out)|ENOSPC|spawnSync .* ETIMEDOUT/i;
+
 export function runTest(framework: Framework, file: string, timeoutMs = 180_000): RunResult {
+  let result = runOnce(framework, file, timeoutMs);
+  for (let retry = 0; retry < 2 && !result.passed && RUNNER_BROKE.test(result.output); retry++) result = runOnce(framework, file, timeoutMs);
+  if (!result.passed && RUNNER_BROKE.test(result.output)) return { ...result, environment: true };
+  return result;
+}
+
+function runOnce(framework: Framework, file: string, timeoutMs: number): RunResult {
   const r = spawnSync(framework.command(file), { cwd: framework.cwd, env: { ...process.env, ...framework.env }, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
   // Colour codes are noise to a reader and would stop a quoted line from matching.
-  const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.replace(/\[[0-9;]*[A-Za-z]/g, '').trim();
+  const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim();
   if (r.status === 0 && onlySkipped(output)) return { passed: false, skipped: true, output: `The test was skipped, so nothing was checked. Make it run here.\n${output.slice(-3000)}` };
   return { passed: r.status === 0, output: output.slice(-6000) + (r.status === 0 ? '' : pageAtFailure(output, framework.cwd)) };
 }
@@ -69,6 +85,7 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
     writeFileSync(file, draft.code, 'utf8');
     result = run(ctx.framework, file);
     if (result.passed) break;
+    if (result.environment) return { draft, outcome: { kind: 'rejected', reason: 'the test runner could not start (environment: browser, server or port), so the test was not judged', repairs, lastError: result.output, passedReliably: false } };
     if (repairs >= opts.repairs) return { draft, outcome: { kind: 'rejected', reason: `still failing after ${repairs} repair(s)`, repairs, lastError: result.output, passedReliably: false } };
     repairs++;
     log(`    failed; repair ${repairs} of ${opts.repairs} from the real error`);
@@ -87,6 +104,7 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
 
   for (let i = 2; i <= opts.runs; i++) {
     const again = run(ctx.framework, file);
+    if (again.environment) return { draft, outcome: { kind: 'rejected', reason: `the test runner broke on run ${i} (environment: browser, server or port), so reliability was not judged`, repairs, lastError: again.output, passedReliably: false } };
     if (!again.passed) return { draft, outcome: { kind: 'rejected', reason: `flaky: passed ${i - 1} time(s), then failed on run ${i}`, repairs, lastError: again.output, passedReliably: false } };
   }
   log(`    passed ${opts.runs} of ${opts.runs} runs; breaking its check on purpose`);
@@ -105,6 +123,7 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   } finally {
     writeFileSync(file, draft.code, 'utf8');
   }
+  if (broken.environment) return { draft, outcome: { kind: 'rejected', reason: 'the test runner broke while checking the deliberate break (environment), so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
   if (broken.skipped) return { draft, outcome: { kind: 'rejected', reason: 'the broken version was skipped, so the check was not proven', repairs, passedReliably: true } };
   if (broken.passed) return { draft, outcome: { kind: 'rejected', reason: `still passes with its check broken (${draft.mutation.find} → ${draft.mutation.replace}): it could not catch the bug it is for`, repairs, passedReliably: true } };
   if (DID_NOT_RUN.test(broken.output)) return { draft, outcome: { kind: 'rejected', reason: 'the broken version did not even run, so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };

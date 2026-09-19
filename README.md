@@ -13,7 +13,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 
 Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.
 
-**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
+**Status: phases 1 to 4 are built, Phase 5 (auto-fix) is in progress, and phases 6 and 7 (test plans and verified test writing) are built.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, multi-role views, and planning and writing tests in the project's own framework. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
 
 ## Use it in your project
 
@@ -87,6 +87,7 @@ The repository needs "Allow GitHub Actions to create and approve pull requests" 
 | "Is the test environment broken?" | `environment_report` (DevOps / SRE) |
 | "Can we release?" | `release_readiness` (business / UAT) |
 | "Where is our test suite fragile?" | `quality_report` (senior / principal) · `architecture_report` (architect) · `risk_digest` (lead) |
+| "Write a test plan for the checkout feature in C:\work\shop" | `test_plan`: risks and scenarios grounded in that project's tests, code and pages; saved in its `.tewip` folder |
 
 Setup, after `npm install`:
 

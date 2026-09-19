@@ -117,3 +117,36 @@ describe('a stale element', () => {
     assert.equal(driverStaleElement("expected 'stale' to equal 'fresh'"), null);
   });
 });
+
+describe('real-world variants seen in public issues', () => {
+  const NOT_FOUND_VARIANTS: Array<[string, string]> = [
+    ['org.openqa.selenium.NoSuchElementException:\nno such element: Unable to locate element: {"method":"xpath","selector":"//*[text()="Sign in"]"}', 'xpath=//*[text()="Sign in"]'],
+    ['OpenQA.Selenium.NoSuchElementException: Unable to locate element: {"method":"LinkText"}', 'LinkText'],
+    ['selenium.common.exceptions.NoSuchElementException: Message: Unable to locate element:\n/html/body/main/button', '/html/body/main/button'],
+    ['org.openqa.selenium.TimeoutException: Expected condition failed: waiting for element to be clickable: By.id: search_input (tried for 15 second(s) with 500 MILLISECONDS interval)', 'By.id: search_input'],
+    ['org.openqa.selenium.TimeoutException: Expected condition failed: waiting for By.cssSelector: .product a to be displayed (tried for 30 second(s) with 100 milliseconds interval)', 'By.cssSelector: .product a'],
+    ['TimeoutError: Waiting for element to be located By(css selector, [data-test-subj="confirm"])\nWait timed out after 10043ms', 'css selector=[data-test-subj="confirm"]'],
+    ['OpenQA.Selenium.WebDriverTimeoutException: Timed out after 10 seconds: Element with By By.XPath: //Window[@Name="Export"] not found.', 'By.XPath: //Window[@Name="Export"]'],
+    ['Error: element ("//div[@id="dialog"]//button") still not displayed after 10000ms', '//div[@id="dialog"]//button'],
+    ["CypressError: Timed out retrying: Expected to find element: 'cx-cart-item-list', but never found it.", 'cx-cart-item-list'],
+    ['AssertionError: Timed out retrying after 10000ms:\nExpected to find element: [data-cy="formSelect"], but never found it.', '[data-cy="formSelect"]'],
+    ["AssertionError: Timed out retrying after 10000ms: Expected to find content:\n'Welcome' within the element: <h1.login-welcome> but never did.", "cy.contains('Welcome')"],
+  ];
+  for (const [message, locator] of NOT_FOUND_VARIANTS) {
+    it(`not found: ${message.slice(0, 60).replace(/\n/g, ' ')}`, () => {
+      assert.equal(isElementNotFound(message), true);
+      assert.equal(extractLocator(message), locator);
+    });
+  }
+
+  it('reads Firefox and Chrome click interceptions, even when Chrome cannot name the element', () => {
+    assert.equal(driverClickIntercepted('ElementClickInterceptedException: Element <li> is not clickable at point (1168,92) because another element <a href="/offers"> obscures it'), '<a href="/offers">');
+    assert.equal(driverClickIntercepted('ElementClickInterceptedError: element click intercepted: Element is not clickable at point (661, 532)'), 'another element');
+    assert.equal(driverClickIntercepted("expected '<span>' to be 'visible'\nThis element is not visible because it has CSS property: position: fixed and it's being covered by another element:\n<div class=\"banner\">"), '<div class="banner">');
+  });
+
+  it('knows old Firefox stale wording, and that waiting for an element to go stale is not one', () => {
+    assert.ok(driverStaleElement('StaleElementReferenceException: The element reference of <a class="x"> is stale; either the element is no longer attached to the DOM'));
+    assert.equal(driverStaleElement('org.openqa.selenium.TimeoutException: Expected condition failed: waiting for element (<body>) to become stale'), null);
+  });
+});

@@ -1,0 +1,33 @@
+// `tewip plan`: gather the facts, ask the writing model for a plan, render it, and keep it in
+// .tewip/plans so the team can review it and `tewip write` can build tests from it later.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { usageLine } from '../llm/usage.ts';
+import { writerFromEnv } from './model.ts';
+import { gatherPlanFacts, writePlan } from './plan.ts';
+import { renderPlan } from './plan-render.ts';
+
+export interface PlanCommand {
+  feature: string;
+  root: string;
+  diffRange?: string;
+  urls: string[];
+  out?: string;
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'plan';
+
+export async function runPlan(cmd: PlanCommand): Promise<void> {
+  const model = writerFromEnv(cmd.root);
+  if (!model) throw new Error('writing a plan needs a model: set OPENAI_API_KEY (in the environment or a .env file)');
+  console.error('Tewip is reading the project...');
+  const facts = await gatherPlanFacts(cmd);
+  console.error(`  ${facts.tests.tests.length} existing test(s), ${facts.pages.length} page(s) read${facts.change ? `, ${facts.change.files.length} changed file(s)` : ''}${facts.history.length ? `, ${facts.history.length} past failure(s)` : ''}. Writing the plan...`);
+  const plan = await writePlan(facts, model);
+  const markdown = renderPlan(plan, facts, model.model);
+  const out = cmd.out ?? join(cmd.root, '.tewip', 'plans', `${slug(plan.title)}.md`);
+  mkdirSync(join(out, '..'), { recursive: true });
+  writeFileSync(out, markdown, 'utf8');
+  console.log(markdown);
+  console.error(`\nSaved to ${out}\n${usageLine()}`);
+}

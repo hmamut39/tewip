@@ -23,6 +23,9 @@ Usage:
   tewip ci <owner/repo> [--pr N | --branch B]
                                     Show the latest report Tewip's GitHub Action uploaded (uses
                                     your gh login). Without --pr or --branch: the newest run.
+  tewip plan "<feature>" [--diff main...HEAD] [--url <page> ...] [--out plan.md]
+                                    Write a test plan grounded in the project: its existing tests,
+                                    the change, the live pages and Tewip's failure history.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -52,6 +55,14 @@ async function main(): Promise<void> {
       const pr = flag(args, 'pr');
       const { githubCiReport } = await import('../mcp/github-report.ts');
       console.log(await githubCiReport(repo, pr ? Number(pr) : undefined, flag(args, 'branch')));
+      return;
+    }
+    case 'plan': {
+      const feature = args.filter((a, i) => !a.startsWith('--') && !['--diff', '--url', '--out'].includes(args[i - 1] ?? '')).join(' ').trim();
+      if (!feature) throw new Error('usage: tewip plan "<what the feature does>" [--diff main...HEAD] [--url http://localhost:3000/page ...] [--out plan.md]');
+      const urls = args.flatMap((a, i) => (args[i - 1] === '--url' ? [a] : []));
+      const { runPlan } = await import('../engine/quality/plan-command.ts');
+      await runPlan({ feature, root: process.cwd(), diffRange: flag(args, 'diff'), urls, out: flag(args, 'out') });
       return;
     }
     case 'mcp':

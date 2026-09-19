@@ -77,9 +77,10 @@ export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https:
         if (res.ok) {
           const json = (await res.json()) as {
             choices?: Array<{ message?: { content?: string | null; refusal?: string | null } }>;
-            usage?: { prompt_tokens?: number; completion_tokens?: number };
+            usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
           };
-          recordCall(Date.now() - startedAt, { prompt: json.usage?.prompt_tokens, completion: json.usage?.completion_tokens });
+          const u = json.usage;
+          recordCall(Date.now() - startedAt, { prompt: u?.prompt_tokens, completion: u?.completion_tokens, cached: u?.prompt_tokens_details?.cached_tokens }, model);
           const message = json.choices?.[0]?.message;
           if (message?.refusal) throw new Error(`model refused: ${truncate(message.refusal, 200)}`);
           if (typeof message?.content !== 'string') throw new Error('model returned no content');

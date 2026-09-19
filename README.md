@@ -206,10 +206,11 @@ The first matching rule, in this order, decides the category. If a lower-priorit
 | `test-data-collision` | TEST_DATA | the error shows the test's data collided with existing data (duplicate key, unique constraint, "already exists") |
 | `env-server-error` | ENV | the app's backend answered a 5xx during the test; declines for tests that provoke errors on purpose, and for errors seen only on this commit |
 | `locator-drift-strict` | LOCATOR_DRIFT | an action's locator now matches several elements, and exactly one of them carries the locator's name as a whole word (`name: 'Edit'` → "Editor canvas", "Edit link"). The fix is the locator Playwright printed for that element. |
-| `timing-intercepted` | TIMING | the element was ready, but the error says another element (a snackbar, menu or overlay) intercepts pointer events, so the click could not land |
+| `timing-intercepted` | TIMING | the element was ready, but the error says another element (a snackbar, menu or overlay) intercepts pointer events, so the click could not land. Also Selenium's `Other element would receive the click` and Cypress's `is being covered by another element` (0.65 until measured on labelled data) |
+| `timing-stale-element` | TIMING | Selenium's `StaleElementReferenceException` or Cypress's `the page updated while this command was executing`: the page replaced the element between finding and using it (0.65 until measured) |
 | `timing-retry-pass` | TIMING | another attempt of the same code in the same run passed |
 | `timing-known-flaky` | TIMING | a known flaky test: in an earlier run it failed with this same error and then passed on a retry. Steps back when a request failed during the test |
-| `locator-drift` | LOCATOR_DRIFT | the element was never found, but the page snapshot has an element with a similar name (similarity ≥ 0.6). Declines when the test has no recorded passing run: nothing then shows the element ever matched. |
+| `locator-drift` | LOCATOR_DRIFT | the element was never found (Playwright, Selenium `NoSuchElementException`, WebdriverIO, Cypress `Expected to find element`), but the page snapshot has an element with a similar name (similarity ≥ 0.6). Declines when the test has no recorded passing run: nothing then shows the element ever matched. |
 | `timing-flaky` | TIMING | the failure rate is 20%-80% over at least 3 runs, and the error message varies |
 | `real-bug-assertion` | REAL_BUG | a value mismatch on a test whose history is stable: it was clean before and has failed the same way since |
 
@@ -256,7 +257,7 @@ Two limits are deliberate:
 
 ## What a run costs
 
-Every triage run, the CLI, the eval and the CI job summary end with one line: how many model calls were made, how long they took, how many came free from the cache, the tokens used, and the cost when prices are configured. A run is cheap because the deterministic rules answer most failures and only what they cannot settle reaches the model. Measured example (JupyterLab, 41 real failures): the rules decided 34 of them, 6 went to the model, and those 6 calls took 30 seconds and about 31,000 tokens in total.
+Every triage run, the CLI, the eval and the CI job summary end with one line: how many model calls were made, how long they took, how many came free from the cache, the tokens used, and the cost in dollars. Each call is priced by its own model from OpenAI's published prices (cached input at the cached rate); a team with its own price sets `TRIAGE_LLM_PRICE_IN/OUT`, and a model with no known price is reported as such, never guessed. A run is cheap because the deterministic rules answer most failures and only what they cannot settle reaches the model. Measured example (JupyterLab, 41 real failures): the rules decided 34 of them, 6 went to the model, and those 6 calls took 30 seconds and about 31,000 tokens in total.
 
 ## Security
 
@@ -283,7 +284,7 @@ Environment variables (you can put them in `.env`, which is gitignored):
 - `TRIAGE_LLM_MODEL` (default `gpt-5.4-mini`) and `TRIAGE_LLM_REASONING` (default `low`): choose the model and its reasoning effort.
 - `TRIAGE_LLM_CACHE=off`: skips the response cache in `data/llm-cache.jsonl`. With the cache on, an unchanged request is answered from the cache for free.
 - `TRIAGE_LLM_MAX_CALLS`: at most this many model calls per run. Further failures keep the rules' answer and say so, instead of running up an unbounded bill on a huge failed run.
-- `TRIAGE_LLM_PRICE_IN` / `TRIAGE_LLM_PRICE_OUT`: your price per million input / output tokens. Set them and every run prints what it cost; leave them unset and it prints tokens only, never a guessed price.
+- `TRIAGE_LLM_PRICE_IN` / `TRIAGE_LLM_PRICE_OUT`: your own price per million input / output tokens, overriding the published prices built in for OpenAI's models. For a model without a built-in price, set them to see a cost; otherwise the run says the price is unknown.
 - `CI_RUN_ID`: used as the run id. If it is not set, the run id is based on a timestamp.
 - `GIT_SHA` or `GITHUB_SHA`: stored as the record's `gitSha`. If neither is set, `gitSha` is left empty.
 

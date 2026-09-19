@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { budgetedClient, cachedClient, LlmBudgetError, type LlmClient } from '../llm/client.ts';
-import { resetLlmUsage, llmUsage, usageLine } from '../llm/usage.ts';
+import { recordCall, resetLlmUsage, llmUsage, usageLine } from '../llm/usage.ts';
 import { HistoryIndex } from '../history.ts';
 import { diagnosePipeline } from '../pipeline.ts';
 
@@ -87,3 +87,20 @@ describe('AI call budget and the cache', () => {
   });
 });
 
+
+describe('what a run cost', () => {
+  it('prices each call by its own model, with cached input at the cached rate', () => {
+    resetLlmUsage();
+    // gpt-5.4-mini: $0.75 in, $0.075 cached, $4.50 out per million; gpt-5.5: $5 in, $30 out.
+    recordCall(10, { prompt: 1_000_000, completion: 100_000, cached: 500_000 }, 'gpt-5.4-mini');
+    recordCall(10, { prompt: 100_000, completion: 10_000 }, 'gpt-5.5');
+    assert.ok(Math.abs(llmUsage().costUsd - (0.375 + 0.0375 + 0.45 + 0.5 + 0.3)) < 1e-9);
+    assert.match(usageLine(), /cost: ~\$1\.6625$/);
+  });
+
+  it('says when a model has no known price instead of guessing', () => {
+    resetLlmUsage();
+    recordCall(10, { prompt: 1000, completion: 10 }, 'some-local-model');
+    assert.match(usageLine(), /unknown model price/);
+  });
+});

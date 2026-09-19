@@ -55,13 +55,12 @@ Keep `autofix: 'false'` for the first week. Read what the agent says, decide whe
 
 On real projects the rules alone decide most failures and are right on 96–98% of what they decide, so starting without a key is a reasonable first week. To add one later: repository **Settings → Secrets and variables → Actions → New repository secret**, named `OPENAI_API_KEY`.
 
-Two guards worth setting once the key is in place:
+Every run prints what it cost, priced from OpenAI's published prices. One guard worth setting once the key is in place:
 
 ```yaml
 env:
   TRIAGE_LLM_MAX_CALLS: '80'     # hard cap on model calls per run
-  TRIAGE_LLM_PRICE_IN: '0.25'    # your price per million input tokens
-  TRIAGE_LLM_PRICE_OUT: '2'      # per million output tokens, so every run prints what it cost
+  # TRIAGE_LLM_PRICE_IN / _OUT: only if your price differs (per million tokens)
 ```
 
 ## Not using Playwright? Every stack works

@@ -139,9 +139,11 @@ export function llmFromEnv(): LlmClient | null {
     reasoningEffort: process.env.TRIAGE_LLM_REASONING || DEFAULT_REASONING,
     baseUrl: process.env.OPENAI_BASE_URL || undefined,
   });
-  const cached = process.env.TRIAGE_LLM_CACHE === 'off' ? client : cachedClient(client);
+  // The budget sits inside the cache: a cached answer never reaches it, so it is free, and only
+  // real calls to the model count against TRIAGE_LLM_MAX_CALLS.
   const budget = Number(process.env.TRIAGE_LLM_MAX_CALLS);
-  return Number.isFinite(budget) && budget > 0 ? budgetedClient(cached, budget) : cached;
+  const capped = Number.isFinite(budget) && budget > 0 ? budgetedClient(client, budget) : client;
+  return process.env.TRIAGE_LLM_CACHE === 'off' ? capped : cachedClient(capped);
 }
 
 /** Raised when the per-process call budget is used up; the pipeline keeps the rules' answer. */

@@ -6,7 +6,7 @@ import { decide } from '../../engine/decide.ts';
 import type { Diagnosis, DiagnosisCategory } from '../../reporters/types.ts';
 import { componentOf, type TriageItem } from '../items.ts';
 import { clean, missingFromView } from '../view.ts';
-import { prCommentView } from '../views/developer.ts';
+import { commentOrder, prCommentView } from '../views/developer.ts';
 import { groupEnv, infraView } from '../views/infra.ts';
 import { releaseView } from '../views/release.ts';
 import { qualityView } from '../views/quality.ts';
@@ -181,6 +181,17 @@ describe('comment text from a test run is made safe', () => {
     assert.match(out, /@​octocat/);
     assert.doesNotMatch(out, /\]\(https/, 'no live link or image');
     assert.doesNotMatch(out, /<img/, 'no raw HTML');
+  });
+});
+
+describe('PR comment numbering', () => {
+  it('shows each failure its number, in the order the hidden map uses', () => {
+    const later = item('TIMING', { testId: 'b', title: 'second shown', relation: { verdict: 'not-this-change', why: 'x' } });
+    const first = item('REAL_BUG', { testId: 'a', title: 'first shown', relation: { verdict: 'likely-this-change', why: 'x' } });
+    const md = prCommentView([later, first], 'r1', 'test').markdown;
+    assert.match(md, /\*\*#1\*\* \*\*first shown\*\*/);
+    assert.match(md, /\*\*#2\*\* \*\*second shown\*\*/);
+    assert.deepEqual(commentOrder([later, first]).map((i) => i.title), ['first shown', 'second shown']);
   });
 });
 

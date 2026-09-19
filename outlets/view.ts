@@ -65,9 +65,9 @@ export const diagnosisLine = (i: TriageItem) => `${i.diagnosis.category}, ${conf
 export const actionLine = (i: TriageItem) => `${i.action.owner}${i.action.autonomous ? ', the agent may do this on its own' : ''}): ${clean(i.action.summary)}`;
 
 /** The standard block for one failure. Views may add lines after it, never drop these. */
-export function itemBlock(i: TriageItem, extra: string[] = []): string {
+export function itemBlock(i: TriageItem, extra: string[] = [], number?: number): string {
   return [
-    `- **${clean(i.title)}** (\`${clean(i.file)}\`, run ${clean(i.runId)})`,
+    `- ${number ? `**#${number}** ` : ''}**${clean(i.title)}** (\`${clean(i.file)}\`, run ${clean(i.runId)})`,
     `  - Diagnosis: ${diagnosisLine(i)}`,
     `  - Next action (${actionLine(i)}`,
     `  - Evidence: ${i.evidence.length > 0 ? i.evidence.map(clean).join(' · ') : '(none)'}`,

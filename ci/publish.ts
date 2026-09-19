@@ -3,7 +3,7 @@
 import { appendFileSync } from 'node:fs';
 import type { FixResult } from '../engine/autofix/autofix.ts';
 import type { TriageItem } from '../outlets/items.ts';
-import { prCommentView } from '../outlets/views/developer.ts';
+import { commentOrder, prCommentView } from '../outlets/views/developer.ts';
 import { groupEnv, infraView } from '../outlets/views/infra.ts';
 import { usageLine } from '../engine/llm/usage.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
@@ -18,19 +18,26 @@ export const ENV_MARKER = '<!-- triage-agent:env-issue -->';
 /** GitHub rejects comment bodies over 65,536 characters. */
 const MAX_BODY = 60_000;
 
-const fit = (body: string, runUrl: string) =>
-  body.length <= MAX_BODY ? body : `${body.slice(0, MAX_BODY)}\n\n…truncated: the full report is in the \`triage-agent-report\` artifact of [this run](${runUrl}).`;
+const fit = (body: string, runUrl: string, limit = MAX_BODY) =>
+  body.length <= limit ? body : `${body.slice(0, limit)}\n\n…truncated: the full report is in the \`triage-agent-report\` artifact of [this run](${runUrl}).`;
 
-export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[], records: TriageRecord[] = []): string {
+/**
+ * `readAt` is when this run read people's replies; the hidden map records it so a reply is only
+ * ever matched against the numbering its author saw.
+ */
+export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[], records: TriageRecord[] = [], readAt?: string): string {
   const footer = `<sub>[CI run](${ctx.runUrl}) · every role's view is in the \`triage-agent-report\` artifact · triage-agent never merges and never edits application code</sub>`;
   if (items.length === 0) return `## triage-agent: all tests passed on \`${ctx.sha.slice(0, 8)}\`\n\n${footer}`;
   const accepted = fixes.filter((f) => f.applied).length;
   const fixLine = fixPr
     ? `\n\n**Verified locator fixes: ${fixPr.html_url}** (${accepted} test(s) re-run and passing with the new locator). Review before merging: an intended UI change and a regression can look alike.`
     : '';
-  // The hidden map keeps "#3" meaning the same failure in later runs; the hint tells people how.
-  const learn = `\n\n${correctionHint(ctx.suite)}\n${renderBoardMap(items, records)}`;
-  return fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}${learn}\n\n${footer}`, ctx.runUrl);
+  // The hidden map turns a person's "#3" back into the third failure they see, so it is written in
+  // the comment's own order. Room for it is kept before truncating: a cut map would silently drop
+  // every correction, or leave a hidden comment that never closes.
+  const learn = `\n\n${correctionHint(ctx.suite)}\n${renderBoardMap(commentOrder(items), records, readAt)}`;
+  const tail = `${learn}\n\n${footer}`;
+  return `${fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}`, ctx.runUrl, MAX_BODY - tail.length)}${tail}`;
 }
 
 export async function postPrComment(ctx: CiContext, github: GitHub, body: string): Promise<string | null> {

@@ -11,6 +11,15 @@ export const TIMING_MIN_RUNS = 3;
 
 const pct = (rate: number) => `${Math.round(rate * 100)}%`;
 
+/**
+ * Any request that failed during the test. Narrowing this to server errors and no-response was
+ * measured and changed nothing on the labelled data, while it would stop a 401 (expired login)
+ * from counting as the environment problem it is, so every failed request still counts.
+ */
+function dependencyFailure(load: (() => Array<{ url: string; status: number | null }>) | undefined) {
+  return (load?.() ?? [])[0];
+}
+
 function declined(source: string, message: string, data?: Record<string, unknown>): RuleOutcome {
   return { category: null, confidence: 0, evidence: [{ source, message, data }] };
 }
@@ -87,9 +96,30 @@ export const timingKnownFlaky: Rule = {
   evaluate({ record, history, loadFailedRequests }) {
     const shape = errorShape(record.errorMessage);
     if (!history.earlierFlakeShapes.includes(shape)) return null;
-    const failed = (loadFailedRequests?.() ?? [])[0];
+    // A dependency failing during the test is checked first: that is ENV, whatever else holds.
+    const failed = dependencyFailure(loadFailedRequests);
     if (failed) {
       return declined(this.id, `this test flaked before with this same error, and ${failed.url} failed during it (${failed.status ?? 'no response'}): a dependency failing now and then is an environment problem, not a race inside the test`);
+    }
+    // A regression can wear an old flake's error. Its signature is different, though: it fails every
+    // retry on this commit while the test passes on other commits, where a flake usually passes one
+    // of its retries. Found by code review: without this, the merge gate could let such a
+    // regression through as "known flaky". Measured, most such failures are still the old flake, so
+    // the category stays TIMING, but at a confidence below what the merge gate trusts: a person
+    // looks before it can merge.
+    const retried = history.sameCommitAttempts >= 2;
+    if (retried && history.sameCommitFailures === history.sameCommitAttempts && history.passesOnOtherCommits > 0) {
+      return {
+        category: 'TIMING',
+        confidence: 0.6,
+        evidence: [
+          {
+            source: this.id,
+            message: `a known flaky test failing its old way, but this time it failed all ${history.sameCommitAttempts} attempts on this commit while passing on other commits, which is also how a regression looks: a person should confirm`,
+            data: { shape, regressionShaped: true },
+          },
+        ],
+      };
     }
     return {
       category: 'TIMING',
@@ -117,7 +147,7 @@ export const timingIntermittent: Rule = {
     if (alternations < INTERMITTENT_MIN_ALTERNATIONS) return null;
     // A dependency that fails now and then also makes a test come and go, and that is ENV, not a
     // race in the test. Seen on held-out data, where an external media API broke this test.
-    const failed = (loadFailedRequests?.() ?? [])[0];
+    const failed = dependencyFailure(loadFailedRequests);
     if (failed) {
       return declined(this.id, `this test comes and goes on this branch (${alternations} switches in ${runs} runs) and ${failed.url} failed during it (${failed.status ?? 'no response'}): a dependency failing now and then is an environment problem, not a race inside the test`);
     }

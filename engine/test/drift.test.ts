@@ -109,3 +109,33 @@ describe('timing-intercepted rule', () => {
     assert.match(d.evidence[0].message, /still on top of it/);
   });
 });
+
+describe('timing-known-flaky rule', () => {
+  const ERR = 'Error: expect(locator).toBeFocused() failed';
+  const TEST = 'nav.spec.ts > focuses the menu';
+  const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 0, minute)).toISOString();
+  const fail = (runId: string, sha: string, retry: number, minute: number): TriageRecord => ({
+    schemaVersion: 1, testId: TEST, file: 'nav.spec.ts', status: 'failed', errorMessage: ERR, errorStack: ERR, duration: 1, retry, attachments: [], runId, gitSha: sha, timestamp: at(minute),
+  });
+  const run = (runId: string, sha: string, attempts: number, minute: number) => ({ schemaVersion: 1, runId, gitSha: sha, startedAt: at(minute), finishedAt: at(minute), status: 'failed', attempts: { [TEST]: attempts } });
+
+  it('calls a known flaky test failing its old way TIMING', () => {
+    // Run 1 flaked (failed, then passed on the retry); run 2, on another commit, fails the same way.
+    const records = [fail('r1', 'aaa', 0, 1), fail('r2', 'bbb', 0, 2)];
+    const index = new HistoryIndex(records, [run('r1', 'aaa', 2, 1), run('r2', 'bbb', 1, 2)]);
+    const d = diagnose({ record: records[1], history: index.historyAsOf(TEST, 'r2'), run: index.runContext('r2'), loadSnapshot: () => null });
+    assert.equal(d.category, 'TIMING');
+    assert.equal(d.ruleId, 'timing-known-flaky');
+  });
+
+  it('does not excuse a regression that fails every retry on this commit while passing elsewhere', () => {
+    const records = [fail('r1', 'aaa', 0, 1), fail('r3', 'ccc', 0, 3), fail('r3', 'ccc', 1, 3)];
+    const index = new HistoryIndex(records, [run('r1', 'aaa', 2, 1), run('r2', 'bbb', 1, 2), run('r3', 'ccc', 2, 3)]);
+    const d = diagnose({ record: records[2], history: index.historyAsOf(TEST, 'r3'), run: index.runContext('r3'), loadSnapshot: () => null });
+    // Still most likely the old flake, but not trusted enough to let the merge gate wave it through.
+    assert.equal(d.ruleId, 'timing-known-flaky');
+    assert.ok(d.confidence < 0.7, `confidence ${d.confidence} must stay below the gate's threshold`);
+    assert.match(d.evidence[0].message, /how a regression looks: a person should confirm/);
+  });
+});
+

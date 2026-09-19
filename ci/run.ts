@@ -68,6 +68,9 @@ async function main(): Promise<void> {
   const github = ctx.token ? new GitHub(ctx.token, ctx.repo, ctx.apiUrl) : null;
   // LEARN, first half: pick up what people wrote under the agent's own comments since last time,
   // store it with the history, and let it decide the category for the failures it covers.
+  // When people's replies were read: the comment's hidden map records it, so later runs match each
+  // reply only against the numbering its author saw.
+  const repliesReadAt = new Date().toISOString();
   if (github && ctx.pr) {
     const written = await step('read corrections', () => readCorrections(github, ctx.pr!.number, `PR #${ctx.pr!.number}`, ctx.suite));
     const saved = saveCorrections(ctx.historyDir, written ?? []);
@@ -91,7 +94,7 @@ async function main(): Promise<void> {
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records)));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt)));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);

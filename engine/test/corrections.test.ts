@@ -121,7 +121,7 @@ describe('the hidden board map in the agent comment', () => {
 
   it('turns a human reply into a correction for the right failure', async () => {
     const comments = [
-      { id: 1, body: `${commentMarker('')}\n## triage-agent\n${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 1, body: `${commentMarker('')}\n## triage-agent\n${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
       { id: 2, body: 'no, this is our test data\n/triage TEST_DATA #1 the fixture user has no card', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
@@ -136,8 +136,8 @@ describe('the hidden board map in the agent comment', () => {
     const unitRecords = [record('tests.test_cart > test_total', 'AssertionError: 3 != 4')];
     const unitItems = [{ runId: 'r1', testId: 'tests.test_cart > test_total', diagnosis: { category: 'REAL_BUG' } }] as never as Parameters<typeof renderBoardMap>[0];
     const comments = [
-      { id: 1, body: `${commentMarker('e2e')}\n${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
-      { id: 2, body: `${commentMarker('unit')}\n${renderBoardMap(unitItems, unitRecords)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:01Z', html_url: '' },
+      { id: 1, body: `${commentMarker('e2e')}\n${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 2, body: `${commentMarker('unit')}\n${renderBoardMap(unitItems, unitRecords, '2026-01-01T09:00:00Z')}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:01Z', html_url: '' },
       { id: 3, body: '/triage TIMING unit#1 flaky on CI\n/triage TEST_DATA e2e#1 no card on file', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
@@ -152,7 +152,7 @@ describe('the hidden board map in the agent comment', () => {
   it('ignores corrections from people without write access: a stranger cannot wave a failure through the gate', async () => {
     const comments = [
       { id: 1, body: `${commentMarker('')}
-${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
+${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`, user: { login: 'bot', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
       { id: 2, body: '/triage TIMING #1 totally just flaky', user: { login: 'drive-by', type: 'User' }, author_association: 'NONE', created_at: '2026-01-01T11:00:00Z', html_url: '' },
       { id: 3, body: '/triage TIMING #2 flaky', user: { login: 'first-timer', type: 'User' }, author_association: 'CONTRIBUTOR', created_at: '2026-01-01T11:01:00Z', html_url: '' },
     ];
@@ -164,9 +164,9 @@ ${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, author_
     const forged = [{ runId: 'r1', testId: 'some.other > test', diagnosis: { category: 'REAL_BUG' } }] as never as Parameters<typeof renderBoardMap>[0];
     const comments = [
       { id: 1, body: `${commentMarker('')}
-${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
+${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`, user: { login: 'github-actions[bot]', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
       { id: 2, body: `${commentMarker('')}
-${renderBoardMap(forged, [record('some.other > test', 'x')])}`, user: { login: 'someone', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T10:30:00Z', html_url: '' },
+${renderBoardMap(forged, [record('some.other > test', 'x')], '2026-01-01T09:30:00Z')}`, user: { login: 'someone', type: 'User' }, author_association: 'CONTRIBUTOR', created_at: '2026-01-01T10:30:00Z', html_url: '' },
       { id: 3, body: '/triage TEST_DATA #1 no card', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
@@ -182,3 +182,36 @@ ${renderBoardMap(forged, [record('some.other > test', 'x')])}`, user: { login: '
     assert.equal(parseBoardMap(rendered).get(1)?.testId, hostile);
   });
 });
+
+describe('review fixes: corrections match what the person saw', () => {
+  const items = [
+    { runId: 'r1', testId: TEST, diagnosis: { category: 'ENV' } },
+    { runId: 'r1', testId: 'shop.spec.ts > other test', diagnosis: { category: 'TIMING' } },
+  ] as never as Parameters<typeof renderBoardMap>[0];
+  const records = [record(TEST, ERROR), record('shop.spec.ts > other test', 'Error: another thing')];
+  const bot = (body: string) => ({ id: 1, body, user: { login: 'github-actions[bot]', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T09:00:00Z', html_url: '' });
+  const reply = (body: string, at: string) => ({ id: 2, body, user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: at, html_url: '' });
+
+  it('ignores a reply written before the current numbering was made: it referred to an older one', async () => {
+    const comments = [bot(`${commentMarker('')}
+${renderBoardMap(items, records, '2026-01-02T00:00:00Z')}`), reply('/triage TEST_DATA #1 old reply', '2026-01-01T12:00:00Z')];
+    assert.deepEqual(await readCorrections({ request: async () => comments } as unknown as GitHub, 7, 'PR #7'), []);
+  });
+
+  it("maps the failure's last attempt, the one that is diagnosed", () => {
+    const attempts = [{ ...record(TEST, 'Error: first attempt'), retry: 0 }, { ...record(TEST, ERROR), retry: 1 }];
+    const map = parseBoardMap(renderBoardMap(items.slice(0, 1), attempts, '2026-01-01T09:00:00Z'));
+    assert.equal(map.get(1)?.errorShape, errorShape(ERROR));
+  });
+
+  it('reads every page of a long discussion', async () => {
+    const filler = Array.from({ length: 100 }, (_, n) => reply(`just talking ${n}`, '2026-01-01T10:00:00Z'));
+    const pages = [[bot(`${commentMarker('')}
+${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`), ...filler.slice(1)], [reply('/triage TEST_DATA #1 late reply', '2026-01-03T00:00:00Z')]];
+    let page = 0;
+    const github = { request: async () => pages[page++] ?? [] } as unknown as GitHub;
+    const [c] = await readCorrections(github, 7, 'PR #7');
+    assert.equal(c?.category, 'TEST_DATA');
+  });
+});
+

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
-import { budgetedClient, LlmBudgetError, type LlmClient } from '../llm/client.ts';
+import { budgetedClient, cachedClient, LlmBudgetError, type LlmClient } from '../llm/client.ts';
 import { resetLlmUsage, llmUsage, usageLine } from '../llm/usage.ts';
 import { HistoryIndex } from '../history.ts';
 import { diagnosePipeline } from '../pipeline.ts';
@@ -66,3 +66,24 @@ describe('usage line', () => {
     assert.match(usageLine(), /no calls \(rules only\)/);
   });
 });
+
+describe('AI call budget and the cache', () => {
+  it('does not spend the budget on answers the cache already has', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const file = join(mkdtempSync(join(tmpdir(), 'triage-cache-')), 'cache.jsonl');
+    let calls = 0;
+    const model = stub(async () => {
+      calls++;
+      return '{}';
+    });
+    const client = cachedClient(budgetedClient(model, 1), file);
+    await client.complete(request); // real call: uses the single budgeted call
+    await client.complete(request); // same request: from the cache, free
+    await client.complete(request);
+    assert.equal(calls, 1);
+    await assert.rejects(() => client.complete({ ...request, user: 'a different question' }), LlmBudgetError);
+  });
+});
+

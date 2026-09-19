@@ -33,22 +33,33 @@ const MAP_START = '<!-- triage-agent:map';
 const encode = (v: string) => Buffer.from(v, 'utf8').toString('base64url');
 const decode = (v: string) => Buffer.from(v, 'base64url').toString('utf8');
 
+/** At most this many failures get a number; a larger run's comment is truncated long before. */
+export const MAP_MAX = 200;
+
 /**
  * The agent's comment carries a hidden map from the numbers people see to the failure each one
- * means, so "#3" keeps meaning the same test even when the next run lists failures differently.
+ * means. `items` must be in the order the comment shows them (commentOrder), so "#3" is the third
+ * failure a person sees. `readAt` is when this run read the replies: a reply written after it
+ * refers to this map, and replies written before it were already read against the map they saw.
  */
-export function renderBoardMap(items: TriageItem[], records: TriageRecord[]): string {
-  const lines = items.map((item, i) => {
-    const record = records.find((r) => r.runId === item.runId && r.testId === item.testId);
+export function renderBoardMap(items: TriageItem[], records: TriageRecord[], readAt = new Date().toISOString()): string {
+  const lines = items.slice(0, MAP_MAX).map((item, i) => {
+    // The last failed attempt: it is the one diagnosed, so its error is the one a correction must match.
+    const record = records.filter((r) => r.runId === item.runId && r.testId === item.testId).sort((a, b) => b.retry - a.retry)[0];
     return record ? [i + 1, encode(item.testId), encode(errorShape(record.errorMessage)), item.diagnosis.category].join('\t') : null;
   });
-  return `${MAP_START} v2\n${lines.filter(Boolean).join('\n')}\n-->`;
+  return `${MAP_START} v2 ${readAt}\n${lines.filter(Boolean).join('\n')}\n-->`;
 }
 
 interface MappedFailure {
   testId: string;
   errorShape: string;
   was: string;
+}
+
+/** When the run that wrote this map read the replies; '' for maps written before this was recorded. */
+export function boardMapTime(body: string): string {
+  return body.split(MAP_START)[1]?.match(/^ v2 (\S+)/)?.[1] ?? '';
 }
 
 export function parseBoardMap(body: string): Map<number, MappedFailure> {
@@ -68,19 +79,34 @@ export function parseBoardMap(body: string): Map<number, MappedFailure> {
  * failures, used to turn "#3" into the test it means; a comment that names no number corrects
  * the only failure, and is ignored when there are several.
  */
+/** Every comment on the issue or pull request, page by page: long discussions pass 100. */
+async function allComments(github: GitHub, issueNumber: number): Promise<Comment[]> {
+  const out: Comment[] = [];
+  for (let page = 1; page <= 30; page++) {
+    const batch = await github.request<Comment[]>('GET', `/repos/{repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`);
+    out.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return out;
+}
+
 export async function readCorrections(github: GitHub, issueNumber: number, where: string, suite = ''): Promise<Correction[]> {
-  const comments = await github.request<Comment[]>('GET', `/repos/{repo}/issues/${issueNumber}/comments?per_page=100`);
-  // This suite's own comment holds the map its numbers refer to.
-  const map = comments
-    // Only the agent's own comment: a map in anyone else's comment could point "#1" at another test.
-    .filter((c) => c.user?.type === 'Bot' && c.body?.includes(commentMarker(suite)) && c.body.includes(MAP_START))
-    .map((c) => parseBoardMap(c.body ?? ''))
+  const comments = await allComments(github, issueNumber);
+  // This suite's own comment holds the map its numbers refer to. Only the agent's comment counts -
+  // posted by a bot, or by a maintainer's token when the workflow uses one - since a map in anyone
+  // else's comment could point "#1" at another test.
+  const own = comments
+    .filter((c) => (c.user?.type === 'Bot' || TRUSTED.has(c.author_association ?? '')) && c.body?.includes(commentMarker(suite)) && c.body.includes(MAP_START))
     .at(-1);
+  const map = own ? parseBoardMap(own.body ?? '') : null;
   if (!map || map.size === 0) return [];
+  // A reply written before this map was made referred to an earlier numbering, and was read then.
+  const since = boardMapTime(own?.body ?? '');
   const out: Correction[] = [];
   for (const comment of comments) {
     if (!comment.body || comment.user?.type === 'Bot' || comment.body.includes(MAP_START)) continue;
     if (!TRUSTED.has(comment.author_association ?? '')) continue;
+    if (since && comment.created_at <= since) continue;
     for (const parsed of parseCorrectionCommands(comment.body)) {
       if ((parsed.suite ?? '') !== suite) continue;
       const failure = map.get(parsed.item ?? (map.size === 1 ? 1 : -1));

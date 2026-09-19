@@ -24,14 +24,25 @@ export function sharedCauses(items: TriageItem[]): Array<{ category: string; err
     .sort((a, b) => b.items.length - a.items.length);
 }
 
+/**
+ * The order the PR comment shows failures in: likely caused by this change, then probably not,
+ * then unclear. The visible "#n" numbers follow it, and the hidden map that turns a person's
+ * "/triage ... #n" back into a test is written in the same order, so the two always agree.
+ */
+export function commentOrder(items: TriageItem[]): TriageItem[] {
+  const by = (verdict: TriageItem['relation']['verdict']) => items.filter((i) => i.relation.verdict === verdict);
+  return [...by('likely-this-change'), ...by('not-this-change'), ...by('unclear')];
+}
+
 export function prCommentView(items: TriageItem[], runId: string, dataset: string): View {
   const commit = items[0]?.commit.slice(0, 8) || 'unknown commit';
   const by = (verdict: TriageItem['relation']['verdict']) => items.filter((i) => i.relation.verdict === verdict);
   const likely = by('likely-this-change');
   const not = by('not-this-change');
   const unclear = by('unclear');
+  const numbers = new Map(commentOrder(items).map((i, n) => [i, n + 1]));
   const section = (title: string, xs: TriageItem[]) =>
-    xs.length === 0 ? [] : [`### ${title} (${xs.length})`, '', ...xs.map((i) => itemBlock(i, [`Related to your change? ${i.relation.why}`])), ''];
+    xs.length === 0 ? [] : [`### ${title} (${xs.length})`, '', ...xs.map((i) => itemBlock(i, [`Related to your change? ${i.relation.why}`], numbers.get(i))), ''];
 
   // Nothing failed: say so plainly instead of an empty list under "0 failing test(s)".
   if (items.length === 0) {

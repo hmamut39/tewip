@@ -71,12 +71,14 @@ runs:
       with:
         node-version: '24'
 
+    # The "--" after the suite name ends it: without it, the unnamed suite's key would be a prefix of
+    # every named suite's, and "unit" of "unit-e2e", so one suite could restore another's history.
     - name: Restore triage history
       uses: actions/cache/restore@v4
       with:
         path: .triage-agent/history
-        key: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}
+        key: triage-agent-history-${{ inputs.suite || 'default' }}--${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: triage-agent-history-${{ inputs.suite || 'default' }}--
 
     - name: Diagnose failures and deliver
       id: triage
@@ -100,7 +102,7 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: .triage-agent/history
-        key: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}${{ github.run_id }}-${{ github.run_attempt }}
+        key: triage-agent-history-${{ inputs.suite || 'default' }}--${{ github.run_id }}-${{ github.run_attempt }}
 
     - name: Upload every role's view
       if: always()

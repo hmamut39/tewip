@@ -10,32 +10,59 @@ interface Artifact {
   name: string;
   expired: boolean;
   created_at: string;
-  workflow_run?: { id: number; head_branch: string; head_sha: string };
+}
+
+interface WorkflowRun {
+  id: number;
+  head_branch: string;
+  head_sha: string;
+  html_url: string;
+}
+
+/** "triage-agent-report", or "triage-agent-report-<suite>" when a workflow triages several suites. */
+const REPORT = /^triage-agent-report(-.+)?$/;
+/** How many recent runs to look through for one that uploaded a report. */
+const RUNS_TO_SEARCH = 30;
+
+/**
+ * The newest workflow run on the branch that uploaded triage-agent reports, and those reports.
+ * Looked up run by run rather than across all of a repository's artifacts, which in a busy
+ * repository are mostly other workflows' and would push the report out of the first page.
+ */
+async function latestReports(repo: string, branch: string | undefined): Promise<{ run: WorkflowRun; artifacts: Artifact[] } | null> {
+  const query = `per_page=${RUNS_TO_SEARCH}${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`;
+  const { workflow_runs: runs } = await ghApi<{ workflow_runs: WorkflowRun[] }>(`repos/${repo}/actions/runs?${query}`);
+  for (const run of runs) {
+    const { artifacts } = await ghApi<{ artifacts: Artifact[] }>(`repos/${repo}/actions/runs/${run.id}/artifacts?per_page=100`);
+    const reports = artifacts.filter((a) => REPORT.test(a.name) && !a.expired);
+    if (reports.length > 0) return { run, artifacts: reports.sort((a, b) => a.name.localeCompare(b.name)) };
+  }
+  return null;
 }
 
 export async function githubCiReport(repo: string, pr?: number, branch?: string): Promise<string> {
   const head = pr ? (await ghApi<{ head: { ref: string } }>(`repos/${repo}/pulls/${pr}`)).head.ref : branch;
-  // "triage-agent-report", or "triage-agent-report-<suite>" when a workflow triages several suites.
-  const { artifacts } = await ghApi<{ artifacts: Artifact[] }>(`repos/${repo}/actions/artifacts?per_page=100`);
-  const latest = artifacts
-    .filter((a) => a.name.startsWith('triage-agent-report') && !a.expired && (!head || a.workflow_run?.head_branch === head))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const target = pr ? `PR #${pr} (${head})` : head ? `branch ${head}` : 'any branch';
-  if (!latest) return `No triage-agent report for ${repo}, ${target}. Is the triage-agent action installed in that repository's CI workflow, and has it run since?`;
+  const found = await latestReports(repo, head);
+  if (!found) return `No triage-agent report for ${repo}, ${target} in its last ${RUNS_TO_SEARCH} workflow runs. Is the triage-agent action installed in that repository's CI workflow, and has it run since?`;
 
-  const files = readZipBuffer(await downloadArtifact(repo, latest.id), (n) => n.endsWith('.md') || n === 'triage.json');
-  const text = (name: string) => files.get(name)?.toString('utf8') ?? '';
-  const bundle = JSON.parse(text('triage.json') || '{}') as { runUrl?: string; sha?: string; generatedAt?: string; items?: Array<{ diagnosis: { category: string } }>; fixPr?: string | null };
-  const envCount = (bundle.items ?? []).filter((i) => i.diagnosis.category === 'ENV').length;
-
-  return cap(
-    [
-      `# triage-agent CI report: ${repo}, ${target}`,
-      `Run: ${bundle.runUrl ?? `workflow run ${latest.workflow_run?.id}`} · commit \`${(bundle.sha ?? latest.workflow_run?.head_sha ?? '').slice(0, 8)}\` · generated ${bundle.generatedAt ?? latest.created_at}${bundle.fixPr ? ` · verified fix PR: ${bundle.fixPr}` : ''}`,
-      text('pr-comment.md'),
-      envCount > 0 ? text('infra.md') : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n---\n\n'),
-  );
+  const sections: string[] = [];
+  for (const artifact of found.artifacts) {
+    const files = readZipBuffer(await downloadArtifact(repo, artifact.id), (n) => n.endsWith('.md') || n === 'triage.json');
+    const text = (name: string) => files.get(name)?.toString('utf8') ?? '';
+    const bundle = JSON.parse(text('triage.json') || '{}') as { runUrl?: string; sha?: string; generatedAt?: string; items?: Array<{ diagnosis: { category: string } }>; fixPr?: string | null };
+    const envCount = (bundle.items ?? []).filter((i) => i.diagnosis.category === 'ENV').length;
+    const suite = artifact.name.replace(/^triage-agent-report-?/, '');
+    sections.push(
+      [
+        `# triage-agent CI report: ${repo}, ${target}${suite ? ` - suite "${suite}"` : ''}`,
+        `Run: ${bundle.runUrl ?? found.run.html_url} · commit \`${(bundle.sha ?? found.run.head_sha).slice(0, 8)}\` · generated ${bundle.generatedAt ?? artifact.created_at}${bundle.fixPr ? ` · verified fix PR: ${bundle.fixPr}` : ''}`,
+        text('pr-comment.md'),
+        envCount > 0 ? text('infra.md') : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    );
+  }
+  return cap(sections.join('\n\n---\n\n'));
 }

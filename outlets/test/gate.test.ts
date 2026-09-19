@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { gate, gateSummary, isNoise, writeGateOutputs } from '../../ci/gate.ts';
+import { prCommentBody } from '../../ci/publish.ts';
+import type { CiContext } from '../../ci/context.ts';
 import type { Diagnosis } from '../../reporters/types.ts';
 import type { TriageItem } from '../items.ts';
 
@@ -46,3 +48,19 @@ describe('smart merge gate', () => {
     assert.equal(readFileSync(file, 'utf8'), 'blocking=1\nflaky=1\nenvironment=0\n');
   });
 });
+
+describe('PR comment on a huge run', () => {
+  it('stays under the size limit and still ends with a complete hidden map', () => {
+    const many = Array.from({ length: 400 }, (_, n) =>
+      item(`test number ${n} with a long name`, { category: 'TIMING', evidence: [{ source: 'x', message: 'evidence '.repeat(40) }] }),
+    ).map((i, n) => ({ ...i, runId: 'r1', commit: 'abcdef12', testId: `t${n}`, file: 'a.spec.ts', errorHead: 'Error', evidence: ['evidence '.repeat(40)], relation: { verdict: 'unclear' as const, why: 'x' }, action: { kind: 'escalate', owner: 'sdet', autonomous: false, summary: 'look', reason: 'x' }, source: 'rules' })) as TriageItem[];
+    const records = many.map((i) => ({ schemaVersion: 1, testId: i.testId, file: 'a.spec.ts', status: 'failed' as const, errorMessage: 'Error', errorStack: '', duration: 1, retry: 0, attachments: [], runId: 'r1', gitSha: '', timestamp: '' }));
+    const ctx = { suite: '', runUrl: 'https://ci/run', runId: 'r1', repo: 'o/r', sha: 'abcdef12' } as CiContext;
+    const body = prCommentBody(ctx, many, null, [], records, '2026-01-01T00:00:00Z');
+    assert.ok(body.length <= 60_000 + 200, `body is ${body.length} characters`);
+    assert.match(body, /truncated/);
+    const map = body.slice(body.indexOf('<!-- triage-agent:map'));
+    assert.ok(map.includes('-->'), 'the hidden map is closed');
+  });
+});
+

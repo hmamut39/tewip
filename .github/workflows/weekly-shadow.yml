@@ -1,6 +1,9 @@
-# Weekly self-check: harvest the last week of a public project's CI, diagnose it, and post what
-# the agent would have said as an issue in THIS private repository. Nothing is ever posted to the
-# public project. Collected failure data stays on the runner and is never committed.
+# Weekly self-check across public projects: harvest the last week of each project's CI, keep it
+# with what earlier weeks harvested (projects delete their CI reports within days, so a real
+# dataset can only be built forward), label it from CI evidence, and score the agent against it.
+# Nothing is ever posted to the public projects, and collected failure data never enters git.
+# A manual run can also publish the shadow report (what the agent would have said) as an issue
+# in this private repository.
 name: weekly shadow run
 
 on:
@@ -9,11 +12,15 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: 'Public project to shadow (supabase, gutenberg, penpot)'
-        default: supabase
+        description: 'One project to run (supabase, gutenberg, penpot, jupyterlab, lxdui); empty runs all'
+        default: ''
       days:
         description: 'How many days back to harvest'
         default: '7'
+      publish:
+        description: 'Also publish the shadow report as an issue here'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,56 +29,71 @@ permissions:
 jobs:
   shadow:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 2 # GitHub's API rate limits are per token; two projects at a time stay well inside them
+      matrix:
+        source: [supabase, gutenberg, penpot, jupyterlab, lxdui]
     steps:
+      - name: Skip projects a manual run did not ask for
+        id: pick
+        run: echo "run=${{ inputs.source == '' || inputs.source == matrix.source }}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v5
+        if: steps.pick.outputs.run == 'true'
       - uses: actions/setup-node@v5
+        if: steps.pick.outputs.run == 'true'
         with:
           node-version: '24'
       - run: npm ci --omit=optional
-      # Public projects delete their CI reports within days, so the only way to build a real
-      # dataset is to keep each week's harvest and add to it. The cache carries it forward.
+        if: steps.pick.outputs.run == 'true'
+
       - name: Restore what earlier weeks harvested
+        if: steps.pick.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
-          path: data/real
-          key: shadow-data-${{ inputs.source || 'supabase' }}-${{ github.run_id }}
-          restore-keys: shadow-data-${{ inputs.source || 'supabase' }}-
-      - name: Harvest the public project's CI
+          path: data/real/${{ matrix.source }}-weekly
+          key: shadow-data-${{ matrix.source }}-${{ github.run_id }}
+          restore-keys: shadow-data-${{ matrix.source }}-
+
+      - name: Harvest this week's CI
+        if: steps.pick.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE: ${{ inputs.source || 'supabase' }}
           DAYS: ${{ inputs.days || '7' }}
         run: |
           from=$(date -u -d "-$DAYS days" +%F)
           to=$(date -u +%F)
-          node eval/harvest/harvest.ts "$SOURCE" --from "$from" --to "$to" --dataset "$SOURCE-weekly"
-      - name: Render and publish the shadow report
+          node eval/harvest/harvest.ts "${{ matrix.source }}" --from "$from" --to "$to" --dataset "${{ matrix.source }}-weekly"
+
+      - name: Label and score everything harvested so far
+        if: steps.pick.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SOURCE: ${{ inputs.source || 'supabase' }}
-        run: node scripts/shadow.ts "$SOURCE" --dataset "$SOURCE-weekly" --publish ${{ github.repository }}
-      # Label the accumulated data from CI evidence and score the agent against it, so the
-      # numbers in the README keep being checked on data nobody tuned anything on.
-      - name: Label and score the accumulated data
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SOURCE: ${{ inputs.source || 'supabase' }}
+          TRIAGE_LLM_MAX_CALLS: '150'
+          SOURCE: ${{ matrix.source }}
         run: |
           node eval/harvest/evidence.ts "$SOURCE" "$SOURCE-weekly"
           node eval/harvest/label.ts "$SOURCE-weekly" "eval/ground-truth.$SOURCE-weekly.jsonl" 2020-01-01T00:00:00Z
           {
-            echo "## Accuracy on \`$SOURCE\` this week"
+            echo "## \`$SOURCE\`: accuracy on everything harvested so far"
             echo '```'
             node eval/evaluate.ts "eval/ground-truth.$SOURCE-weekly.jsonl" --data "data/real/$SOURCE-weekly" 2>&1 | tee /dev/stderr || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Keep this week's data for the next run
-        if: always()
+
+      - name: Publish the shadow report (manual runs only)
+        if: steps.pick.outputs.run == 'true' && inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node scripts/shadow.ts "${{ matrix.source }}" --dataset "${{ matrix.source }}-weekly" --publish ${{ github.repository }}
+
+      - name: Keep the data for next week
+        if: always() && steps.pick.outputs.run == 'true'
         uses: actions/cache/save@v4
         with:
-          path: data/real
-          key: shadow-data-${{ inputs.source || 'supabase' }}-${{ github.run_id }}
+          path: data/real/${{ matrix.source }}-weekly
+          key: shadow-data-${{ matrix.source }}-${{ github.run_id }}

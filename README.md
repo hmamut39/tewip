@@ -6,7 +6,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 
 | Where | How |
 |---|---|
-| **Terminal** | `npm install -g tewip`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
+| **Terminal** | `npm install -g tewip-<version>.tgz` (from the release; Tewip is not on the npm registry yet), then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
 | **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension: registers Tewip with the editor's AI assistant and adds *Explain a test report* and *Why did CI fail on this branch?* |
 | **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
@@ -99,7 +99,7 @@ Setup, after `npm install`:
 
 **VS Code, Cursor, Windsurf and VSCodium:** install the Tewip extension (`extensions/vscode`, packaged as `tewip-<version>.vsix`: *Extensions → … → Install from VSIX*). It registers Tewip as an MCP server by itself, so the assistant can use it with no configuration, and adds two commands: *Tewip: Explain a test report…* and *Tewip: Why did CI fail on this branch?*
 
-**Every other MCP client** (JetBrains IDEs 2025.2+, Claude Code, Claude Desktop, or an editor without the extension) takes one entry. With Tewip installed (`npm install -g tewip`) the command is simply `tewip mcp`; from a checkout, point at `cli/tewip.ts`:
+**Every other MCP client** (JetBrains IDEs 2025.2+, Claude Code, Claude Desktop, or an editor without the extension) takes one entry. With Tewip installed from its release file (`npm install -g tewip-<version>.tgz`), the command is simply `tewip mcp`; from a checkout, point at `cli/tewip.ts`:
 
 Point the entry at this checkout with an absolute path (the server resolves its own data, so the editor's working directory does not matter). **VS Code** uses its own shape, with a `servers` key and a `type`; put it in the workspace's `.vscode/mcp.json`, or in your user-level configuration (command *MCP: Open User Configuration*) to have it in every window:
 

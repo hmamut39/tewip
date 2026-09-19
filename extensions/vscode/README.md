@@ -11,7 +11,7 @@ This extension brings Tewip into the editor:
 ## Requirements
 
 - Node.js 22.18 or newer.
-- The Tewip command line: `npm install -g tewip`, or set **Tewip: Path** to `cli/tewip.ts` in a checkout.
+- The Tewip command line: `npm install -g tewip-<version>.tgz` (from the release; Tewip is not on the npm registry yet), or set **Tewip: Path** to `cli/tewip.ts` in a checkout.
 - For CI reports: the GitHub CLI (`gh`), signed in.
 
 Tewip never changes your code from the editor. Its answers name their source (a rule, the AI, or a person's correction) and their confidence.

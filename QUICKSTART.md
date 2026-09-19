@@ -102,7 +102,7 @@ When one workflow triages several suites (say `unit` and `e2e`), give each a `su
 
 ## On your own machine, without CI
 
-Install the command once (`npm install -g tewip`, Node 22.18 or newer), run your tests with the report switched on (see the table above), then:
+Install the command once from the release file, `npm install -g tewip-<version>.tgz` (Tewip is not on the npm registry yet; Node 22.18 or newer), run your tests with the report switched on (see the table above), then:
 
 ```bash
 tewip explain report.xml          # JUnit XML or .trx

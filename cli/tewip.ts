@@ -6,6 +6,7 @@
 //   tewip --version | --help
 // The verbs reuse the same code as the GitHub Action and the MCP server: one engine, many outlets.
 import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 // cli/ in the source tree, dist/cli/ in the published package: package.json is one or two levels up.
@@ -54,6 +55,9 @@ async function main(): Promise<void> {
       return;
     }
     case 'mcp':
+      // An editor starts this from any folder, and an installed tool's own folder may be read-only:
+      // the AI answer cache goes to the user's home folder, which is always writable.
+      process.env.TEWIP_LLM_CACHE ??= join(homedir(), '.tewip', 'llm-cache.jsonl');
       await import('../mcp/server.ts');
       return;
     case '--version':

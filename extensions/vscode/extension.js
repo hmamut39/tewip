@@ -4,7 +4,7 @@
 // - Adds two commands: explain a test report on disk, and show the latest CI report for the
 //   current branch. Both run the same `tewip` command line people use in a terminal.
 const vscode = require('vscode');
-const { execFile } = require('node:child_process');
+const { exec, execFile } = require('node:child_process');
 
 /** The program and leading arguments that run Tewip, from the `tewip.path` setting. */
 function tewipCommand() {
@@ -18,14 +18,37 @@ function workspaceDir() {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
-/** Runs `tewip <args>` in the workspace and resolves with its output. */
+/**
+ * On Windows the `tewip` command is a .cmd file, which only runs through cmd.exe, and cmd.exe
+ * splits and interprets an unquoted command line: a path with a space would break in two, and an
+ * "&" in a folder or branch name would start a second command. Every argument is quoted, and a
+ * "%" (which cmd.exe expands even inside quotes) is refused rather than guessed at.
+ */
+function forCmd(arg) {
+  if (/[%\r\n]/.test(arg)) throw new Error(`cannot pass "${arg}" safely to the Windows command line (it contains % or a line break)`);
+  return `"${arg.replace(/"/g, '""')}"`;
+}
+
+/** Runs `tewip <args>` in `cwd` and resolves with its output. */
 function runTewip(args, cwd) {
   const { command, args: lead } = tewipCommand();
+  const windows = process.platform === 'win32';
   return new Promise((resolve, reject) => {
-    execFile(command, [...lead, ...args], { cwd, maxBuffer: 32 * 1024 * 1024, shell: process.platform === 'win32', env: process.env }, (error, stdout, stderr) => {
+    let all;
+    try {
+      all = windows ? [command, ...lead, ...args].map(forCmd) : [...lead, ...args];
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    const done = (error, stdout, stderr) => {
       if (error && !stdout) reject(new Error(stderr?.trim() || error.message));
       else resolve(stdout);
-    });
+    };
+    const options = { cwd, maxBuffer: 32 * 1024 * 1024, env: process.env };
+    // Windows: one command line, every part already quoted by forCmd, run by cmd.exe.
+    if (windows) exec(all.join(' '), options, done);
+    else execFile(command, all, options, done);
   });
 }
 
@@ -45,9 +68,13 @@ async function explainReport() {
     defaultUri: workspaceDir() ? vscode.Uri.file(workspaceDir()) : undefined,
   });
   if (!picked?.[0]) return;
+  // History goes in a .tewip folder where this runs: the open project, or, with no folder open,
+  // next to the report - never the editor's own folder.
+  const report = picked[0].fsPath;
+  const cwd = workspaceDir() ?? require('node:path').dirname(report);
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Tewip is reading the report…' }, async () => {
     try {
-      await show(await runTewip(['explain', picked[0].fsPath], workspaceDir()));
+      await show(await runTewip(['explain', report], cwd));
     } catch (error) {
       vscode.window.showErrorMessage(`Tewip: ${error.message}. Is it installed? See the "tewip.path" setting.`);
     }
@@ -58,7 +85,8 @@ async function explainReport() {
 function gitInfo(cwd) {
   const git = (args) => new Promise((resolve) => execFile('git', args, { cwd }, (e, out) => resolve(e ? '' : out.trim())));
   return Promise.all([git(['remote', 'get-url', 'origin']), git(['branch', '--show-current'])]).then(([remote, branch]) => ({
-    repo: remote.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/)?.[1],
+    // Repository names may contain dots (acme/api.v2); only a trailing ".git" is dropped.
+    repo: remote.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1],
     branch,
   }));
 }

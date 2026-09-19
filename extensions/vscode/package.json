@@ -23,7 +23,7 @@
         "tewip.path": {
           "type": "string",
           "default": "tewip",
-          "markdownDescription": "How to run Tewip: `tewip` when it is installed (`npm install -g tewip`), or the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
+          "markdownDescription": "How to run Tewip: `tewip` when it is installed from its release file (`npm install -g tewip-<version>.tgz`), or the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
         }
       }
     }

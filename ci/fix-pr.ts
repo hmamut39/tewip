@@ -114,7 +114,9 @@ export async function autofixAndOpenPr(
   if (accepted.length === 0) return { fixes, pr: null };
 
   const base = ctx.pr?.headRef ?? ctx.branch;
-  const branch = `tewip/fix-${base}`.replace(/[^\w./-]/g, '-');
+  // The branch prefix keeps the name used before the rename, so fix PRs already open are found and
+  // updated instead of duplicated (like the hidden comment markers).
+  const branch = `triage-agent/fix-${base}`.replace(/[^\w./-]/g, '-');
   const tree = join(ctx.outDir, 'fix-worktree');
   if (existsSync(tree)) rmSync(tree, { recursive: true, force: true });
   git(ctx.workspace, ['fetch', '--no-tags', 'origin', base]);

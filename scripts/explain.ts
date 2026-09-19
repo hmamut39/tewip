@@ -1,0 +1,62 @@
+// Explains a test report on your own machine, no CI needed: run your tests, then
+//   node scripts/explain.ts <report>
+// where <report> is a JUnit XML or TRX file, a directory of them, or a Playwright blob report
+// directory. Works for any stack the importer reads (see QUICKSTART.md). Each run is kept in
+// data/local, so the second and later runs judge failures against their history, as CI does.
+// Options: --name <project> keeps a separate history per project (default: the report's folder).
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { loadCorrections } from '../engine/corrections.ts';
+import { HistoryIndex } from '../engine/history.ts';
+import { importBlobReportDir } from '../engine/import/blob.ts';
+import { importJunit } from '../engine/import/junit.ts';
+import { llmFromEnv } from '../engine/llm/client.ts';
+import { usageLine } from '../engine/llm/usage.ts';
+import { buildItems } from '../outlets/items.ts';
+import { sdetBoardView } from '../outlets/views/sdet.ts';
+import { appendJsonl, DATA_DIR, datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
+
+const arg = (name: string) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+
+/** A Playwright blob report is a directory of report-*.zip files; anything else is JUnit or TRX. */
+function isBlobDir(path: string): boolean {
+  return statSync(path).isDirectory() && readdirSync(path).some((f) => /^report.*\.zip$/.test(f));
+}
+
+async function main(): Promise<void> {
+  const target = process.argv[2];
+  if (!target || target.startsWith('--') || !existsSync(target)) {
+    console.error('usage: node scripts/explain.ts <report.xml | report.trx | reports-dir | blob-report-dir> [--name project]');
+    process.exitCode = 1;
+    return;
+  }
+  const path = resolve(target);
+  const name = (arg('name') ?? basename(statSync(path).isDirectory() ? path : dirname(path))).replace(/[^\w.-]+/g, '-');
+  const historyDir = join(DATA_DIR, 'local', name);
+  const history = datasetFiles(historyDir);
+  const runId = `local-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+  const meta = { runId, gitSha: '', workspace: process.cwd() };
+
+  const imported = isBlobDir(path) ? importBlobReportDir(path, meta, join(historyDir, 'files')) : importJunit(path, meta);
+  const pastRecords = readTriageRecords(history.triage);
+  const pastRuns = readRunSummaries(history.runs);
+  const index = new HistoryIndex([...pastRecords, ...imported.records], [...pastRuns, imported.summary]);
+
+  const items = await buildItems(imported.records, index, { dataset: `local: ${name}`, llm: llmFromEnv(), corrections: loadCorrections(historyDir) });
+  const tests = Object.keys(imported.summary.attempts).length;
+  if (items.length === 0) console.log(`All ${tests} test(s) passed. Nothing to explain.`);
+  else console.log(sdetBoardView(items, runId, `local: ${name}`).markdown);
+
+  // Keep this run as history for the next one, with its diagnoses.
+  const diagnosed = imported.records.map((r) => ({ ...r, diagnosis: items.find((i) => i.testId === r.testId)?.diagnosis }));
+  appendJsonl(history.triage, diagnosed);
+  appendJsonl(history.runs, [imported.summary]);
+  const runs = pastRuns.length + 1;
+  console.log(`\n${usageLine()}`);
+  console.log(`History: ${runs} run(s) of "${name}" kept in ${historyDir}.${runs === 1 ? ' A test\'s first failure often stays undecided; later runs are judged against this one.' : ''}`);
+}
+
+await main();

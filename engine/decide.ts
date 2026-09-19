@@ -99,7 +99,7 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
         kind: 'file-bug',
         owner: 'developer',
         autonomous: true,
-        summary: `File a bug${hints.component ? ` against ${hints.component}` : ''}${hints.commit ? ` for commit ${hints.commit.slice(0, 8)}` : ''} with the trace${hints.tracePath ? ` (${hints.tracePath})` : ''} attached; do not change the test.`,
+        summary: `File a bug${hints.component ? ` against ${hints.component}` : ''}${hints.commit ? ` for commit ${hints.commit.slice(0, 8)}` : ''}${hints.tracePath ? ` with the trace (${hints.tracePath}) attached` : ' with the failure output attached'}; do not change the test.`,
         reason: `${conf}: the application is broken, so the test stays as it is`,
       };
     case 'LOCATOR_DRIFT': {
@@ -146,7 +146,11 @@ export function decide(d: Diagnosis, hints: ActionHints = {}): PlannedAction {
             kind: 'stabilize-test',
             owner: 'sdet',
             autonomous: false,
-            summary: `Make the step${target} wait for the element's ready state (e.g. await expect(locator).toBeVisible()) before acting; quarantine the test if it keeps flaking.`,
+            summary: hints.locator
+              ? `Make the step${target} wait for the element's ready state (e.g. await expect(locator).toBeVisible()) before acting; quarantine the test if it keeps flaking.`
+              : // Not a browser step (a unit or API test in any language): the race is in shared state,
+                // ordering or timing, and the fix is to wait for the condition instead of hoping.
+                'Find what the test races against (shared state, test order, a timer, a service still starting) and make it wait for that condition instead of a fixed delay; quarantine the test if it keeps flaking.',
             reason: `${conf}: race without a hard-coded wait to replace, so there is no safe automatic fix`,
           };
     }

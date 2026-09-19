@@ -16,6 +16,7 @@
     "history": "node scripts/history.ts",
     "diagnose": "node scripts/diagnose.ts",
     "triage": "node scripts/triage.ts",
+    "explain": "node scripts/explain.ts",
     "lab": "node scripts/lab.ts",
     "test:engine": "node --test engine/test/*.test.ts outlets/test/*.test.ts mcp/test/*.test.ts",
     "mcp": "node mcp/server.ts",

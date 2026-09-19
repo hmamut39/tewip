@@ -100,6 +100,18 @@ A wrong value on a test's **first** recorded failure stays undecided rather than
 
 When one workflow triages several suites (say `unit` and `e2e`), give each a `suite` name: each then keeps its own history and its own comment, and corrections name the suite, as in `/triage TIMING unit#2 flaky on CI`.
 
+## On your own machine, without CI
+
+Run your tests with the report switched on (see the table above), then point the agent at it:
+
+```bash
+node /path/to/triage-agent/scripts/explain.ts report.xml          # JUnit XML or .trx
+node /path/to/triage-agent/scripts/explain.ts reports/            # a folder of them
+node /path/to/triage-agent/scripts/explain.ts blob-report/        # Playwright
+```
+
+It prints the same triage board CI writes: each failure's cause, confidence, evidence and next action. Every run is kept under `data/local/<project>` inside the triage-agent folder, so from the second run on, failures are judged against their history exactly as in CI. `--name` keeps separate histories for different projects.
+
 ## What you will see on the next failing run
 
 - **On the pull request:** one comment listing each failing test, grouped by whether your change likely caused it, each with a cause, a confidence, the evidence and the next action. It updates in place rather than adding a comment per run.

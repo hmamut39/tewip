@@ -154,3 +154,22 @@ describe('quality view: quarantine candidates', () => {
     assert.match(md, /chromium > a\.spec\.ts > Replicator/);
   });
 });
+
+describe('PR comment: failures that share one cause', () => {
+  it('says so up front when three or more failures share a category and an error', () => {
+    const outage = (n: number) => item('ENV', { testId: `t${n}`, title: `t${n}`, errorHead: 'Error: connect ECONNREFUSED 10.0.0.5:5432' });
+    const md = prCommentView([outage(1), outage(2), outage(3), item('REAL_BUG')], 'r1', 'test').markdown;
+    assert.match(md, /3 failures look like one cause\*\* \(ENV, same error\): `Error: connect ECONNREFUSED 10\.0\.0\.5:5432`/);
+  });
+
+  it('does not group timeouts on different elements: each is its own problem', () => {
+    const drift = (n: number) => item('LOCATOR_DRIFT', { testId: `d${n}`, title: `d${n}`, errorHead: 'TimeoutError: locator.click: Timeout 10000ms exceeded.', locator: `#button-${n}` });
+    const md = prCommentView([drift(1), drift(2), drift(3)], 'r1', 'test').markdown;
+    assert.doesNotMatch(md, /look like one cause/);
+  });
+
+  it('never groups undecided failures: their cause is not known', () => {
+    const unknown = (n: number) => item('UNKNOWN', { testId: `u${n}`, title: `u${n}`, errorHead: 'Error: something' }, 0);
+    assert.doesNotMatch(prCommentView([unknown(1), unknown(2), unknown(3)], 'r1', 'test').markdown, /look like one cause/);
+  });
+});

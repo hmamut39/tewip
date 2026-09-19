@@ -23,7 +23,7 @@ jobs:
         with: { node-version: '24' }
       - run: npm install --no-audit --no-fund
       - name: node:test
-        run: node --test --test-reporter=junit --test-reporter-destination=out/node-test.xml node-test.test.mjs || true
+        run: mkdir -p out && node --test --test-reporter=junit --test-reporter-destination=out/node-test.xml node-test.test.mjs || true
       - name: Jest
         env: { JEST_JUNIT_OUTPUT_DIR: out, JEST_JUNIT_OUTPUT_NAME: jest.xml }
         run: npx jest --ci --testMatch '**/jest.test.cjs' --reporters=default --reporters=jest-junit || true

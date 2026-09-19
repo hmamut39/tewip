@@ -79,32 +79,35 @@ function sameSuffix(example: string | null, fallback: string, known: RegExp): (i
   return (id) => `tewip-${kebab(id)}${suffix}`;
 }
 
-function jsFramework(dir: string, deps: string): Framework | null {
+/** Every JavaScript test framework set up in this folder: a project often has e2e and unit tests. */
+function jsFrameworks(dir: string, deps: string): Framework[] {
+  const out: Framework[] = [];
   const config = (names: string[]) => names.map((n) => join(dir, n)).find(existsSync);
   const pw = config(['playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs']);
   if (pw) {
     const testDir = join(dir, read(pw).match(/testDir:\s*['"`]([^'"`]+)/)?.[1] ?? '.');
     const example = testFiles(testDir, /\.(spec|test)\.[mc]?[jt]s$/)[0] ?? null;
-    return { id: 'playwright', label: 'Playwright Test (TypeScript/JavaScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : testDir, example, fileFor: sameSuffix(example, '.spec.ts', /\.(spec|test)\.[mc]?[jt]s$/), command: (f) => `npx playwright test ${q(relative(dir, f).replaceAll('\\', '/'))} --retries=0 --workers=1 --reporter=line` };
+    out.push({ id: 'playwright', label: 'Playwright Test (TypeScript/JavaScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : testDir, example, fileFor: sameSuffix(example, '.spec.ts', /\.(spec|test)\.[mc]?[jt]s$/), command: (f) => `npx playwright test ${q(relative(dir, f).replaceAll('\\', '/'))} --retries=0 --workers=1 --reporter=line` });
   }
   const cy = config(['cypress.config.ts', 'cypress.config.js', 'cypress.config.mjs']);
   if (cy) {
     const example = testFiles(join(dir, 'cypress'), /\.cy\.[jt]sx?$/)[0] ?? null;
-    return { id: 'cypress', label: 'Cypress (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'cypress', 'e2e'), example, fileFor: sameSuffix(example, '.cy.ts', /\.cy\.[jt]sx?$/), command: (f) => `npx cypress run --spec ${q(relative(dir, f))}` };
+    out.push({ id: 'cypress', label: 'Cypress (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'cypress', 'e2e'), example, fileFor: sameSuffix(example, '.cy.ts', /\.cy\.[jt]sx?$/), command: (f) => `npx cypress run --spec ${q(relative(dir, f))}` });
   }
   const wdio = config(['wdio.conf.ts', 'wdio.conf.js']);
   if (wdio) {
     const example = testFiles(dir, /\.(e2e|spec|test)\.[jt]s$/)[0] ?? null;
-    return { id: 'webdriverio', label: 'WebdriverIO (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test', 'specs'), example, fileFor: sameSuffix(example, '.e2e.ts', /\.(e2e|spec|test)\.[jt]s$/), command: (f) => `npx wdio run ${q(basename(wdio))} --spec ${q(relative(dir, f))}` };
+    out.push({ id: 'webdriverio', label: 'WebdriverIO (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test', 'specs'), example, fileFor: sameSuffix(example, '.e2e.ts', /\.(e2e|spec|test)\.[jt]s$/), command: (f) => `npx wdio run ${q(basename(wdio))} --spec ${q(relative(dir, f))}` });
   }
   // Angular runs its unit tests through the CLI (Karma with Jasmine, or the Vitest-based unit-test
   // builder), with the project's TestBed setup, so a spec must run through `ng test` as well.
   const angular = read(join(dir, 'angular.json'));
   const builder = angular.match(/"test"\s*:\s*\{\s*"builder"\s*:\s*"([^"]+)"/)?.[1] ?? '';
-  if (angular && /karma|unit-test/.test(builder)) {
+  const hasAngular = Boolean(angular && /karma|unit-test/.test(builder));
+  if (hasAngular) {
     const example = testFiles(join(dir, 'src'), /\.spec\.ts$/)[0] ?? null;
     const karma = builder.includes('karma');
-    return {
+    out.push({
       id: 'angular',
       label: `Angular (ng test with ${karma ? 'Karma and Jasmine' : 'Vitest'}, TestBed; TypeScript)`,
       browser: false,
@@ -113,7 +116,8 @@ function jsFramework(dir: string, deps: string): Framework | null {
       example,
       fileFor: (id) => `tewip-${kebab(id)}.spec.ts`,
       command: (f) => `npx ng test --watch=false --include=${q(relative(dir, f).replaceAll('\\', '/'))}${karma ? ' --browsers=ChromeHeadless' : ''}`,
-    };
+      env: karma ? karmaChrome() : undefined,
+    });
   }
   for (const id of ['vitest', 'jest'] as const) {
     if (!new RegExp(`"${id}"\\s*:`).test(deps)) continue;
@@ -124,9 +128,10 @@ function jsFramework(dir: string, deps: string): Framework | null {
     const testingLibrary = /"@testing-library\/[\w-]+"\s*:/.test(deps) ? ' and Testing Library' : '';
     const label = `${id === 'jest' ? 'Jest' : 'Vitest'}${browser ? ' with Selenium/Puppeteer' : ''}${ui.length ? ` for ${ui.join('/')}${testingLibrary}` : ''} (JavaScript/TypeScript)`;
     const run = id === 'jest' ? 'npx jest' : 'npx vitest run';
-    return { id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}` };
+    out.push({ id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}` });
+    break;
   }
-  return null;
+  return out;
 }
 
 /** The project's own Python (its virtual environment) when it has one, else the one on the PATH. */
@@ -177,13 +182,15 @@ export function detectFrameworks(root: string): Framework[] {
   const found: Framework[] = [];
   for (const dir of dirs(root)) {
     const deps = read(join(dir, 'package.json'));
-    for (const f of [jsFramework(dir, deps), otherFramework(dir)]) if (f && !found.some((x) => x.id === f.id && x.cwd === f.cwd)) found.push(f);
+    for (const f of [...jsFrameworks(dir, deps), otherFramework(dir)]) if (f && !found.some((x) => x.id === f.id && x.cwd === f.cwd)) found.push(f);
   }
   return found.sort((a, b) => Number(b.browser) - Number(a.browser));
 }
 
-/** The framework to write in: the one asked for, else the first browser framework, else the first. */
-export function chooseFramework(found: Framework[], wanted?: string): Framework | null {
+/** The framework to write in: the one asked for, else the first of the kind the scenarios need, else the first. */
+export function chooseFramework(found: Framework[], wanted?: string, browser = true): Framework | null {
   if (wanted) return found.find((f) => f.id === wanted) ?? null;
-  return found[0] ?? null;
+  // Scenarios on pages of the running app are browser tests; without pages they are unit or
+  // component tests, which belong in the project's unit framework even when it also has e2e tests.
+  return found.find((f) => f.browser === browser) ?? found[0] ?? null;
 }

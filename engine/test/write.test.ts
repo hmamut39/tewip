@@ -220,3 +220,18 @@ describe('front-end projects', () => {
     assert.match(chooseFramework(detectFrameworks(root))!.label, /^Vitest for React and Testing Library/);
   });
 });
+
+describe('a project with both e2e and unit tests', () => {
+  it('finds both, and picks by the kind of test: pages mean the browser, none mean the unit framework', () => {
+    const root = files({
+      'playwright.config.ts': "export default { testDir: './e2e' };",
+      'e2e/home.spec.ts': '',
+      'package.json': '{"dependencies":{"react":"19"},"devDependencies":{"@playwright/test":"1","vitest":"4"}}',
+      'components/Vote.test.tsx': '',
+    });
+    const found = detectFrameworks(root);
+    assert.deepEqual(found.map((f) => f.id), ['playwright', 'vitest']);
+    assert.equal(chooseFramework(found, undefined, true)!.id, 'playwright');
+    assert.equal(chooseFramework(found, undefined, false)!.id, 'vitest');
+  });
+});

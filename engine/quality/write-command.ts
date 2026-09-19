@@ -43,14 +43,18 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   const saved = JSON.parse(readFileSync(planPath, 'utf8')) as SavedPlan;
 
   const found = detectFrameworks(cmd.root);
-  const detected = chooseFramework(found, cmd.framework);
+  const urls = cmd.urls.length ? cmd.urls : saved.urls;
+  const detected = chooseFramework(found, cmd.framework, urls.length > 0);
   if (!detected) {
     const seen = found.map((f) => f.id).join(', ') || 'none';
     throw new Error(`no ${cmd.framework ?? 'test'} framework found to write in (found: ${seen}). Tewip writes Playwright, Cypress, WebdriverIO, Angular (ng test), Jest, Vitest, pytest, JUnit (Maven/Gradle), .NET and Go tests.`);
   }
   // Copy the style of the existing test closest to the feature, when it is one of this framework's
   // tests: it shows the helpers and conventions this part of the code base is tested with.
-  const sameKind = (f: string) => detected.example !== null && extname(f) === extname(detected.example) && f.startsWith(detected.cwd);
+  // Only a test this framework runs: a browser framework runs what is in its test folder; a unit
+  // framework runs tests anywhere in its project.
+  const within = detected.browser ? detected.testDir : detected.cwd;
+  const sameKind = (f: string) => detected.example !== null && extname(f) === extname(detected.example) && f.startsWith(within);
   const closest = relatedTestSources(cmd.root, saved.feature, 10).map((t) => join(cmd.root, t.file)).find(sameKind);
   const framework = closest ? { ...detected, example: closest, testDir: dirname(closest) } : detected;
 
@@ -59,7 +63,6 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   if (scenarios.length === 0) throw new Error(wanted.size ? `none of ${cmd.only.join(', ')} is in ${planPath}` : 'the plan has nothing left to automate');
 
   const code = relatedCodeSources(cmd.root, saved.feature);
-  const urls = cmd.urls.length ? cmd.urls : saved.urls;
   const { pages, note } = await readPages(urls, cmd.root);
   console.error(`Tewip is writing ${scenarios.length} test(s) in ${framework.label}, in ${relative(cmd.root, framework.testDir) || '.'}${framework.example ? `, in the style of ${relative(cmd.root, framework.example)}` : ''}.`);
   if (note) console.error(`  ${note}`);

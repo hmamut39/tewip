@@ -145,6 +145,23 @@ In **Cursor, Claude Desktop, Windsurf** and most other clients, the same entry g
 
 Then ask, in plain language: "why did CI fail on my PR?", "which tests are flaky in checkout?", "is main safe to release?". Every tool is read-only, and it reads the report the Action already uploaded, so you do not need the other repository cloned.
 
+## Stop flaky tests from blocking merges (optional)
+
+Once you trust its answers, let the agent decide whether a failed run should block:
+
+```yaml
+      - name: Tests
+        continue-on-error: true      # the gate below decides
+        run: npx playwright test
+      - name: triage-agent
+        if: always()
+        uses: hmamut39/triage-agent@main
+        with:
+          gate: real-failures
+```
+
+The build then fails only for real bugs, changed selectors, test-data problems and anything undecided. Failures a rule or a person classified as flaky or environment no longer block. On 2,296 real failures this unblocked 84% of the flaky and environment ones without letting a real bug through.
+
 ## Turning fixing on, once you trust it
 
 ```yaml

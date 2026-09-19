@@ -2,10 +2,13 @@
 // MCP server for Tewip: lets any MCP-capable AI assistant (Claude Code, Claude Desktop,
 // Cursor, VS Code agent mode, ...) ask about Playwright test failures and get the same
 // diagnoses, next actions and role views the agent produces in CI.
-// Read-only by design: no tool changes code, CI, GitHub or collected data.
+// Read-only by design, except test_plan, which saves the plan it returns in the project's .tewip
+// folder: no tool changes code, CI, GitHub or collected data.
 // Run: node mcp/server.ts (stdio). Setup for each client is in README.md.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { githubCiReport } from './github-report.ts';
 import { explainFailure, listDatasets, listFailedRuns, runView, windowView } from './tools.ts';
@@ -83,6 +86,29 @@ server.registerTool(
     annotations: readOnly,
   },
   ({ test, dataset: d, run: r, ai: a }) => answer(() => explainFailure(test, d, r, a ?? true)),
+);
+
+server.registerTool(
+  'test_plan',
+  {
+    title: 'Write a test plan for a feature',
+    description:
+      'A test plan grounded in a project on this machine: its existing tests (read in full where related), the code the feature lives in, an optional git change and live pages, and the failures Tewip diagnosed there before. Returns risks, prioritised scenarios, what is already covered and what to automate next. Saves the plan in the project\'s .tewip/plans (nothing else is written). Needs OPENAI_API_KEY; takes about a minute.',
+    inputSchema: {
+      feature: z.string().describe('What the feature does, in a sentence or two'),
+      project: z.string().describe('Absolute path of the project folder'),
+      diff: z.string().optional().describe('A git range whose change to plan for, e.g. "main...HEAD"'),
+      urls: z.array(z.string()).optional().describe('Pages of the running app to read, e.g. ["http://localhost:3000/checkout"]'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  ({ feature, project, diff, urls }) =>
+    answer(async () => {
+      if (!isAbsolute(project) || !existsSync(project)) throw new Error(`project must be an existing absolute path, got "${project}"`);
+      const { planProject } = await import('../engine/quality/plan-command.ts');
+      const { markdown, out } = await planProject({ feature, root: project, diffRange: diff, urls: urls ?? [] });
+      return `${markdown}\n\n(Saved to ${out}. To turn it into verified tests, run \`tewip write\` in that folder.)`;
+    }),
 );
 
 await server.connect(new StdioServerTransport());

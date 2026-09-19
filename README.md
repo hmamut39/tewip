@@ -124,7 +124,7 @@ Point the entry at this checkout with an absolute path (the server resolves its 
 - **JetBrains** (IntelliJ, WebStorm, PyCharm 2025.2+): Settings → Tools → MCP Server.
 - **Inside this repository** nothing is needed for Claude Code: `.mcp.json` is already set up.
 
-Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are flaky in checkout?"*, *"is the main branch safe to release?"*. Every tool is read-only, and `github_ci_report` reads the report the Action uploaded, so you can ask about a repository's CI **without cloning it or opening the Actions page** (it uses your `gh` login).
+Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are flaky in checkout?"*, *"is the main branch safe to release?"*. You can also ask it to *"write a test plan for the checkout feature in C:\work\shop"*: the `test_plan` tool plans from that project's real tests, code and pages, and saves the plan in its `.tewip` folder. Every other tool is read-only, and `github_ci_report` reads the report the Action uploaded, so you can ask about a repository's CI **without cloning it or opening the Actions page** (it uses your `gh` login).
 
 ## Plan and write tests (Phases 6 and 7, new)
 

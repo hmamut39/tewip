@@ -23,13 +23,20 @@ describe('MCP server', { skip: hasLocalData ? false : 'no local data/triage.json
     return { text: result.content.map((c) => c.text).join('\n'), isError: Boolean(result.isError) };
   };
 
-  it('lists every tool as read-only', async () => {
+  it('lists every tool as read-only, except the plan it saves in the project, and none destructive', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    for (const expected of ['github_ci_report', 'triage_board', 'pr_impact', 'environment_report', 'release_readiness', 'quality_report', 'architecture_report', 'risk_digest', 'explain_failure', 'list_datasets', 'list_failed_runs']) {
+    for (const expected of ['github_ci_report', 'triage_board', 'pr_impact', 'environment_report', 'release_readiness', 'quality_report', 'architecture_report', 'risk_digest', 'explain_failure', 'list_datasets', 'list_failed_runs', 'test_plan']) {
       assert.ok(names.includes(expected), `missing tool ${expected}`);
     }
-    assert.ok(tools.every((t) => t.annotations?.readOnlyHint === true), 'every tool must be read-only');
+    assert.ok(tools.filter((t) => t.name !== 'test_plan').every((t) => t.annotations?.readOnlyHint === true), 'every other tool must be read-only');
+    assert.ok(tools.every((t) => t.annotations?.destructiveHint === false), 'no tool may be destructive');
+  });
+
+  it('refuses to plan for a project path that is not an existing absolute folder', async () => {
+    const { text, isError } = await call('test_plan', { feature: 'checkout', project: 'relative/folder' });
+    assert.equal(isError, true);
+    assert.match(text, /existing absolute path/);
   });
 
   it('returns the SDET board for the latest failed run, with confidence and source', async () => {

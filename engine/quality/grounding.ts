@@ -65,38 +65,47 @@ const STOPWORDS = new Set(['with', 'that', 'this', 'from', 'into', 'when', 'then
 /**
  * The full text of the tests most related to a feature. Test names alone hide what table-driven
  * tests (test.each, parametrize, @ParameterizedTest, a list of cases in a loop) already check, so
- * the planner also reads the files that mention the feature's words most. Code-like words
- * (withQuery, parse_query) count five times as much as plain ones. With kind 'code', the same for
- * the source files the feature lives in.
+ * the planner also reads the files that mention the feature's words most, rare words counting
+ * most. With kind 'code', the same for the source files the feature lives in. Tests Tewip wrote
+ * itself are left out: they are not the project's own conventions.
  */
 export function relatedTestSources(root: string, feature: string, maxFiles = 4, maxChars = 8_000, kind: 'tests' | 'code' = 'tests'): TestSource[] {
   const wanted = (name: string) => (kind === 'tests' ? TEST_FILE.test(name) : CODE_FILE.test(name) && !TEST_FILE.test(name) && !/\.d\.ts$|\.min\.js$|\.config\./.test(name));
-  const terms = [...new Set(feature.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? [])].filter((t) => !STOPWORDS.has(t.toLowerCase()));
+  const words = [...new Set(feature.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? [])].filter((t) => !STOPWORDS.has(t.toLowerCase()));
+  // Names written like code (with_query, withQuery) almost surely point at the right file.
+  const codeLike = words.map((t) => /[a-z][A-Z]|_/.test(t));
+  const terms = words.map((t) => t.toLowerCase());
   if (terms.length === 0) return [];
-  const scored: Array<{ file: string; score: number; content: string }> = [];
+  const files: Array<{ file: string; content: string; hits: number[] }> = [];
   const walk = (dir: string, depth: number) => {
     if (depth > 8) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) walk(path, depth + 1);
-      } else if (wanted(entry.name) && statSync(path).size <= 1_000_000) {
+      } else if (wanted(entry.name) && !/tewip/i.test(entry.name) && statSync(path).size <= 1_000_000) {
         const content = readFileSync(path, 'utf8');
         const lower = content.toLowerCase();
-        let score = 0;
-        for (const term of terms) {
-          const hits = Math.min(20, lower.split(term.toLowerCase()).length - 1);
-          score += hits * (/[a-z][A-Z]|_/.test(term) ? 5 : 1);
-        }
-        if (score > 0) scored.push({ file: relative(root, path).replaceAll('\\', '/'), score, content });
+        files.push({ file: relative(root, path).replaceAll('\\', '/'), content, hits: terms.map((t) => Math.min(20, lower.split(t).length - 1)) });
       }
     }
   };
   walk(root, 0);
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxFiles)
-    .map(({ file, content }) => ({ file, content: content.length > maxChars ? `${content.slice(0, maxChars)}\n... (cut)` : content }));
+  // A word found in few files says more about which file is meant than one found everywhere
+  // (tf-idf): "naturalsize" picks the file-size tests, "number" or "format" pick nothing in particular.
+  const weight = terms.map((_, i) => Math.log(1 + files.length / Math.max(1, files.filter((f) => f.hits[i] > 0).length)) * (codeLike[i] ? 3 : 1));
+  // Pick greedily by what each file adds: once a chosen file covers a word, that word counts a
+  // quarter as much, so a feature naming two functions gets the tests of both.
+  const left = [...weight];
+  const chosen: typeof files = [];
+  const gain = (f: (typeof files)[number]) => f.hits.reduce((sum, h, i) => sum + Math.log(1 + h) * left[i], 0);
+  while (chosen.length < maxFiles) {
+    const best = files.filter((f) => !chosen.includes(f)).sort((x, y) => gain(y) - gain(x))[0];
+    if (!best || gain(best) <= 0) break;
+    chosen.push(best);
+    best.hits.forEach((h, i) => (left[i] = h > 0 ? left[i] / 4 : left[i]));
+  }
+  return chosen.map(({ file, content }) => ({ file, content: content.length > maxChars ? `${content.slice(0, maxChars)}\n... (cut)` : content }));
 }
 
 export interface ChangeSummary {

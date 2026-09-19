@@ -91,12 +91,22 @@ function jsFramework(dir: string, deps: string): Framework | null {
   return null;
 }
 
+/** The project's own Python (its virtual environment) when it has one, else the one on the PATH. */
+function pythonOf(dir: string): string {
+  for (const env of ['.venv', 'venv', 'env']) {
+    for (const bin of process.platform === 'win32' ? ['Scripts/python.exe'] : ['bin/python']) {
+      if (existsSync(join(dir, env, bin))) return join(dir, env, bin);
+    }
+  }
+  return 'python';
+}
+
 function otherFramework(dir: string): Framework | null {
   const py = ['pytest.ini', 'conftest.py', 'pyproject.toml', 'requirements.txt', 'setup.cfg', 'tox.ini'].map((n) => read(join(dir, n))).join('\n');
   const pyExample = testFiles(dir, /^test_.*\.py$|_test\.py$/)[0] ?? null;
   if (pyExample && (/pytest/i.test(py) || existsSync(join(dir, 'conftest.py')))) {
     const lib = /selenium/i.test(py) ? ' with Selenium' : /playwright/i.test(py) ? ' with Playwright' : '';
-    return { id: 'pytest', label: `pytest${lib} (Python)`, browser: lib !== '', cwd: dir, testDir: dirname(pyExample), example: pyExample, fileFor: (id) => `test_tewip_${kebab(id).replaceAll('-', '_')}.py`, command: (f) => `python -m pytest ${q(relative(dir, f))} -q -p no:cacheprovider` };
+    return { id: 'pytest', label: `pytest${lib} (Python)`, browser: lib !== '', cwd: dir, testDir: dirname(pyExample), example: pyExample, fileFor: (id) => `test_tewip_${kebab(id).replaceAll('-', '_')}.py`, command: (f) => `${q(pythonOf(dir))} -m pytest ${q(relative(dir, f))} -q -p no:cacheprovider` };
   }
   const javaExample = testFiles(join(dir, 'src', 'test'), /Tests?\.(java|kt)$/)[0] ?? null;
   const pom = read(join(dir, 'pom.xml'));

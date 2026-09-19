@@ -9,7 +9,7 @@ import type { Framework } from './frameworks.ts';
 import type { PageFacts } from './grounding.ts';
 import type { Plan } from './plan.ts';
 
-export const WRITE_PROMPT_VERSION = 'write-4';
+export const WRITE_PROMPT_VERSION = 'write-5';
 
 export type Scenario = Plan['scenarios'][number];
 
@@ -41,6 +41,7 @@ const DRAFT_SYSTEM = `You are Tewip's test writer, a senior SDET. Write one auto
 const REPAIR_SYSTEM = `You are Tewip's test writer, a senior SDET. Your test failed when run against the working app. Read the real error and decide:
 - fault "test": the test is wrong (a locator, a wait, a wrong assumption about the page). Return the corrected full test.
 - fault "app": the test is right and the app does not do what the scenario expects. Return the test unchanged and say in reason what the app did instead.
+If the code documents the behaviour the app showed (a comment or doc saying so), the scenario's expectation was wrong: the fault is "test"; correct the check to the documented behaviour and say so in reason.
 Never weaken the check of the scenario's expected result to make it pass: that would hide the bug the test exists to catch. If the only way to pass is to stop checking the expected result, the fault is "app".\n\n${RULES}`;
 
 const DRAFT_PROPS = {
@@ -62,6 +63,8 @@ export interface WriteContext {
   fileName: string;
   pages: PageFacts[];
   feature: string;
+  /** The source files the feature lives in, so a failing check can be weighed against documented intent. */
+  code?: Array<{ file: string; content: string }>;
 }
 
 function contextFor(ctx: WriteContext, scenario: Scenario) {
@@ -74,6 +77,7 @@ function contextFor(ctx: WriteContext, scenario: Scenario) {
     scenario: { id: scenario.id, title: scenario.title, given: scenario.preconditions, steps: scenario.steps, expected: scenario.expected },
     exampleTest: example,
     pages: ctx.pages.map((p) => ({ readAt: p.url, title: p.title, accessibilitySnapshot: p.aria })),
+    codeUnderTest: ctx.code?.length ? ctx.code : undefined,
   };
 }
 

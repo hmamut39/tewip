@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { dirname, extname, join, relative } from 'node:path';
 import { usageLine } from '../llm/usage.ts';
 import { chooseFramework, detectFrameworks } from './frameworks.ts';
-import { readPages, relatedTestSources } from './grounding.ts';
+import { readPages, relatedCodeSources, relatedTestSources } from './grounding.ts';
 import { writerFromEnv } from './model.ts';
 import type { Plan } from './plan.ts';
 import { writeAndVerify, type Outcome } from './write-verify.ts';
@@ -58,6 +58,7 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   const scenarios = saved.plan.scenarios.filter((s) => (wanted.size ? wanted.has(s.id.toUpperCase()) : s.automate && !s.covered_by)).slice(0, cmd.max);
   if (scenarios.length === 0) throw new Error(wanted.size ? `none of ${cmd.only.join(', ')} is in ${planPath}` : 'the plan has nothing left to automate');
 
+  const code = relatedCodeSources(cmd.root, saved.feature);
   const urls = cmd.urls.length ? cmd.urls : saved.urls;
   const { pages, note } = await readPages(urls, cmd.root);
   console.error(`Tewip is writing ${scenarios.length} test(s) in ${framework.label}, in ${relative(cmd.root, framework.testDir) || '.'}${framework.example ? `, in the style of ${relative(cmd.root, framework.example)}` : ''}.`);
@@ -85,7 +86,7 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
     process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing);
     let outcome: Outcome;
     try {
-      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, log: (l) => console.error(l) }));
+      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, log: (l) => console.error(l) }));
     } catch (error) {
       outcome = { kind: 'rejected', reason: `stopped: ${(error as Error).message}`, repairs: 0, passedReliably: false };
     } finally {

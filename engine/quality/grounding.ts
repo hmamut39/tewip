@@ -8,6 +8,7 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.tewip', '.venv', 'venv', '__pycache__', 'target', 'vendor', 'coverage', 'test-results', 'playwright-report', 'blob-report']);
+const CODE_FILE = /\.(?:[cm]?[jt]sx?|py|java|kt|cs|go|rb|php|rs)$/;
 const TEST_FILE = /(\.(spec|test)\.[cm]?[jt]sx?$)|(^test_.*\.py$)|(_test\.(py|go)$)|(Tests?\.(java|kt|cs)$)|(_spec\.rb$)|(Test\.php$)/;
 
 /** Test names found in one file, for the languages Tewip reads reports from. */
@@ -65,9 +66,11 @@ const STOPWORDS = new Set(['with', 'that', 'this', 'from', 'into', 'when', 'then
  * The full text of the tests most related to a feature. Test names alone hide what table-driven
  * tests (test.each, parametrize, @ParameterizedTest, a list of cases in a loop) already check, so
  * the planner also reads the files that mention the feature's words most. Code-like words
- * (withQuery, parse_query) count five times as much as plain ones.
+ * (withQuery, parse_query) count five times as much as plain ones. With kind 'code', the same for
+ * the source files the feature lives in.
  */
-export function relatedTestSources(root: string, feature: string, maxFiles = 4, maxChars = 8_000): TestSource[] {
+export function relatedTestSources(root: string, feature: string, maxFiles = 4, maxChars = 8_000, kind: 'tests' | 'code' = 'tests'): TestSource[] {
+  const wanted = (name: string) => (kind === 'tests' ? TEST_FILE.test(name) : CODE_FILE.test(name) && !TEST_FILE.test(name) && !/\.d\.ts$|\.min\.js$|\.config\./.test(name));
   const terms = [...new Set(feature.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? [])].filter((t) => !STOPWORDS.has(t.toLowerCase()));
   if (terms.length === 0) return [];
   const scored: Array<{ file: string; score: number; content: string }> = [];
@@ -77,7 +80,7 @@ export function relatedTestSources(root: string, feature: string, maxFiles = 4, 
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) walk(path, depth + 1);
-      } else if (TEST_FILE.test(entry.name) && statSync(path).size <= 1_000_000) {
+      } else if (wanted(entry.name) && statSync(path).size <= 1_000_000) {
         const content = readFileSync(path, 'utf8');
         const lower = content.toLowerCase();
         let score = 0;
@@ -123,10 +126,6 @@ export interface PageFacts {
 }
 
 /**
- * What a page of the running app contains, read with Playwright. Returns null with a reason when
- * Playwright or its browser is not installed, rather than failing the whole command.
- */
-/**
  * Playwright as the project installed it, found from the project's own folders (the root, or a
  * browser-test folder such as e2e/ one or two levels down), then Tewip's own copy. An installed
  * Tewip cannot see the project's node_modules through a plain import, so it resolves them here.
@@ -162,6 +161,10 @@ async function loadChromium(root: string): Promise<{ launch: () => Promise<any> 
   return null;
 }
 
+/**
+ * What a page of the running app contains, read with Playwright. Returns no pages and a reason when
+ * Playwright or its browser is not available, rather than failing the whole command.
+ */
 export async function readPages(urls: string[], root = process.cwd(), maxAria = 8_000): Promise<{ pages: PageFacts[]; note: string | null }> {
   if (urls.length === 0) return { pages: [], note: null };
   const chromium = await loadChromium(root);
@@ -187,3 +190,6 @@ export async function readPages(urls: string[], root = process.cwd(), maxAria = 
     await browser.close();
   }
 }
+
+/** The source files (not tests) most related to a feature: what it does and what its comments promise. */
+export const relatedCodeSources = (root: string, feature: string): TestSource[] => relatedTestSources(root, feature, 2, 6_000, 'code');

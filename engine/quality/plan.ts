@@ -43,7 +43,7 @@ function failureHistory(root: string, cap = 60): string[] {
 }
 
 export async function gatherPlanFacts(input: PlanInput): Promise<PlanFacts> {
-  const { pages, note } = await readPages(input.urls ?? []);
+  const { pages, note } = await readPages(input.urls ?? [], input.root);
   return {
     feature: input.feature,
     change: input.diffRange ? changeSummary(input.root, input.diffRange) : null,

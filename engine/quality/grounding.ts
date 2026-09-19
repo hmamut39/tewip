@@ -2,8 +2,10 @@
 // instead of inventing it: the tests that already exist, what a change touched, and what the
 // running app's pages actually contain.
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.tewip', '.venv', 'venv', '__pycache__', 'target', 'vendor', 'coverage', 'test-results', 'playwright-report', 'blob-report']);
 const TEST_FILE = /(\.(spec|test)\.[cm]?[jt]sx?$)|(^test_.*\.py$)|(_test\.(py|go)$)|(Tests?\.(java|kt|cs)$)|(_spec\.rb$)|(Test\.php$)/;
@@ -82,19 +84,52 @@ export interface PageFacts {
  * What a page of the running app contains, read with Playwright. Returns null with a reason when
  * Playwright or its browser is not installed, rather than failing the whole command.
  */
-export async function readPages(urls: string[], maxAria = 8_000): Promise<{ pages: PageFacts[]; note: string | null }> {
-  if (urls.length === 0) return { pages: [], note: null };
-  let chromium: { launch: () => Promise<any> };
-  try {
-    ({ chromium } = (await import('@playwright/test')) as any);
-  } catch {
-    try {
-      ({ chromium } = (await import('playwright' as string)) as any);
-    } catch {
-      return { pages: [], note: 'Playwright is not installed, so the pages were not read (npm install -D @playwright/test && npx playwright install chromium).' };
+/**
+ * Playwright as the project installed it, found from the project's own folders (the root, or a
+ * browser-test folder such as e2e/ one or two levels down), then Tewip's own copy. An installed
+ * Tewip cannot see the project's node_modules through a plain import, so it resolves them here.
+ */
+async function loadChromium(root: string): Promise<{ launch: () => Promise<any> } | null> {
+  const dirs = [root];
+  for (const a of readdirSync(root, { withFileTypes: true })) {
+    if (!a.isDirectory() || SKIP_DIRS.has(a.name) || a.name.startsWith('.')) continue;
+    dirs.push(join(root, a.name));
+    for (const b of readdirSync(join(root, a.name), { withFileTypes: true })) {
+      if (b.isDirectory() && !SKIP_DIRS.has(b.name) && !b.name.startsWith('.')) dirs.push(join(root, a.name, b.name));
     }
   }
-  const browser = await chromium.launch();
+  for (const dir of dirs) {
+    for (const name of ['@playwright/test', 'playwright']) {
+      if (!existsSync(join(dir, 'node_modules', ...name.split('/')))) continue;
+      try {
+        const entry = createRequire(join(dir, 'package.json')).resolve(name);
+        const m = (await import(pathToFileURL(entry).href)) as any;
+        if (m.chromium ?? m.default?.chromium) return m.chromium ?? m.default.chromium;
+      } catch {
+        // an unusable install here; try the next folder
+      }
+    }
+  }
+  for (const name of ['@playwright/test', 'playwright']) {
+    try {
+      return ((await import(name as string)) as any).chromium;
+    } catch {
+      // not bundled with Tewip either
+    }
+  }
+  return null;
+}
+
+export async function readPages(urls: string[], root = process.cwd(), maxAria = 8_000): Promise<{ pages: PageFacts[]; note: string | null }> {
+  if (urls.length === 0) return { pages: [], note: null };
+  const chromium = await loadChromium(root);
+  if (!chromium) return { pages: [], note: 'Playwright is not installed in this project, so the pages were not read (npm install -D @playwright/test && npx playwright install chromium).' };
+  let browser: any;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    return { pages: [], note: `Playwright could not start a browser, so the pages were not read (npx playwright install chromium): ${String(error instanceof Error ? error.message : error).split('\n')[0]}` };
+  }
   try {
     const page = await browser.newPage();
     const pages: PageFacts[] = [];

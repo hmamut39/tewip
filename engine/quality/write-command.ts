@@ -54,7 +54,7 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   if (scenarios.length === 0) throw new Error(wanted.size ? `none of ${cmd.only.join(', ')} is in ${planPath}` : 'the plan has nothing left to automate');
 
   const urls = cmd.urls.length ? cmd.urls : saved.urls;
-  const { pages, note } = await readPages(urls);
+  const { pages, note } = await readPages(urls, cmd.root);
   console.error(`Tewip is writing ${scenarios.length} test(s) in ${framework.label}, in ${relative(cmd.root, framework.testDir) || '.'}${framework.example ? `, in the style of ${relative(cmd.root, framework.example)}` : ''}.`);
   if (note) console.error(`  ${note}`);
   if (!framework.browser && pages.length) console.error('  note: this framework does not drive a browser; pass --framework to pick a browser one if the scenarios need pages.');

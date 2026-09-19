@@ -39,8 +39,24 @@ export const PLAIN_CATEGORY: Record<DiagnosisCategory, string> = {
   UNKNOWN: 'not understood yet',
 };
 
-/** Markdown-safe single line: no backticks, pipes or line breaks. */
-export const clean = (s: string) => s.replaceAll('`', "'").replaceAll('|', '/').replace(/\s+/g, ' ').trim();
+/** A zero-width space: invisible, but it stops GitHub from reading the text around it as syntax. */
+const ZWSP = '​';
+
+/**
+ * Markdown-safe single line from a test run: no backticks, pipes or line breaks. Test names and
+ * error messages come from the pull request's own code, so on a public repository its author
+ * controls them: without this they could ping people (@name), embed tracking images or disguised
+ * links, or inject HTML into the agent's comment.
+ */
+export const clean = (s: string) =>
+  s
+    .replaceAll('`', "'")
+    .replaceAll('|', '/')
+    .replaceAll('<', '&lt;')
+    .replace(/@(?=[\w-])/g, `@${ZWSP}`) // "@name" reads the same but notifies no one
+    .replace(/!?\[([^\]\n]*)\]\(/g, `[$1]${ZWSP}(`) // links and images show as plain text
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export const confidenceText = (d: Diagnosis) => (d.category === 'UNKNOWN' ? 'confidence 0.00 (undecided)' : `confidence ${d.confidence.toFixed(2)}`);
 

@@ -245,6 +245,16 @@ Two limits are deliberate:
 
 Every triage run, the CLI, the eval and the CI job summary end with one line: how many model calls were made, how long they took, how many came free from the cache, the tokens used, and the cost when prices are configured. A run is cheap because the deterministic rules answer most failures and only what they cannot settle reaches the model. Measured example (JupyterLab, 41 real failures): the rules decided 34 of them, 6 went to the model, and those 6 calls took 30 seconds and about 31,000 tokens in total.
 
+## Security
+
+The agent reads text that a pull request's author controls (test names, error messages, traces) and it can change what blocks a merge, so it is built for untrusted input:
+
+- **Corrections come only from people with write access** (owner, member or collaborator). On a public repository a stranger's `/triage` comment is ignored, so nobody outside the team can wave a real failure past the merge gate.
+- **Only the agent's own comment defines what `#1` means.** A numbering map posted by anyone else is ignored, and the map's fields are encoded so no test name can break out of it.
+- **Text from a test run is made inert in comments:** `@mentions` do not notify anyone, links and images show as plain text, and HTML is escaped.
+- **The AI never has the last word on anything risky.** A crafted error message could try to talk the model into an answer, but AI-only verdicts never let a failure through the gate and never authorise a code change; fixes need a deterministic rule's match and a passing re-run.
+- **It never merges, never edits application code**, and keeps collected data in the Actions cache, not in the repository. The OpenAI key is optional and only ever read from a secret.
+
 ## Known issues (found on real data)
 
 - **Drift and real bugs are hard to tell apart (improving).** Rules-5 reads Playwright's strict-mode errors: when a locator like `name: 'Edit'` starts matching several elements, the error already lists them, and the one named with the whole word is the element the test means. On the fresh set (Sep 1–3) drift is **16/20 = 80%** (**16/23 = 70%** on the labels before a labelling flaw was corrected, see [eval/README.md](eval/README.md)), real bugs called drift **1 of 29**, and **15 drift cases would now be auto-fixed, each suggestion identical to the developers' own fix**. On an unseen week (Aug 20–26, 473 labels) drift is **3/3** and the agent would still have made **0 automatic changes**. The remaining misses have no usable page data: the error names no locator at all.

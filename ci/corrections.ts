@@ -15,9 +15,23 @@ interface Comment {
   user: { login: string; type: string } | null;
   created_at: string;
   html_url: string;
+  /** GitHub's relation of the author to the repository: OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, NONE... */
+  author_association?: string;
 }
 
+/**
+ * Only people who can already change the repository may correct the agent. A correction is
+ * trusted like a maintainer's word (the merge gate lets a person's TIMING/ENV through), so on a
+ * public repository a comment from anyone else must not be able to wave a real failure past it.
+ */
+const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
 const MAP_START = '<!-- triage-agent:map';
+
+// Map fields are encoded, so no test name can close the hidden comment early ("-->") or break the
+// map's separators, and the exact name comes back when a correction is read.
+const encode = (v: string) => Buffer.from(v, 'utf8').toString('base64url');
+const decode = (v: string) => Buffer.from(v, 'base64url').toString('utf8');
 
 /**
  * The agent's comment carries a hidden map from the numbers people see to the failure each one
@@ -26,9 +40,9 @@ const MAP_START = '<!-- triage-agent:map';
 export function renderBoardMap(items: TriageItem[], records: TriageRecord[]): string {
   const lines = items.map((item, i) => {
     const record = records.find((r) => r.runId === item.runId && r.testId === item.testId);
-    return record ? [i + 1, item.testId, errorShape(record.errorMessage), item.diagnosis.category].join('\t') : null;
+    return record ? [i + 1, encode(item.testId), encode(errorShape(record.errorMessage)), item.diagnosis.category].join('\t') : null;
   });
-  return `${MAP_START}\n${lines.filter(Boolean).join('\n')}\n-->`;
+  return `${MAP_START} v2\n${lines.filter(Boolean).join('\n')}\n-->`;
 }
 
 interface MappedFailure {
@@ -39,10 +53,12 @@ interface MappedFailure {
 
 export function parseBoardMap(body: string): Map<number, MappedFailure> {
   const block = body.split(MAP_START)[1]?.split('-->')[0] ?? '';
+  // "v2" maps encode their fields; maps written before that (plain text) are still read as they are.
+  const read = block.startsWith(' v2') ? decode : (v: string) => v;
   const map = new Map<number, MappedFailure>();
-  for (const line of block.split('\n')) {
+  for (const line of block.split('\n').slice(1)) {
     const [n, testId, shape, was] = line.split('\t');
-    if (n && testId && shape) map.set(Number(n), { testId, errorShape: shape, was: was ?? '' });
+    if (n && testId && shape) map.set(Number(n), { testId: read(testId), errorShape: read(shape), was: was ?? '' });
   }
   return map;
 }
@@ -56,13 +72,15 @@ export async function readCorrections(github: GitHub, issueNumber: number, where
   const comments = await github.request<Comment[]>('GET', `/repos/{repo}/issues/${issueNumber}/comments?per_page=100`);
   // This suite's own comment holds the map its numbers refer to.
   const map = comments
-    .filter((c) => c.body?.includes(commentMarker(suite)) && c.body.includes(MAP_START))
+    // Only the agent's own comment: a map in anyone else's comment could point "#1" at another test.
+    .filter((c) => c.user?.type === 'Bot' && c.body?.includes(commentMarker(suite)) && c.body.includes(MAP_START))
     .map((c) => parseBoardMap(c.body ?? ''))
     .at(-1);
   if (!map || map.size === 0) return [];
   const out: Correction[] = [];
   for (const comment of comments) {
     if (!comment.body || comment.user?.type === 'Bot' || comment.body.includes(MAP_START)) continue;
+    if (!TRUSTED.has(comment.author_association ?? '')) continue;
     for (const parsed of parseCorrectionCommands(comment.body)) {
       if ((parsed.suite ?? '') !== suite) continue;
       const failure = map.get(parsed.item ?? (map.size === 1 ? 1 : -1));

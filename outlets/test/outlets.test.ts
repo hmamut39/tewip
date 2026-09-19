@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { decide } from '../../engine/decide.ts';
 import type { Diagnosis, DiagnosisCategory } from '../../reporters/types.ts';
 import { componentOf, type TriageItem } from '../items.ts';
-import { missingFromView } from '../view.ts';
+import { clean, missingFromView } from '../view.ts';
 import { prCommentView } from '../views/developer.ts';
 import { groupEnv, infraView } from '../views/infra.ts';
 import { releaseView } from '../views/release.ts';
@@ -173,3 +173,14 @@ describe('PR comment: failures that share one cause', () => {
     assert.doesNotMatch(prCommentView([unknown(1), unknown(2), unknown(3)], 'r1', 'test').markdown, /look like one cause/);
   });
 });
+
+describe('comment text from a test run is made safe', () => {
+  it('stops pings, links, images and HTML while keeping the text readable', () => {
+    const out = clean('fails for @octocat ![x](https://evil/p.png) [click](https://evil) <img src=x>');
+    assert.doesNotMatch(out, /@octocat/, 'no live mention');
+    assert.match(out, /@​octocat/);
+    assert.doesNotMatch(out, /\]\(https/, 'no live link or image');
+    assert.doesNotMatch(out, /<img/, 'no raw HTML');
+  });
+});
+

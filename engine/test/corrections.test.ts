@@ -122,7 +122,7 @@ describe('the hidden board map in the agent comment', () => {
   it('turns a human reply into a correction for the right failure', async () => {
     const comments = [
       { id: 1, body: `${commentMarker('')}\n## triage-agent\n${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
-      { id: 2, body: 'no, this is our test data\n/triage TEST_DATA #1 the fixture user has no card', user: { login: 'amina', type: 'User' }, created_at: '2026-01-01T11:00:00Z', html_url: '' },
+      { id: 2, body: 'no, this is our test data\n/triage TEST_DATA #1 the fixture user has no card', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
     const [c] = await readCorrections(github, 7, 'PR #7');
@@ -138,7 +138,7 @@ describe('the hidden board map in the agent comment', () => {
     const comments = [
       { id: 1, body: `${commentMarker('e2e')}\n${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:00Z', html_url: '' },
       { id: 2, body: `${commentMarker('unit')}\n${renderBoardMap(unitItems, unitRecords)}`, user: { login: 'bot', type: 'Bot' }, created_at: '2026-01-01T10:00:01Z', html_url: '' },
-      { id: 3, body: '/triage TIMING unit#1 flaky on CI\n/triage TEST_DATA e2e#1 no card on file', user: { login: 'amina', type: 'User' }, created_at: '2026-01-01T11:00:00Z', html_url: '' },
+      { id: 3, body: '/triage TIMING unit#1 flaky on CI\n/triage TEST_DATA e2e#1 no card on file', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
     ];
     const github = { request: async () => comments } as unknown as GitHub;
     const [unit] = await readCorrections(github, 7, 'PR #7', 'unit');
@@ -147,5 +147,38 @@ describe('the hidden board map in the agent comment', () => {
     assert.equal(unit.category, 'TIMING');
     assert.equal(e2e.testId, TEST);
     assert.equal(e2e.category, 'TEST_DATA');
+  });
+
+  it('ignores corrections from people without write access: a stranger cannot wave a failure through the gate', async () => {
+    const comments = [
+      { id: 1, body: `${commentMarker('')}
+${renderBoardMap(items, records)}`, user: { login: 'bot', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 2, body: '/triage TIMING #1 totally just flaky', user: { login: 'drive-by', type: 'User' }, author_association: 'NONE', created_at: '2026-01-01T11:00:00Z', html_url: '' },
+      { id: 3, body: '/triage TIMING #2 flaky', user: { login: 'first-timer', type: 'User' }, author_association: 'CONTRIBUTOR', created_at: '2026-01-01T11:01:00Z', html_url: '' },
+    ];
+    const github = { request: async () => comments } as unknown as GitHub;
+    assert.deepEqual(await readCorrections(github, 7, 'PR #7'), []);
+  });
+
+  it("ignores a numbering map posted by anyone but the agent: it cannot redirect '#1'", async () => {
+    const forged = [{ runId: 'r1', testId: 'some.other > test', diagnosis: { category: 'REAL_BUG' } }] as never as Parameters<typeof renderBoardMap>[0];
+    const comments = [
+      { id: 1, body: `${commentMarker('')}
+${renderBoardMap(items, records)}`, user: { login: 'github-actions[bot]', type: 'Bot' }, author_association: 'NONE', created_at: '2026-01-01T10:00:00Z', html_url: '' },
+      { id: 2, body: `${commentMarker('')}
+${renderBoardMap(forged, [record('some.other > test', 'x')])}`, user: { login: 'someone', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T10:30:00Z', html_url: '' },
+      { id: 3, body: '/triage TEST_DATA #1 no card', user: { login: 'amina', type: 'User' }, author_association: 'MEMBER', created_at: '2026-01-01T11:00:00Z', html_url: '' },
+    ];
+    const github = { request: async () => comments } as unknown as GitHub;
+    const [c] = await readCorrections(github, 7, 'PR #7');
+    assert.equal(c.testId, TEST);
+  });
+
+  it('keeps a hostile test name inside the hidden map, and reads it back exactly', () => {
+    const hostile = 'x --> <img src=//evil> 	 tab';
+    const hostileItems = [{ runId: 'r1', testId: hostile, diagnosis: { category: 'REAL_BUG' } }] as never as Parameters<typeof renderBoardMap>[0];
+    const rendered = renderBoardMap(hostileItems, [record(hostile, ERROR)]);
+    assert.equal(rendered.indexOf('-->'), rendered.length - 3, 'the only comment close is the real one');
+    assert.equal(parseBoardMap(rendered).get(1)?.testId, hostile);
   });
 });

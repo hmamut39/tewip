@@ -22,10 +22,10 @@
     "sdet",
     "devops"
   ],
-  "homepage": "https://github.com/hmamut39/triage-agent#readme",
+  "homepage": "https://github.com/hmamut39/tewip#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hmamut39/triage-agent.git"
+    "url": "https://github.com/hmamut39/tewip.git"
   },
   "type": "module",
   "engines": {

@@ -11,7 +11,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 | **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
 
-Formerly *triage-agent*; the repository and the Action path keep that name for now. See [ROADMAP.md](ROADMAP.md) for the plan.
+Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.
 
 **Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
 
@@ -41,7 +41,7 @@ steps:
   # ... checkout, install, npx playwright test ...
   - name: triage-agent
     if: always()
-    uses: hmamut39/triage-agent@main
+    uses: hmamut39/tewip@main
     with:
       openai-api-key: ${{ secrets.OPENAI_API_KEY }}   # optional: without it only the rules run
       autofix: 'true'                                  # optional: verified locator-fix PRs
@@ -67,7 +67,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - uses: hmamut39/triage-agent@main
+      - uses: hmamut39/tewip@main
         with: { mode: report }
 ```
 
@@ -164,7 +164,7 @@ With `gate: real-failures`, the triage step fails the build only when a failing 
         run: npx playwright test     # or pytest, jest, mvn test, go test ...
       - name: triage-agent
         if: always()
-        uses: hmamut39/triage-agent@main
+        uses: hmamut39/tewip@main
         with:
           gate: real-failures
 ```

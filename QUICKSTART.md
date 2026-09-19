@@ -35,7 +35,7 @@ steps:
 
   - name: Tewip
     if: always()           # it must run even though the test step failed
-    uses: hmamut39/triage-agent@main
+    uses: hmamut39/tewip@main
     with:
       openai-api-key: ${{ secrets.OPENAI_API_KEY }}   # optional, see step 3
       autofix: 'false'                                # start with this off
@@ -88,7 +88,7 @@ Point the agent at your test runner's **JUnit XML** report (or .NET's **TRX**) i
 ```yaml
       - name: Tewip
         if: always()
-        uses: hmamut39/triage-agent@main
+        uses: hmamut39/tewip@main
         with:
           junit-report: report.xml     # a file, or a directory of them (.xml and .trx)
           suite: unit                  # only needed when one workflow triages several suites
@@ -147,7 +147,7 @@ Once you trust its answers, let the agent decide whether a failed run should blo
         run: npx playwright test
       - name: Tewip
         if: always()
-        uses: hmamut39/triage-agent@main
+        uses: hmamut39/tewip@main
         with:
           gate: real-failures
 ```

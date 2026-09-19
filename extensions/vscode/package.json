@@ -5,7 +5,7 @@
   "version": "0.4.0",
   "publisher": "hmamut39",
   "license": "SEE LICENSE IN LICENSE.txt",
-  "repository": { "type": "git", "url": "https://github.com/hmamut39/triage-agent.git" },
+  "repository": { "type": "git", "url": "https://github.com/hmamut39/tewip.git" },
   "engines": { "vscode": "^1.101.0" },
   "categories": ["Testing", "AI", "Other"],
   "keywords": ["test failures", "flaky tests", "triage", "root cause", "playwright", "pytest", "jest", "junit", "ci", "mcp"],

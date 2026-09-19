@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
-export type FrameworkId = 'playwright' | 'cypress' | 'webdriverio' | 'jest' | 'vitest' | 'pytest' | 'maven' | 'gradle' | 'dotnet' | 'go';
+export type FrameworkId = 'playwright' | 'cypress' | 'webdriverio' | 'angular' | 'jest' | 'vitest' | 'pytest' | 'maven' | 'gradle' | 'dotnet' | 'go';
 
 export interface Framework {
   id: FrameworkId;
@@ -80,11 +80,32 @@ function jsFramework(dir: string, deps: string): Framework | null {
     const example = testFiles(dir, /\.(e2e|spec|test)\.[jt]s$/)[0] ?? null;
     return { id: 'webdriverio', label: 'WebdriverIO (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test', 'specs'), example, fileFor: sameSuffix(example, '.e2e.ts', /\.(e2e|spec|test)\.[jt]s$/), command: (f) => `npx wdio run ${q(basename(wdio))} --spec ${q(relative(dir, f))}` };
   }
+  // Angular runs its unit tests through the CLI (Karma with Jasmine, or the Vitest-based unit-test
+  // builder), with the project's TestBed setup, so a spec must run through `ng test` as well.
+  const angular = read(join(dir, 'angular.json'));
+  const builder = angular.match(/"test"\s*:\s*\{\s*"builder"\s*:\s*"([^"]+)"/)?.[1] ?? '';
+  if (angular && /karma|unit-test/.test(builder)) {
+    const example = testFiles(join(dir, 'src'), /\.spec\.ts$/)[0] ?? null;
+    const karma = builder.includes('karma');
+    return {
+      id: 'angular',
+      label: `Angular (ng test with ${karma ? 'Karma and Jasmine' : 'Vitest'}, TestBed; TypeScript)`,
+      browser: false,
+      cwd: dir,
+      testDir: example ? dirname(example) : join(dir, 'src', 'app'),
+      example,
+      fileFor: (id) => `tewip-${kebab(id)}.spec.ts`,
+      command: (f) => `npx ng test --watch=false --include=${q(relative(dir, f).replaceAll('\\', '/'))}${karma ? ' --browsers=ChromeHeadless' : ''}`,
+    };
+  }
   for (const id of ['vitest', 'jest'] as const) {
     if (!new RegExp(`"${id}"\\s*:`).test(deps)) continue;
     const example = testFiles(dir, /\.(spec|test)\.[mc]?[jt]sx?$/)[0] ?? null;
     const browser = /"selenium-webdriver"\s*:|"puppeteer"\s*:/.test(deps);
-    const label = `${id === 'jest' ? 'Jest' : 'Vitest'}${browser ? ' with Selenium/Puppeteer' : ''} (JavaScript/TypeScript)`;
+    // Name the UI library and Testing Library, so component tests are written the way this project writes them.
+    const ui = [['react', 'React'], ['vue', 'Vue'], ['svelte', 'Svelte'], ['solid-js', 'Solid'], ['@angular/core', 'Angular']].filter(([dep]) => new RegExp(`"${dep}"\\s*:`).test(deps)).map(([, name]) => name);
+    const testingLibrary = /"@testing-library\/[\w-]+"\s*:/.test(deps) ? ' and Testing Library' : '';
+    const label = `${id === 'jest' ? 'Jest' : 'Vitest'}${browser ? ' with Selenium/Puppeteer' : ''}${ui.length ? ` for ${ui.join('/')}${testingLibrary}` : ''} (JavaScript/TypeScript)`;
     const run = id === 'jest' ? 'npx jest' : 'npx vitest run';
     return { id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}` };
   }

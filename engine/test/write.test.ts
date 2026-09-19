@@ -200,3 +200,21 @@ describe('checks in Python style', () => {
     assert.ok('code' in mutate({ code: multi, checks: '', mutation: { find: '("12x34", "abc")', replace: '("x", "abc")' } }));
   });
 });
+
+describe('front-end projects', () => {
+  it('runs Angular specs through ng test, Karma or the Vitest builder', () => {
+    const karma = files({ 'angular.json': '{"projects":{"app":{"architect":{"test":{"builder":"@angular-devkit/build-angular:karma"}}}}}', 'src/app/app.component.spec.ts': '', 'package.json': '{"devDependencies":{"jasmine-core":"5"}}' });
+    const a = chooseFramework(detectFrameworks(karma))!;
+    assert.equal(a.id, 'angular');
+    assert.match(a.label, /Karma and Jasmine/);
+    assert.equal(a.testDir, join(karma, 'src', 'app'));
+    assert.match(a.command(join(a.testDir, 'tewip-x.spec.ts')), /^npx ng test --watch=false --include="src\/app\/tewip-x\.spec\.ts" --browsers=ChromeHeadless$/);
+    const vitest = files({ 'angular.json': '{"test": {"builder": "@angular/build:unit-test"}}', 'src/app/a.spec.ts': '' });
+    assert.match(chooseFramework(detectFrameworks(vitest))!.label, /ng test with Vitest/);
+  });
+
+  it('names React and Testing Library for a Vitest project, so component tests follow them', () => {
+    const root = files({ 'package.json': '{"dependencies":{"react":"19"},"devDependencies":{"vitest":"4","@testing-library/react":"16"}}', 'src/App.test.tsx': '' });
+    assert.match(chooseFramework(detectFrameworks(root))!.label, /^Vitest for React and Testing Library/);
+  });
+});

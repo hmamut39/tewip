@@ -46,7 +46,7 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   const detected = chooseFramework(found, cmd.framework);
   if (!detected) {
     const seen = found.map((f) => f.id).join(', ') || 'none';
-    throw new Error(`no ${cmd.framework ?? 'test'} framework found to write in (found: ${seen}). Tewip writes Playwright, Cypress, WebdriverIO, Jest, Vitest, pytest, JUnit (Maven/Gradle), .NET and Go tests.`);
+    throw new Error(`no ${cmd.framework ?? 'test'} framework found to write in (found: ${seen}). Tewip writes Playwright, Cypress, WebdriverIO, Angular (ng test), Jest, Vitest, pytest, JUnit (Maven/Gradle), .NET and Go tests.`);
   }
   // Copy the style of the existing test closest to the feature, when it is one of this framework's
   // tests: it shows the helpers and conventions this part of the code base is tested with.

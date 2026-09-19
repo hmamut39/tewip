@@ -109,15 +109,17 @@ From the next run on, that failure of that test gets your answer, shown as "corr
 
 ## Asking it questions from your editor
 
-Any editor with MCP support (VS Code Copilot agent mode, Cursor, JetBrains 2025.2+, Claude Code, Windsurf) can query the agent. Add one entry, pointing at a checkout of this repository:
+Any editor with MCP support (VS Code Copilot agent mode, Cursor, JetBrains 2025.2+, Claude Code, Windsurf) can query the agent. Add one entry pointing at a checkout of this repository. In **VS Code** (`.vscode/mcp.json`, or *MCP: Open User Configuration* for every window):
 
 ```json
 {
-  "mcpServers": {
-    "triage-agent": { "command": "node", "args": ["/absolute/path/to/triage-agent/mcp/server.ts"] }
+  "servers": {
+    "triage-agent": { "type": "stdio", "command": "node", "args": ["/absolute/path/to/triage-agent/mcp/server.ts"] }
   }
 }
 ```
+
+In **Cursor, Claude Desktop, Windsurf** and most other clients, the same entry goes under `mcpServers`, without `type`.
 
 Then ask, in plain language: "why did CI fail on my PR?", "which tests are flaky in checkout?", "is main safe to release?". Every tool is read-only, and it reads the report the Action already uploaded, so you do not need the other repository cloned.
 

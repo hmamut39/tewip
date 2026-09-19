@@ -88,7 +88,17 @@ Setup, after `npm install`:
 
 The agent ships an MCP server, so an AI assistant inside your editor can ask it about failures. There is nothing to install from a marketplace: MCP servers are configured with one entry, and every major AI coding tool supports them — VS Code (Copilot agent mode), Cursor, JetBrains IDEs (2025.2+), Claude Code, Claude Desktop and Windsurf.
 
-Point the entry at this checkout with an absolute path (the server resolves its own data, so the editor's working directory does not matter):
+Point the entry at this checkout with an absolute path (the server resolves its own data, so the editor's working directory does not matter). **VS Code** uses its own shape, with a `servers` key and a `type`; put it in the workspace's `.vscode/mcp.json`, or in your user-level configuration (command *MCP: Open User Configuration*) to have it in every window:
+
+```json
+{
+  "servers": {
+    "triage-agent": { "type": "stdio", "command": "node", "args": ["C:/path/to/triage-agent/mcp/server.ts"] }
+  }
+}
+```
+
+**Cursor, Claude Desktop, Windsurf and most other clients** use the `mcpServers` shape (Cursor: Settings → MCP):
 
 ```json
 {
@@ -98,10 +108,8 @@ Point the entry at this checkout with an absolute path (the server resolves its 
 }
 ```
 
-- **VS Code**: `.vscode/mcp.json` in the workspace, or the *MCP: Add Server* command.
-- **Cursor**: Settings → MCP → add server (same JSON).
 - **JetBrains** (IntelliJ, WebStorm, PyCharm 2025.2+): Settings → Tools → MCP Server.
-- **Claude Code**: the `.mcp.json` in this repository is already set up.
+- **Inside this repository** nothing is needed: `.vscode/mcp.json` (VS Code) and `.mcp.json` (Claude Code) are already set up.
 
 Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are flaky in checkout?"*, *"is the main branch safe to release?"*. Every tool is read-only, and `github_ci_report` reads the report the Action uploaded, so you can ask about a repository's CI **without cloning it or opening the Actions page** (it uses your `gh` login).
 

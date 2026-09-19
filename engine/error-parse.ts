@@ -1,5 +1,7 @@
 // Deterministic readers for Playwright error messages. Each returns null (or false)
-// when the message does not carry the signal; none of them guess.
+// when the message does not carry the signal; none of them guess. Selenium, WebdriverIO and
+// Cypress wording is read by driver-errors.ts and folded in here, so the rules see one signal.
+import { driverElementNotFound, driverLocator } from './driver-errors.ts';
 
 const CALL_LOG = /\n\s*Call log:/;
 
@@ -8,7 +10,7 @@ const callLogOf = (message: string) => message.split(CALL_LOG)[1] ?? '';
 
 /** The element the failing call waited for never matched anything on the page. */
 export function isElementNotFound(message: string): boolean {
-  if (/element\(s\) not found/i.test(message)) return true;
+  if (/element\(s\) not found/i.test(message) || driverElementNotFound(message)) return true;
   const callLog = callLogOf(message);
   return /Timeout \d+ms exceeded/.test(headOf(message)) && /waiting for /.test(callLog) && !/resolved to /.test(callLog);
 }
@@ -19,7 +21,7 @@ const LOCATOR_START = /^(?:locator|getBy[A-Z]\w*|frameLocator|internal:)/;
 export function extractLocator(message: string): string | null {
   const waited = [...message.matchAll(/waiting for (.+)/g)].map((m) => m[1].trim()).filter((s) => LOCATOR_START.test(s));
   const header = message.match(/^\s*Locator:\s*(.+)$/m)?.[1]?.trim();
-  return waited.at(-1) ?? header ?? null;
+  return waited.at(-1) ?? header ?? driverLocator(message);
 }
 
 export interface ValueMismatch {
@@ -130,6 +132,6 @@ export function strictModeViolation(message: string): StrictModeViolation | null
 
 /** The accessible name or text a locator looks for, when it names one. */
 export function locatorName(locator: string): string | null {
-  const m = [...locator.matchAll(/(?:name: |getBy(?:Text|Label|Title|Placeholder|AltText)\()'((?:[^'\\]|\\.)*)'/g)].at(-1);
+  const m = [...locator.matchAll(/(?:name: |getBy(?:Text|Label|Title|Placeholder|AltText)\(|cy\.contains\()'((?:[^'\\]|\\.)*)'/g)].at(-1);
   return m ? m[1].replaceAll("\\'", "'") : null;
 }

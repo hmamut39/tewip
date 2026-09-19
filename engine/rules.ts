@@ -4,7 +4,7 @@
 import type { Evidence, RootCause, TriageRecord } from '../reporters/types.ts';
 import { isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
 import { locatorDrift, locatorDriftStrict } from './drift-rules.ts';
-import { timingFlaky, timingIntercepted, timingIntermittent, timingKnownFlaky, timingRetryPass } from './timing-rules.ts';
+import { timingFlaky, timingIntercepted, timingIntermittent, timingKnownFlaky, timingRetryPass, timingStaleElement } from './timing-rules.ts';
 import type { RunContext, TestHistory } from './history.ts';
 import { errorScenarioOf } from './llm/context.ts';
 import { errorShape, truncate } from './signature.ts';
@@ -182,4 +182,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];

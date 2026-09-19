@@ -3,6 +3,7 @@
 // keeps flipping or has flaked this way before - and all stay below the auto-fix threshold,
 // because knowing a race happened does not say which wait to add.
 import type { Rule, RuleOutcome } from './rules.ts';
+import { driverClickIntercepted, driverStaleElement } from './driver-errors.ts';
 import { errorShape, truncate } from './signature.ts';
 
 export const FLAKY_MIN_RATE = 0.2;
@@ -74,12 +75,42 @@ export const timingIntercepted: Rule = {
   id: 'timing-intercepted',
   evaluate({ record }) {
     const match = record.errorMessage.match(/<[^>]+>[^\n]*intercepts pointer events/);
-    if (!match) return null;
-    const what = truncate(match[0].replace(/\s+/g, ' ').trim(), 100);
+    if (match) {
+      const what = truncate(match[0].replace(/\s+/g, ' ').trim(), 100);
+      return {
+        category: 'TIMING',
+        confidence: 0.8,
+        evidence: [{ source: this.id, message: `the element was ready but the click could not land: ${what}, so something was still on top of it`, data: { intercepted: what } }],
+      };
+    }
+    // Selenium and Cypress report the same race in their own words. No labelled data from those
+    // tools has measured this yet, so the confidence stays below what the merge gate trusts.
+    const other = driverClickIntercepted(record.errorMessage);
+    if (!other) return null;
+    const what = truncate(other.replace(/\s+/g, ' '), 100);
     return {
       category: 'TIMING',
-      confidence: 0.8,
-      evidence: [{ source: 'timing-intercepted', message: `the element was ready but the click could not land: ${what}, so something was still on top of it`, data: { intercepted: what } }],
+      confidence: 0.65,
+      evidence: [{ source: this.id, message: `the click could not land because ${what} was on top of the element, so something had not gone away yet`, data: { intercepted: what } }],
+    };
+  },
+};
+
+/**
+ * Selenium's stale element (and Cypress's "the page updated while this command was executing"):
+ * the test found the element, then the page re-rendered and replaced it before the test used it.
+ * That is a race between the test and the page, fixed by finding the element again, not a broken
+ * feature. Unmeasured on labelled data, so below the merge gate's trust line.
+ */
+export const timingStaleElement: Rule = {
+  id: 'timing-stale-element',
+  evaluate({ record }) {
+    const stale = driverStaleElement(record.errorMessage);
+    if (!stale) return null;
+    return {
+      category: 'TIMING',
+      confidence: 0.65,
+      evidence: [{ source: this.id, message: `"${truncate(stale, 80)}": the element was found, then the page replaced it before the test used it`, data: { stale } }],
     };
   },
 };

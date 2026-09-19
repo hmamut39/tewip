@@ -82,7 +82,8 @@ Point the agent at your test runner's **JUnit XML** report (or .NET's **TRX**) i
 | **Ruby**, Rails | RSpec | `rspec --format RspecJunitFormatter --out report.xml` | verified |
 | **PHP**, Laravel, Symfony | PHPUnit | `phpunit --log-junit report.xml` | verified |
 | **Rust** | cargo-nextest | `[profile.ci.junit]` in `.config/nextest.toml` | verified |
-| End-to-end | Cypress, WebdriverIO | `mocha-junit-reporter` / `@wdio/junit-reporter` | JUnit format |
+| End-to-end | **Selenium** (Java, Python, JavaScript, C#) | through the runner above it: Surefire, pytest, Jest/Mocha, `dotnet test` | JUnit format; error wording read |
+| End-to-end | Cypress, WebdriverIO | `mocha-junit-reporter` / `@wdio/junit-reporter` | JUnit format; error wording read |
 | End-to-end | **Playwright** | blob reporter (step 1) — adds traces, selector drift and verified fixes | verified on 5 real projects |
 
 ```yaml
@@ -94,7 +95,7 @@ Point the agent at your test runner's **JUnit XML** report (or .NET's **TRX**) i
           suite: unit                  # only needed when one workflow triages several suites
 ```
 
-What it reads from any of these: the failure text, retries, and each test's history. From that it tells apart a wrong value (a real bug once the test has a passing history), an unreachable service (environment), a data collision, and a test that failed then passed on a retry (timing), in the wording each language uses: `expected: <4> but was: <3>` in Java, `got 3, want 4` in Go, `AssertionError: 3 != 4` in Python, `Expected: 4 / Actual: 3` in .NET, and so on. What it cannot do without Playwright's traces is look at the page, so selector drift and automatic fixes stay Playwright-only.
+What it reads from any of these: the failure text, retries, and each test's history. From that it tells apart a wrong value (a real bug once the test has a passing history), an unreachable service (environment), a data collision, and a test that failed then passed on a retry (timing), in the wording each language uses: `expected: <4> but was: <3>` in Java, `got 3, want 4` in Go, `AssertionError: 3 != 4` in Python, `Expected: 4 / Actual: 3` in .NET, and so on. It also reads each browser tool's own words for the same three problems: an element that was never found (Selenium's `NoSuchElementException`, WebdriverIO's `still not displayed`, Cypress's `Expected to find element`), a click another element received (Selenium's `Other element would receive the click`, Cypress's `is being covered by another element`), and an element the page replaced mid-test (Selenium's `StaleElementReferenceException`, Cypress's `the page updated while this command was executing`). No labelled Selenium or Cypress runs have measured those rules yet, so they report at a confidence the merge gate does not trust on its own. What it cannot do without Playwright's traces is look at the page, so selector drift and automatic fixes stay Playwright-only.
 
 A wrong value on a test's **first** recorded failure stays undecided rather than guessed: one failure alone does not show whether the test was reliable before. It becomes a real-bug diagnosis once the test's history shows it passing and then failing the same way.
 

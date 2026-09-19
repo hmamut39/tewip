@@ -37,7 +37,8 @@ function pageAtFailure(output: string, cwd: string): string {
 
 export function runTest(framework: Framework, file: string, timeoutMs = 180_000): RunResult {
   const r = spawnSync(framework.command(file), { cwd: framework.cwd, env: { ...process.env, ...framework.env }, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
-  const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.trim();
+  // Colour codes are noise to a reader and would stop a quoted line from matching.
+  const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.replace(/\[[0-9;]*[A-Za-z]/g, '').trim();
   if (r.status === 0 && onlySkipped(output)) return { passed: false, skipped: true, output: `The test was skipped, so nothing was checked. Make it run here.\n${output.slice(-3000)}` };
   return { passed: r.status === 0, output: output.slice(-6000) + (r.status === 0 ? '' : pageAtFailure(output, framework.cwd)) };
 }

@@ -74,6 +74,8 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
 
   const drafts = join(cmd.root, '.tewip', 'drafts');
   const results: Array<{ id: string; title: string; file: string; outcome: Outcome }> = [];
+  const started = Date.now();
+  let done = 0;
   for (const scenario of scenarios) {
     const fileName = framework.fileFor(scenario.id);
     const file = join(framework.testDir, fileName);
@@ -99,6 +101,11 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
     } finally {
       process.off('SIGINT', leaveNothing).off('SIGTERM', leaveNothing);
     }
+    // Some runners take minutes per run (Angular rebuilds the app for every `ng test`): say how long
+    // the rest will take, so a slow run is not mistaken for a stuck one.
+    done++;
+    const left = scenarios.length - results.length - 1;
+    if (done === 1 && left > 0) console.error(`    (about ${Math.max(1, Math.round((Date.now() - started) / 60_000))} min per scenario here; ${left} more to go)`);
     if (outcome.kind !== 'kept' && existsSync(file)) {
       mkdirSync(drafts, { recursive: true });
       renameSync(file, join(drafts, fileName));

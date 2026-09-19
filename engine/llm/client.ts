@@ -25,7 +25,8 @@ export const DEFAULT_MODEL = 'gpt-5.4-mini';
 export const DEFAULT_REASONING = 'low';
 const REQUEST_TIMEOUT_MS = 90_000;
 const MAX_ATTEMPTS = 3;
-const CACHE_FILE = join(DATA_DIR, 'llm-cache.jsonl');
+/** TEWIP_LLM_CACHE moves the cache, e.g. into the project the command line runs in. */
+const CACHE_FILE = process.env.TEWIP_LLM_CACHE || join(DATA_DIR, 'llm-cache.jsonl');
 
 let envLoaded = false;
 

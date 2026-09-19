@@ -46,11 +46,11 @@ export function prCommentView(items: TriageItem[], runId: string, dataset: strin
 
   // Nothing failed: say so plainly instead of an empty list under "0 failing test(s)".
   if (items.length === 0) {
-    const markdown = ['## triage-agent: all tests passed', '', 'Nothing to triage in this run.', '', sourceNote(dataset), ''].join('\n');
+    const markdown = ['## Tewip: all tests passed', '', 'Nothing to triage in this run.', '', sourceNote(dataset), ''].join('\n');
     return { id: 'pr-comment', role: 'developer', title: `PR comment for run ${runId}`, scope: 'run', items, markdown };
   }
   const markdown = [
-    `## triage-agent: ${items.length} failing test(s) on \`${commit}\``,
+    `## Tewip: ${items.length} failing test(s) on \`${commit}\``,
     '',
     `**${likely.length} likely caused by this change**, ${not.length} probably not, ${unclear.length} unclear.`,
     '',

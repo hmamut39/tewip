@@ -1,8 +1,19 @@
-# triage-agent
+# Tewip
 
-A triage agent for failing tests, for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pytest, unittest), Java and Kotlin (JUnit, TestNG), Go, .NET, Ruby, PHP and Rust, each checked against its real runner's report ([the full list](QUICKSTART.md#not-using-playwright-every-stack-works)), plus Playwright in depth with traces, selector drift and verified fixes. See [ROADMAP.md](ROADMAP.md) for the full plan.
+**Tewip** (Uyghur *téwip*, تېۋىپ: healer, doctor) finds why each failing test failed: a real bug, a flaky test, the environment, test data, or a changed selector. Every answer comes with its confidence, its evidence and one next step, and names its source: a deterministic rule, the AI model, or a person's correction.
 
-**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
+It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pytest, unittest), Java and Kotlin (JUnit, TestNG), Go, .NET, Ruby, PHP and Rust, each checked against its real runner's report ([the full list](QUICKSTART.md#not-using-playwright-every-stack-works)), plus Playwright in depth with traces, selector drift and verified fixes.
+
+| Where | How |
+|---|---|
+| **Terminal** | `npm install -g tewip`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
+| **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension: registers Tewip with the editor's AI assistant and adds *Explain a test report* and *Why did CI fail on this branch?* |
+| **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
+| **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
+
+Formerly *triage-agent*; the repository and the Action path keep that name for now. See [ROADMAP.md](ROADMAP.md) for the plan.
+
+**Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
 
 ## Use it in your project
 
@@ -86,14 +97,16 @@ Setup, after `npm install`:
 
 ## Use it from your editor (any IDE that speaks MCP)
 
-The agent ships an MCP server, so an AI assistant inside your editor can ask it about failures. There is nothing to install from a marketplace: MCP servers are configured with one entry, and every major AI coding tool supports them — VS Code (Copilot agent mode), Cursor, JetBrains IDEs (2025.2+), Claude Code, Claude Desktop and Windsurf.
+**VS Code, Cursor, Windsurf and VSCodium:** install the Tewip extension (`extensions/vscode`, packaged as `tewip-<version>.vsix`: *Extensions → … → Install from VSIX*). It registers Tewip as an MCP server by itself, so the assistant can use it with no configuration, and adds two commands: *Tewip: Explain a test report…* and *Tewip: Why did CI fail on this branch?*
+
+**Every other MCP client** (JetBrains IDEs 2025.2+, Claude Code, Claude Desktop, or an editor without the extension) takes one entry. With Tewip installed (`npm install -g tewip`) the command is simply `tewip mcp`; from a checkout, point at `cli/tewip.ts`:
 
 Point the entry at this checkout with an absolute path (the server resolves its own data, so the editor's working directory does not matter). **VS Code** uses its own shape, with a `servers` key and a `type`; put it in the workspace's `.vscode/mcp.json`, or in your user-level configuration (command *MCP: Open User Configuration*) to have it in every window:
 
 ```json
 {
   "servers": {
-    "triage-agent": { "type": "stdio", "command": "node", "args": ["C:/path/to/triage-agent/mcp/server.ts"] }
+    "tewip": { "type": "stdio", "command": "tewip", "args": ["mcp"] }
   }
 }
 ```
@@ -103,13 +116,13 @@ Point the entry at this checkout with an absolute path (the server resolves its 
 ```json
 {
   "mcpServers": {
-    "triage-agent": { "command": "node", "args": ["C:/path/to/triage-agent/mcp/server.ts"] }
+    "tewip": { "command": "tewip", "args": ["mcp"] }
   }
 }
 ```
 
 - **JetBrains** (IntelliJ, WebStorm, PyCharm 2025.2+): Settings → Tools → MCP Server.
-- **Inside this repository** nothing is needed: `.vscode/mcp.json` (VS Code) and `.mcp.json` (Claude Code) are already set up.
+- **Inside this repository** nothing is needed for Claude Code: `.mcp.json` is already set up.
 
 Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are flaky in checkout?"*, *"is the main branch safe to release?"*. Every tool is read-only, and `github_ci_report` reads the report the Action uploaded, so you can ask about a repository's CI **without cloning it or opening the Actions page** (it uses your `gh` login).
 

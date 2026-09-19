@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["cli", "engine", "outlets", "mcp", "reporters", "scripts/explain.ts", "eval/harvest/gh.ts", "eval/harvest/harvest.ts"],
+  "exclude": ["**/test/**", "**/*.test.ts"]
+}

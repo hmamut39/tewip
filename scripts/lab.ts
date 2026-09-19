@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   const pr = [
     `# Fix ${accepted.length} drifted locator(s) (verified by re-running each test)`,
     '',
-    'Opened by triage-agent in the drift lab. Only test code changed; every change was re-run against v2 and passed. A human reviews and merges.',
+    'Opened by Tewip in the drift lab. Only test code changed; every change was re-run against v2 and passed. A human reviews and merges.',
     '',
     ...accepted.flatMap(({ item, fix }) => [
       `## ${item.title}`,

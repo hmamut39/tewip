@@ -1,8 +1,9 @@
 // Explains a test report on your own machine, no CI needed: run your tests, then
 //   node scripts/explain.ts <report>
 // where <report> is a JUnit XML or TRX file, a directory of them, or a Playwright blob report
-// directory. Works for any stack the importer reads (see QUICKSTART.md). Each run is kept in
-// data/local, so the second and later runs judge failures against their history, as CI does.
+// directory. Works for any stack the importer reads (see QUICKSTART.md). Each run is kept in a
+// .tewip folder in the directory you run it from (your project, not the installed tool), so later
+// runs judge failures against their history, as CI does.
 // Options: --name <project> keeps a separate history per project (default: the report's folder).
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -14,7 +15,7 @@ import { llmFromEnv } from '../engine/llm/client.ts';
 import { usageLine } from '../engine/llm/usage.ts';
 import { buildItems } from '../outlets/items.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
-import { appendJsonl, DATA_DIR, datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
+import { appendJsonl, datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -35,7 +36,7 @@ async function main(): Promise<void> {
   }
   const path = resolve(target);
   const name = (arg('name') ?? basename(statSync(path).isDirectory() ? path : dirname(path))).replace(/[^\w.-]+/g, '-');
-  const historyDir = join(DATA_DIR, 'local', name);
+  const historyDir = join(process.cwd(), '.tewip', 'history', name);
   const history = datasetFiles(historyDir);
   const runId = `local-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
   const meta = { runId, gitSha: '', workspace: process.cwd() };
@@ -56,7 +57,7 @@ async function main(): Promise<void> {
   appendJsonl(history.runs, [imported.summary]);
   const runs = pastRuns.length + 1;
   console.log(`\n${usageLine()}`);
-  console.log(`History: ${runs} run(s) of "${name}" kept in ${historyDir}.${runs === 1 ? ' A test\'s first failure often stays undecided; later runs are judged against this one.' : ''}`);
+  console.log(`History: ${runs} run(s) of "${name}" kept in ${historyDir}.${runs === 1 ? ' A test\'s first failure often stays undecided; later runs are judged against this one. Add .tewip/ to your .gitignore.' : ''}`);
 }
 
 await main();

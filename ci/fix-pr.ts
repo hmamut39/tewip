@@ -13,7 +13,7 @@ import type { TriageRecord } from '../reporters/types.ts';
 import type { CiContext } from './context.ts';
 import type { GitHub, IssueRef } from './github.ts';
 
-const BOT_NAME = 'triage-agent[bot]';
+const BOT_NAME = 'tewip[bot]';
 const BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com';
 
 function git(cwd: string, args: string[]): string {
@@ -55,7 +55,7 @@ function applyFix(file: string, fix: FixResult): boolean {
 
 function prBody(ctx: CiContext, accepted: Array<{ fix: FixResult; item: TriageItem }>): string {
   return [
-    `triage-agent found ${accepted.length} test(s) whose locator no longer matches a renamed element, rewrote each locator, and re-ran each test: all passed.`,
+    `Tewip found ${accepted.length} test(s) whose locator no longer matches a renamed element, rewrote each locator, and re-ran each test: all passed.`,
     '',
     '**Please review before merging.** An intended UI change and a regression can look alike; check that each new locator targets the element the test meant. Only test code changed.',
     '',
@@ -114,7 +114,7 @@ export async function autofixAndOpenPr(
   if (accepted.length === 0) return { fixes, pr: null };
 
   const base = ctx.pr?.headRef ?? ctx.branch;
-  const branch = `triage-agent/fix-${base}`.replace(/[^\w./-]/g, '-');
+  const branch = `tewip/fix-${base}`.replace(/[^\w./-]/g, '-');
   const tree = join(ctx.outDir, 'fix-worktree');
   if (existsSync(tree)) rmSync(tree, { recursive: true, force: true });
   git(ctx.workspace, ['fetch', '--no-tags', 'origin', base]);
@@ -125,7 +125,7 @@ export async function autofixAndOpenPr(
     git(tree, ['add', '-A']);
     git(tree, ['-c', `user.name=${BOT_NAME}`, '-c', `user.email=${BOT_EMAIL}`, 'commit', '-m', `Fix ${applied.length} drifted locator(s), verified by re-running each test`]);
     git(tree, ['push', '--force', 'origin', `HEAD:refs/heads/${branch}`]);
-    const pr = await github.upsertPullRequest(branch, base, `triage-agent: fix ${applied.length} drifted locator(s) (verified)`, prBody(ctx, applied));
+    const pr = await github.upsertPullRequest(branch, base, `Tewip: fix ${applied.length} drifted locator(s) (verified)`, prBody(ctx, applied));
     return { fixes, pr };
   } finally {
     spawnSync('git', ['worktree', 'remove', '--force', tree], { cwd: ctx.workspace });

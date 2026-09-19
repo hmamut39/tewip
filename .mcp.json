@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "triage-agent": {
+    "tewip": {
       "command": "node",
-      "args": ["mcp/server.ts"]
+      "args": ["cli/tewip.ts", "mcp"]
     }
   }
 }

@@ -1,4 +1,4 @@
-# triage-agent ROADMAP
+# Tewip ROADMAP (formerly triage-agent)
 
 ## Product Purpose
 Compress a QA engineer's morning triage (200 failed cases, ~3 hours of manual root-cause judgment) down to under 20 minutes.

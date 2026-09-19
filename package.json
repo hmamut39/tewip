@@ -1,15 +1,44 @@
 {
-  "name": "triage-agent",
-  "version": "0.1.0",
+  "name": "tewip",
+  "version": "0.4.0",
   "private": true,
-  "description": "Playwright failure triage agent — failure collection (phase 1) and rule-based diagnosis (phase 2)",
+  "description": "Tewip finds why each failing test failed - real bug, flaky test, environment, test data or changed selector - for any stack, from the command line, CI, or your editor.",
+  "keywords": [
+    "test-failures",
+    "flaky-tests",
+    "triage",
+    "root-cause",
+    "ci",
+    "github-action",
+    "playwright",
+    "pytest",
+    "jest",
+    "vitest",
+    "junit",
+    "mcp",
+    "ai-agent",
+    "test-automation",
+    "qa",
+    "sdet",
+    "devops"
+  ],
+  "homepage": "https://github.com/hmamut39/triage-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hmamut39/triage-agent.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.18"
   },
   "bin": {
-    "triage-agent-mcp": "mcp/server.ts"
+    "tewip": "dist/cli/tewip.js"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "QUICKSTART.md"
+  ],
   "scripts": {
     "test": "playwright test",
     "test:loop": "node scripts/test-loop.ts 5",
@@ -29,7 +58,10 @@
     "shadow": "node scripts/shadow.ts",
     "harvest": "node eval/harvest/harvest.ts",
     "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "tewip": "node cli/tewip.ts"
   },
   "license": "UNLICENSED",
   "devDependencies": {

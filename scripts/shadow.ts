@@ -1,4 +1,4 @@
-// Shadow run: what triage-agent would have said on a public project's real CI, without posting
+// Shadow run: what Tewip would have said on a public project's real CI, without posting
 // anything there. Renders, for every failed run in a harvested dataset, the PR comment the agent
 // would have written, plus a summary, and (with --publish <owner/repo>) posts it as one issue with
 // one comment per run in a repository you own. References to the public project are written in
@@ -51,9 +51,9 @@ async function main(): Promise<void> {
   const inFailed = items.filter((i) => failedRuns.some((r) => r.runId === i.runId));
 
   const summary = [
-    `## Shadow run: triage-agent on \`${config.repo}\` (${config.workflow}), ${days[0]} to ${days.at(-1)}`,
+    `## Shadow run: Tewip on \`${config.repo}\` (${config.workflow}), ${days[0]} to ${days.at(-1)}`,
     '',
-    `> **Nothing was posted to \`${config.repo}\`.** This is what triage-agent would have said on its real CI, rebuilt from the public blob reports. Every diagnosis shows its confidence and source.`,
+    `> **Nothing was posted to \`${config.repo}\`.** This is what Tewip would have said on its real CI, rebuilt from the public blob reports. Every diagnosis shows its confidence and source.`,
     '',
     `- Runs analysed: **${data.summaries.length}**, of which **${failedRuns.length} failed** with **${inFailed.length} failing test case(s)**.`,
     `- By category: ${[...new Set(inFailed.map((i) => i.diagnosis.category))].map((c) => `${c} ${count(inFailed, (i) => i.diagnosis.category === c)}`).join(', ')}.`,
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     return JSON.parse((await ghRaw(['api', path, '-X', 'POST', '--input', file])).toString('utf8')) as T;
   };
   const issue = await post<{ number: number; html_url: string }>(`repos/${target}/issues`, {
-    title: `Shadow run: triage-agent on ${config.repo} (${days[0]} to ${days.at(-1)})`,
+    title: `Shadow run: Tewip on ${config.repo} (${days[0]} to ${days.at(-1)})`,
     body: summary,
   });
   for (const c of comments) {

@@ -1,0 +1,31 @@
+{
+  "name": "tewip",
+  "displayName": "Tewip - why did my test fail?",
+  "description": "Finds why each failing test failed (real bug, flaky, environment, test data or changed selector) for any stack, and connects Tewip to your editor's AI assistant.",
+  "version": "0.4.0",
+  "publisher": "hmamut39",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "repository": { "type": "git", "url": "https://github.com/hmamut39/triage-agent.git" },
+  "engines": { "vscode": "^1.101.0" },
+  "categories": ["Testing", "AI", "Other"],
+  "keywords": ["test failures", "flaky tests", "triage", "root cause", "playwright", "pytest", "jest", "junit", "ci", "mcp"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "mcpServerDefinitionProviders": [{ "id": "tewip", "label": "Tewip" }],
+    "commands": [
+      { "command": "tewip.explainReport", "title": "Explain a test report…", "category": "Tewip" },
+      { "command": "tewip.ciReport", "title": "Why did CI fail on this branch?", "category": "Tewip" }
+    ],
+    "configuration": {
+      "title": "Tewip",
+      "properties": {
+        "tewip.path": {
+          "type": "string",
+          "default": "tewip",
+          "markdownDescription": "How to run Tewip: `tewip` when it is installed (`npm install -g tewip`), or the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
+        }
+      }
+    }
+  }
+}

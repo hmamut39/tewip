@@ -30,3 +30,9 @@ fixtures/polyglot/**/out/
 fixtures/polyglot/java/target/
 fixtures/polyglot/rust/target/
 fixtures/polyglot/php/vendor/
+
+# Tewip: local command-line history and the published build.
+.tewip/
+dist/
+*.tgz
+*.vsix

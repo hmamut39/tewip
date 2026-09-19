@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const records = readTriageRecords(history.triage);
   const summaries = readRunSummaries(history.runs);
   const label = `${ctx.repo} CI history (${summaries.length} runs)`;
-  console.log(`[triage-agent] report over ${summaries.length} run(s) and ${records.length} failed attempt(s) from the cache`);
+  console.log(`[tewip] report over ${summaries.length} run(s) and ${records.length} failed attempt(s) from the cache`);
 
   const index = new HistoryIndex(records, summaries);
   const items = await buildItems(records, index, { dataset: label, llm: llmFromEnv(), reuseStoredDiagnoses: true });
@@ -33,13 +33,13 @@ async function main(): Promise<void> {
 
   const date = new Date().toISOString().slice(0, 10);
   const intro = [
-    `## triage-agent team report, ${date}`,
+    `## Tewip team report, ${date}`,
     '',
     `Built from ${summaries.length} CI run(s) on this branch. Sections: engineering quality (senior and principal engineers), architecture (architects), and risk digest (leads). Each report replaces the previous one in this issue; the history of edits keeps older reports.`,
     `<sub>[Report run](${ctx.runUrl})</sub>`,
   ].join('\n');
   const body = [intro, ...views.map((v) => v.markdown)].join('\n\n---\n\n');
-  const fitted = body.length <= MAX_BODY ? body : `${body.slice(0, MAX_BODY)}\n\n…truncated: the full report is in the \`triage-agent-report\` artifact.`;
+  const fitted = body.length <= MAX_BODY ? body : `${body.slice(0, MAX_BODY)}\n\n…truncated: the full report is in the \`tewip-report\` artifact.`;
   writeFileSync(join(ctx.outDir, 'team-report.md'), body, 'utf8');
   if (ctx.stepSummary) writeFileSync(ctx.stepSummary, fitted, { encoding: 'utf8', flag: 'a' });
 
@@ -50,12 +50,12 @@ async function main(): Promise<void> {
   const text = `${REPORT_MARKER}\n${fitted}`;
   const issue = existing
     ? await github.request<{ html_url: string }>('PATCH', `/repos/{repo}/issues/${existing.number}`, { body: text })
-    : await github.request<{ html_url: string }>('POST', '/repos/{repo}/issues', { title: 'triage-agent: team report', body: text });
-  console.log(`[triage-agent] team report: ${issue.html_url}`);
+    : await github.request<{ html_url: string }>('POST', '/repos/{repo}/issues', { title: 'Tewip: team report', body: text });
+  console.log(`[tewip] team report: ${issue.html_url}`);
 }
 
 try {
   await main();
 } catch (error) {
-  console.warn(`::warning::triage-agent report could not finish: ${String(error).slice(0, 600)}`);
+  console.warn(`::warning::tewip report could not finish: ${String(error).slice(0, 600)}`);
 }

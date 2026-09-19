@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server for triage-agent: lets any MCP-capable AI assistant (Claude Code, Claude Desktop,
+// MCP server for Tewip: lets any MCP-capable AI assistant (Claude Code, Claude Desktop,
 // Cursor, VS Code agent mode, ...) ask about Playwright test failures and get the same
 // diagnoses, next actions and role views the agent produces in CI.
 // Read-only by design: no tool changes code, CI, GitHub or collected data.
@@ -10,10 +10,10 @@ import { z } from 'zod';
 import { githubCiReport } from './github-report.ts';
 import { explainFailure, listDatasets, listFailedRuns, runView, windowView } from './tools.ts';
 
-const server = new McpServer({ name: 'triage-agent', version: '0.3.0' });
+const server = new McpServer({ name: 'tewip', version: '0.4.0' });
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
-const dataset = z.string().optional().describe('Dataset directory relative to the triage-agent repo, e.g. "data/real/gutenberg-holdout". Default: data/ (what the reporter collected). See list_datasets.');
+const dataset = z.string().optional().describe('Dataset directory relative to the Tewip repo, e.g. "data/real/gutenberg-holdout". Default: data/ (what the reporter collected). See list_datasets.');
 const run = z.string().optional().describe('Run id or a unique part of it. Default: the latest run with failures.');
 const ai = z.boolean().optional().describe('Use the AI layer for failures the rules cannot decide (default true; needs OPENAI_API_KEY).');
 
@@ -22,7 +22,7 @@ async function answer(fn: () => string | Promise<string>): Promise<Result> {
   try {
     return { content: [{ type: 'text', text: await fn() }] };
   } catch (error) {
-    return { content: [{ type: 'text', text: `triage-agent: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    return { content: [{ type: 'text', text: `Tewip: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
   }
 }
 
@@ -30,7 +30,7 @@ server.registerTool(
   'github_ci_report',
   {
     title: 'CI diagnosis for a pull request',
-    description: "Latest triage-agent report from a GitHub repository's CI: which failing tests the change likely caused, why each failed, the next action, and any verified fix PR. Use for questions like \"why did CI fail on my PR?\".",
+    description: "Latest Tewip report from a GitHub repository's CI: which failing tests the change likely caused, why each failed, the next action, and any verified fix PR. Use for questions like \"why did CI fail on my PR?\".",
     inputSchema: {
       repo: z.string().describe('owner/name, e.g. hmamut39/triage-agent-sandbox'),
       pr: z.number().int().optional().describe('Pull request number'),

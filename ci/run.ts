@@ -27,12 +27,12 @@ import { postEnvIssue, postPrComment, prCommentBody, writeStepSummary } from './
 /** Runs of history kept in the cache; older ones are dropped. */
 const MAX_HISTORY_RUNS = 300;
 
-const log = (message: string) => console.log(`[triage-agent] ${message}`);
+const log = (message: string) => console.log(`[tewip] ${message}`);
 async function step<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
   } catch (error) {
-    console.warn(`::warning::triage-agent ${name} failed: ${String(error).slice(0, 400)}`);
+    console.warn(`::warning::tewip ${name} failed: ${String(error).slice(0, 400)}`);
     return null;
   }
 }
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error) {
-  console.warn(`::warning::triage-agent could not finish: ${String(error).slice(0, 600)}`);
+  console.warn(`::warning::tewip could not finish: ${String(error).slice(0, 600)}`);
   // A gate that could not decide must not let the run through.
   if (process.env.TRIAGE_GATE?.trim()) process.exitCode = 1;
 }

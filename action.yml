@@ -1,5 +1,8 @@
-name: triage-agent
-description: Diagnose Playwright test failures, comment on the pull request, group environment failures into one issue, and open verified locator-fix pull requests for review.
+name: Tewip
+description: Tewip diagnoses every failing test - real bug, flaky, environment, test data or changed selector - comments on the pull request, can gate merges on real failures, and opens verified selector-fix pull requests. Playwright, pytest, Jest, Vitest, JUnit, Go, .NET, Ruby, PHP, Rust.
+branding:
+  icon: activity
+  color: green
 author: hmamut39
 
 inputs:
@@ -108,6 +111,6 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: triage-agent-report${{ inputs.suite && '-' || '' }}${{ inputs.suite }}
+        name: tewip-report${{ inputs.suite && '-' || '' }}${{ inputs.suite }}
         path: .triage-agent/out
         if-no-files-found: ignore

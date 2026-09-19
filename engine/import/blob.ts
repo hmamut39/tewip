@@ -2,7 +2,7 @@
 // plus one run summary with every attempt. Two sources: a CI artifact zip holding one
 // report-N.zip per shard (harvesting public repos), or a local blob-report/ directory (the
 // GitHub Action, right after the tests ran). Consumers only need Playwright's built-in
-// `blob` reporter, no triage-agent code in their config.
+// `blob` reporter, no Tewip code in their config.
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, sep } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';

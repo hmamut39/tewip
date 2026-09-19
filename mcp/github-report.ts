@@ -1,4 +1,4 @@
-// Fetches the latest triage-agent report that the GitHub Action uploaded for a repository,
+// Fetches the latest Tewip report that the GitHub Action uploaded for a repository,
 // pull request or branch, so an assistant can answer "why did CI fail on my PR?" without
 // anyone opening the Actions page. Uses the gh CLI's login; read-only.
 import { readZipBuffer } from '../engine/trace/zip.ts';
@@ -19,13 +19,13 @@ interface WorkflowRun {
   html_url: string;
 }
 
-/** "triage-agent-report", or "triage-agent-report-<suite>" when a workflow triages several suites. */
-const REPORT = /^triage-agent-report(-.+)?$/;
+/** "tewip-report" or "tewip-report-<suite>"; "triage-agent-report" is what versions before the rename uploaded. */
+const REPORT = /^(?:tewip|triage-agent)-report(-.+)?$/;
 /** How many recent runs to look through for one that uploaded a report. */
 const RUNS_TO_SEARCH = 30;
 
 /**
- * The newest workflow run on the branch that uploaded triage-agent reports, and those reports.
+ * The newest workflow run on the branch that uploaded Tewip reports, and those reports.
  * Looked up run by run rather than across all of a repository's artifacts, which in a busy
  * repository are mostly other workflows' and would push the report out of the first page.
  */
@@ -44,7 +44,7 @@ export async function githubCiReport(repo: string, pr?: number, branch?: string)
   const head = pr ? (await ghApi<{ head: { ref: string } }>(`repos/${repo}/pulls/${pr}`)).head.ref : branch;
   const target = pr ? `PR #${pr} (${head})` : head ? `branch ${head}` : 'any branch';
   const found = await latestReports(repo, head);
-  if (!found) return `No triage-agent report for ${repo}, ${target} in its last ${RUNS_TO_SEARCH} workflow runs. Is the triage-agent action installed in that repository's CI workflow, and has it run since?`;
+  if (!found) return `No Tewip report for ${repo}, ${target} in its last ${RUNS_TO_SEARCH} workflow runs. Is the Tewip action installed in that repository's CI workflow, and has it run since?`;
 
   const sections: string[] = [];
   for (const artifact of found.artifacts) {
@@ -52,10 +52,10 @@ export async function githubCiReport(repo: string, pr?: number, branch?: string)
     const text = (name: string) => files.get(name)?.toString('utf8') ?? '';
     const bundle = JSON.parse(text('triage.json') || '{}') as { runUrl?: string; sha?: string; generatedAt?: string; items?: Array<{ diagnosis: { category: string } }>; fixPr?: string | null };
     const envCount = (bundle.items ?? []).filter((i) => i.diagnosis.category === 'ENV').length;
-    const suite = artifact.name.replace(/^triage-agent-report-?/, '');
+    const suite = artifact.name.replace(/^(?:tewip|triage-agent)-report-?/, '');
     sections.push(
       [
-        `# triage-agent CI report: ${repo}, ${target}${suite ? ` - suite "${suite}"` : ''}`,
+        `# Tewip CI report: ${repo}, ${target}${suite ? ` - suite "${suite}"` : ''}`,
         `Run: ${bundle.runUrl ?? found.run.html_url} · commit \`${(bundle.sha ?? found.run.head_sha).slice(0, 8)}\` · generated ${bundle.generatedAt ?? artifact.created_at}${bundle.fixPr ? ` · verified fix PR: ${bundle.fixPr}` : ''}`,
         text('pr-comment.md'),
         envCount > 0 ? text('infra.md') : '',

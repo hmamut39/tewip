@@ -35,7 +35,7 @@ export function infraView(items: TriageItem[], runId: string, dataset: string): 
   const groups = groupEnv(items);
   const env = groups.flatMap((g) => g.items);
   const alert = [
-    `[triage-agent] run ${runId}: ${env.length} test failure(s) caused by the test environment, not by code.`,
+    `[tewip] run ${runId}: ${env.length} test failure(s) caused by the test environment, not by code.`,
     ...groups.map((g) => `- ${clean(g.signature)}: ${g.items.length} test(s), ${g.recovered} recovered on retry${g.hosts.length ? ` (hosts: ${g.hosts.join(', ')})` : ''}`),
     'Test code was not changed. Next: re-run the affected tests once; if they fail again, investigate the dependency above.',
   ];

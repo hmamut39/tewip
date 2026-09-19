@@ -1,4 +1,4 @@
-# Quickstart: putting triage-agent on one repository
+# Quickstart: putting Tewip on one repository
 
 For an engineer adding the agent to a project that already runs Playwright tests in GitHub Actions. It takes about ten minutes, and the first useful output arrives with the next failing run.
 
@@ -33,7 +33,7 @@ permissions:
 steps:
   # ... your existing checkout, install, and `npx playwright test` steps ...
 
-  - name: triage-agent
+  - name: Tewip
     if: always()           # it must run even though the test step failed
     uses: hmamut39/triage-agent@main
     with:
@@ -86,7 +86,7 @@ Point the agent at your test runner's **JUnit XML** report (or .NET's **TRX**) i
 | End-to-end | **Playwright** | blob reporter (step 1) — adds traces, selector drift and verified fixes | verified on 5 real projects |
 
 ```yaml
-      - name: triage-agent
+      - name: Tewip
         if: always()
         uses: hmamut39/triage-agent@main
         with:
@@ -102,22 +102,23 @@ When one workflow triages several suites (say `unit` and `e2e`), give each a `su
 
 ## On your own machine, without CI
 
-Run your tests with the report switched on (see the table above), then point the agent at it:
+Install the command once (`npm install -g tewip`, Node 22.18 or newer), run your tests with the report switched on (see the table above), then:
 
 ```bash
-node /path/to/triage-agent/scripts/explain.ts report.xml          # JUnit XML or .trx
-node /path/to/triage-agent/scripts/explain.ts reports/            # a folder of them
-node /path/to/triage-agent/scripts/explain.ts blob-report/        # Playwright
+tewip explain report.xml          # JUnit XML or .trx
+tewip explain reports/            # a folder of them
+tewip explain blob-report/        # Playwright
+tewip ci owner/repo --pr 12       # what Tewip's GitHub Action said about a pull request
 ```
 
-It prints the same triage board CI writes: each failure's cause, confidence, evidence and next action. Every run is kept under `data/local/<project>` inside the triage-agent folder, so from the second run on, failures are judged against their history exactly as in CI. `--name` keeps separate histories for different projects.
+It prints the same triage board CI writes: each failure's cause, confidence, evidence and next action. Each run is kept in a `.tewip/` folder in your project (add it to `.gitignore`), so from the second run on, failures are judged against their history exactly as in CI. `--name` keeps separate histories for different projects.
 
 ## What you will see on the next failing run
 
 - **On the pull request:** one comment listing each failing test, grouped by whether your change likely caused it, each with a cause, a confidence, the evidence and the next action. It updates in place rather than adding a comment per run.
 - **In the job summary:** the same failures as a triage board.
 - **As an issue:** environment failures (5xx responses, connection resets, outages) grouped into one issue instead of one per test.
-- **As an artifact** named `triage-agent-report`: every role's view, including the engineering-quality view with the flaky tests ranked by the CI minutes they cost.
+- **As an artifact** named `tewip-report`: every role's view, including the engineering-quality view with the flaky tests ranked by the CI minutes they cost.
 
 ## Correcting it
 
@@ -131,17 +132,8 @@ From the next run on, that failure of that test gets your answer, shown as "corr
 
 ## Asking it questions from your editor
 
-Any editor with MCP support (VS Code Copilot agent mode, Cursor, JetBrains 2025.2+, Claude Code, Windsurf) can query the agent. Add one entry pointing at a checkout of this repository. In **VS Code** (`.vscode/mcp.json`, or *MCP: Open User Configuration* for every window):
-
-```json
-{
-  "servers": {
-    "triage-agent": { "type": "stdio", "command": "node", "args": ["/absolute/path/to/triage-agent/mcp/server.ts"] }
-  }
-}
-```
-
-In **Cursor, Claude Desktop, Windsurf** and most other clients, the same entry goes under `mcpServers`, without `type`.
+- **VS Code, Cursor, Windsurf, VSCodium:** install the Tewip extension (*Extensions → … → Install from VSIX*, `tewip-<version>.vsix`). It connects Tewip to the editor's AI assistant by itself and adds *Tewip: Explain a test report…* and *Tewip: Why did CI fail on this branch?*
+- **JetBrains (2025.2+), Claude, and other MCP clients:** add one server whose command is `tewip mcp`.
 
 Then ask, in plain language: "why did CI fail on my PR?", "which tests are flaky in checkout?", "is main safe to release?". Every tool is read-only, and it reads the report the Action already uploaded, so you do not need the other repository cloned.
 
@@ -153,7 +145,7 @@ Once you trust its answers, let the agent decide whether a failed run should blo
       - name: Tests
         continue-on-error: true      # the gate below decides
         run: npx playwright test
-      - name: triage-agent
+      - name: Tewip
         if: always()
         uses: hmamut39/triage-agent@main
         with:

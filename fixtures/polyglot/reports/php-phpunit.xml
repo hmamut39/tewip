@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="CLI Arguments" tests="3" assertions="2" errors="1" failures="1" skipped="0" time="0.006829">
+    <testsuite name="ShopTest" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php" tests="3" assertions="2" errors="1" failures="1" skipped="0" time="0.006829">
+      <testcase name="testAddsNumbers" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php" line="6" class="ShopTest" classname="ShopTest" assertions="1" time="0.001867"/>
+      <testcase name="testComputesTheTotal" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php" line="11" class="ShopTest" classname="ShopTest" assertions="1" time="0.004182">
+        <failure type="PHPUnit\Framework\ExpectationFailedException">ShopTest::testComputesTheTotal
+Failed asserting that 3 is identical to 4.
+
+/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php:13</failure>
+      </testcase>
+      <testcase name="testReachesThePricingService" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php" line="16" class="ShopTest" classname="ShopTest" assertions="0" time="0.000780">
+        <error type="RuntimeException">ShopTest::testReachesThePricingService
+RuntimeException: Connection refused (111): Connection refused
+
+/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/php/tests/ShopTest.php:20</error>
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>

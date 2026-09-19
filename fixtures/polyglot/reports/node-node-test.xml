@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+	<testsuite name="shop" time="0.041070" disabled="0" errors="0" tests="3" failures="2" skipped="0" timestamp="2026-09-19T13:35:10.941Z" hostname="runnervmlun5p">
+		<testcase name="adds numbers" time="0.000516" classname="test" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs"/>
+		<testcase name="computes the total" time="0.000170" classname="test" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs" failure="Expected: 4&#10;Received: 3">
+			<failure type="testCodeFailure" message="Expected: 4&#10;Received: 3">
+Error [ERR_TEST_FAILURE]: Expected: 4
+Received: 3
+    at async Promise.all (index 0) {
+  code: 'ERR_TEST_FAILURE',
+  failureType: 'testCodeFailure',
+  cause: Error [AssertionError]: Expected: 4
+  Received: 3
+      at same (file:///home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs:4:15)
+      at TestContext.&lt;anonymous> (file:///home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs:11:34)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1889:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+}
+			</failure>
+		</testcase>
+		<testcase name="reaches the pricing service" time="0.039298" classname="test" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs" failure="fetch failed">
+			<failure type="testCodeFailure" message="fetch failed">
+[Error [ERR_TEST_FAILURE]: fetch failed] {
+  code: 'ERR_TEST_FAILURE',
+  failureType: 'testCodeFailure',
+  cause: [TypeError: fetch failed] {
+    [cause]: Error: bad port
+        at makeNetworkError (node:internal/deps/undici/undici:11806:35)
+        at mainFetch (node:internal/deps/undici/undici:13189:22)
+        at fetching (node:internal/deps/undici/undici:13176:7)
+        at fetch (node:internal/deps/undici/undici:13040:20)
+        at fetch (node:internal/deps/undici/undici:17708:10)
+        at fetch (node:internal/bootstrap/web/exposed-window-or-worker:83:12)
+        at TestContext.&lt;anonymous> (file:///home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/node-test.test.mjs:12:57)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1397:25)
+        at Suite.processPendingSubtests (node:internal/test_runner/test:969:18)
+  }
+}
+			</failure>
+		</testcase>
+	</testsuite>
+	<!-- tests 3 -->
+	<!-- suites 1 -->
+	<!-- pass 1 -->
+	<!-- fail 2 -->
+	<!-- cancelled 0 -->
+	<!-- skipped 0 -->
+	<!-- todo 0 -->
+	<!-- duration_ms 102.309715 -->
+</testsuites>

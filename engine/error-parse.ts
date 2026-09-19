@@ -27,13 +27,49 @@ export interface ValueMismatch {
   received: string;
 }
 
-/** An expect() comparison that found the element (or value) but not the expected value. */
+/**
+ * How each language's assertion library prints "got the wrong value". Each pattern captures the
+ * expected and the actual value; the order of the groups differs, so each names its own.
+ */
+const MISMATCH_PATTERNS: Array<{ pattern: RegExp; expected: number; received: number }> = [
+  // Playwright, Jest, Vitest, node:test: "Expected: 4" / "Received: 3" on separate lines.
+  // A runner may print the error type first: "AssertionError: Expected: 4", or node:test's
+  // "Error [ERR_TEST_FAILURE]: Expected: 4".
+  { pattern: /^(?:[\w.]*Error(?: \[\w+\])?:\s*)?\s*Expected[^:\n]*:\s*(.+)$[\s\S]*?^\s*Received[^:\n]*:\s*(.+)$/m, expected: 1, received: 2 },
+  // xUnit (.NET): "Expected: 4" / "Actual: 3".
+  { pattern: /^\s*Expected:\s*(.+)$[\s\S]*?^\s*Actual:\s*(.+)$/m, expected: 1, received: 2 },
+  // NUnit (.NET): "Expected: 4" / "But was: 3".
+  { pattern: /^\s*Expected:\s*(.+)$[\s\S]*?^\s*But was:\s*(.+)$/m, expected: 1, received: 2 },
+  // RSpec (Ruby): "expected: 4" / "got: 3".
+  { pattern: /^\s*expected:\s*(.+)$[\s\S]*?^\s*got:\s*(.+)$/m, expected: 1, received: 2 },
+  // JUnit 4/5, TestNG, Kotlin (Java/JVM): "expected: <4> but was: <3>".
+  { pattern: /expected:\s*<([^>\n]*)>\s*but was:\s*<([^>\n]*)>/, expected: 1, received: 2 },
+  // Go convention: "got 3, want 4".
+  { pattern: /\bgot:?\s*([^,\n]+),\s*want:?\s*(.+)$/m, expected: 2, received: 1 },
+  // Rust assert_eq!: "left: 3" / "right: 4" (actual on the left by convention).
+  { pattern: /^\s*left:\s*(.+)$[\s\S]*?^\s*right:\s*(.+)$/m, expected: 2, received: 1 },
+  // Python unittest: "AssertionError: 3 != 4" (actual first).
+  { pattern: /AssertionError:\s*([^\n]+?)\s+!=\s+([^\n]+)$/m, expected: 2, received: 1 },
+  // pytest assertion rewriting: "assert 3 == 4" (actual first by convention).
+  { pattern: /^\s*(?:E\s+)?assert\s+(.+?)\s+==\s+(.+)$/m, expected: 2, received: 1 },
+  // PHPUnit: "Failed asserting that 3 is identical to 4." / "... matches expected 4."
+  { pattern: /Failed asserting that (.+?) (?:is identical to|is equal to|matches expected) (.+?)\.?$/m, expected: 2, received: 1 },
+  // Chai (Mocha): "expected 3 to equal 4".
+  { pattern: /expected (.+?) to (?:deeply )?(?:equal|be|eql) (.+)$/m, expected: 2, received: 1 },
+];
+
+/** A comparison that found the value (or element) but not the expected one, in any language. */
 export function valueMismatch(message: string): ValueMismatch | null {
   const head = headOf(message);
-  const expected = head.match(/^\s*Expected[^:\n]*:\s*(.+)$/m)?.[1]?.trim();
-  const received = head.match(/^\s*Received[^:\n]*:\s*(.+)$/m)?.[1]?.trim();
-  if (!expected || !received || /element\(s\) not found/i.test(received)) return null;
-  return { expected, received };
+  for (const { pattern, expected: e, received: r } of MISMATCH_PATTERNS) {
+    const m = head.match(pattern);
+    if (!m) continue;
+    const expected = m[e]?.trim();
+    const received = m[r]?.trim();
+    if (!expected || !received || /element\(s\) not found/i.test(received)) return null;
+    return { expected, received };
+  }
+  return null;
 }
 
 export interface NetworkSignal {
@@ -50,6 +86,9 @@ const NETWORK_PATTERNS: Array<{ kind: NetworkSignal['kind']; confidence: number;
     pattern:
       /net::ERR_[A-Z_]+|NS_ERROR_[A-Z_]+|\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|EPIPE)\b|socket hang up|connection (?:refused|reset|closed)/i,
   },
+  // Node's built-in fetch (undici) reports every network-level failure (refused, reset, DNS) as
+  // this one line, with the real cause nested where test reporters usually drop it.
+  { kind: 'connection', confidence: 0.8, pattern: /TypeError: fetch failed/ },
   { kind: 'http-5xx', confidence: 0.85, pattern: /\b(?:5\d\d\s+)?(?:Internal Server Error|Bad Gateway|Service Unavailable|Gateway Time-?out)\b/i },
   { kind: 'http-5xx', confidence: 0.85, pattern: /\b(?:status(?:\s*code)?|HTTP(?:\/[\d.]+)?|response code)\b\D{0,12}\b5\d\d\b/i },
   // expect(response.status()).toBe(200) that received a 5xx.

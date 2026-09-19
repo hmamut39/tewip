@@ -1,0 +1,94 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="0e8a257a-8292-41d6-b3eb-26b8d6a31ccf" name="@runnervmlun5p 2026-09-19 13:30:28" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-09-19T13:30:28.7406358+00:00" queuing="2026-09-19T13:30:28.7406359+00:00" start="2026-09-19T13:30:27.6525661+00:00" finish="2026-09-19T13:30:28.7775088+00:00" />
+  <TestSettings name="default" id="167de640-7db1-44cf-ad94-41172a1855b7">
+    <Deployment runDeploymentRoot="_runnervmlun5p_2026-09-19_13_30_28" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="ce44dabb-4390-4c86-b42d-2d5fe407e95c" testId="4945f331-746d-bf08-865b-6fdde93d4c96" testName="ShopTests.ReachesThePricingService" computerName="runnervmlun5p" duration="00:00:00.0157969" startTime="2026-09-19T13:30:28.5924826+00:00" endTime="2026-09-19T13:30:28.5924827+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ce44dabb-4390-4c86-b42d-2d5fe407e95c">
+      <Output>
+        <ErrorInfo>
+          <Message>System.Net.Sockets.SocketException : Connection refused [::ffff:127.0.0.1]:9</Message>
+          <StackTrace>   at System.Net.Sockets.Socket.DoConnect(EndPoint endPointSnapshot, SocketAddress socketAddress)
+   at System.Net.Sockets.Socket.Connect(EndPoint remoteEP)
+   at System.Net.Sockets.Socket.Connect(String host, Int32 port)
+   at System.Net.Sockets.TcpClient.Connect(String hostname, Int32 port)
+   at ShopTests.ReachesThePricingService() in /home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/ShopTests.cs:line 16
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="0e2e7f2a-9166-4b33-93d6-046c51ac046c" testId="55bfba77-a2a8-f33d-15ca-bf67d99d94d2" testName="ShopTests.AddsNumbers" computerName="runnervmlun5p" duration="00:00:00.0083693" startTime="2026-09-19T13:30:28.5589944+00:00" endTime="2026-09-19T13:30:28.5590195+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0e2e7f2a-9166-4b33-93d6-046c51ac046c" />
+    <UnitTestResult executionId="35be627f-95ff-4119-af22-9b7535f01ab5" testId="53e94531-fa9a-2760-5711-2b8672280f1a" testName="ShopTests.ComputesTheTotal" computerName="runnervmlun5p" duration="00:00:00.0051136" startTime="2026-09-19T13:30:28.5872928+00:00" endTime="2026-09-19T13:30:28.5872930+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="35be627f-95ff-4119-af22-9b7535f01ab5">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Values differ
+Expected: 4
+Actual:   3</Message>
+          <StackTrace>   at ShopTests.ComputesTheTotal() in /home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/ShopTests.cs:line 10
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ShopTests.AddsNumbers" storage="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/debug/net8.0/shop.tests.dll" id="55bfba77-a2a8-f33d-15ca-bf67d99d94d2">
+      <Execution id="0e2e7f2a-9166-4b33-93d6-046c51ac046c" />
+      <TestMethod codeBase="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/Debug/net8.0/Shop.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="ShopTests" name="AddsNumbers" />
+    </UnitTest>
+    <UnitTest name="ShopTests.ComputesTheTotal" storage="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/debug/net8.0/shop.tests.dll" id="53e94531-fa9a-2760-5711-2b8672280f1a">
+      <Execution id="35be627f-95ff-4119-af22-9b7535f01ab5" />
+      <TestMethod codeBase="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/Debug/net8.0/Shop.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="ShopTests" name="ComputesTheTotal" />
+    </UnitTest>
+    <UnitTest name="ShopTests.ReachesThePricingService" storage="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/debug/net8.0/shop.tests.dll" id="4945f331-746d-bf08-865b-6fdde93d4c96">
+      <Execution id="ce44dabb-4390-4c86-b42d-2d5fe407e95c" />
+      <TestMethod codeBase="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/bin/Debug/net8.0/Shop.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="ShopTests" name="ReachesThePricingService" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="4945f331-746d-bf08-865b-6fdde93d4c96" executionId="ce44dabb-4390-4c86-b42d-2d5fe407e95c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="55bfba77-a2a8-f33d-15ca-bf67d99d94d2" executionId="0e2e7f2a-9166-4b33-93d6-046c51ac046c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="53e94531-fa9a-2760-5711-2b8672280f1a" executionId="35be627f-95ff-4119-af22-9b7535f01ab5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="3" executed="3" passed="1" failed="2" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 8.0.31)
+[xUnit.net 00:00:00.18]   Discovering: Shop.Tests
+[xUnit.net 00:00:00.22]   Discovered:  Shop.Tests
+[xUnit.net 00:00:00.22]   Starting:    Shop.Tests
+[xUnit.net 00:00:00.32]       Assert.Equal() Failure: Values differ
+[xUnit.net 00:00:00.32]       Expected: 4
+[xUnit.net 00:00:00.32]       Actual:   3
+[xUnit.net 00:00:00.32]       Stack Trace:
+[xUnit.net 00:00:00.32]         /home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/ShopTests.cs(10,0): at ShopTests.ComputesTheTotal()
+[xUnit.net 00:00:00.32]            at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+[xUnit.net 00:00:00.32]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.33]       System.Net.Sockets.SocketException : Connection refused [::ffff:127.0.0.1]:9
+[xUnit.net 00:00:00.33]       Stack Trace:
+[xUnit.net 00:00:00.33]            at System.Net.Sockets.Socket.DoConnect(EndPoint endPointSnapshot, SocketAddress socketAddress)
+[xUnit.net 00:00:00.33]            at System.Net.Sockets.Socket.Connect(EndPoint remoteEP)
+[xUnit.net 00:00:00.33]            at System.Net.Sockets.Socket.Connect(String host, Int32 port)
+[xUnit.net 00:00:00.33]            at System.Net.Sockets.TcpClient.Connect(String hostname, Int32 port)
+[xUnit.net 00:00:00.33]         /home/runner/work/triage-agent/triage-agent/fixtures/polyglot/dotnet/ShopTests.cs(16,0): at ShopTests.ReachesThePricingService()
+[xUnit.net 00:00:00.33]            at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+[xUnit.net 00:00:00.33]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.34]   Finished:    Shop.Tests
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="runnervmlun5p" outcome="Error" timestamp="2026-09-19T13:30:28.5838228+00:00">
+        <Text>[xUnit.net 00:00:00.32]     ShopTests.ComputesTheTotal [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="runnervmlun5p" outcome="Error" timestamp="2026-09-19T13:30:28.5933788+00:00">
+        <Text>[xUnit.net 00:00:00.33]     ShopTests.ReachesThePricingService [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

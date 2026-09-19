@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="0.033" tests="3" failures="2">
+  <testsuite name="Root Suite" timestamp="2026-09-19T13:30:31" tests="0" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="shop" timestamp="2026-09-19T13:30:31" tests="3" file="/home/runner/work/triage-agent/triage-agent/fixtures/polyglot/node/mocha.spec.cjs" time="0.033" failures="2">
+    <testcase name="shop adds numbers" time="0.000" classname="adds numbers">
+    </testcase>
+    <testcase name="shop computes the total" time="0.000" classname="computes the total">
+      <failure message="Expected: 4
+Received: 3" type="AssertionError"><![CDATA[AssertionError: Expected: 4
+Received: 3
+    at same (mocha.spec.cjs:3:15)
+    at Context.<anonymous> (mocha.spec.cjs:10:34)
+    at process.processImmediate (node:internal/timers:574:21)]]></failure>
+    </testcase>
+    <testcase name="shop reaches the pricing service" time="0.029" classname="reaches the pricing service">
+      <failure message="fetch failed" type="TypeError"><![CDATA[TypeError: fetch failed]]></failure>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,6 +1,6 @@
 # triage-agent
 
-A triage agent for failing tests: Playwright in depth (traces, selector drift, verified fixes), and any language or framework that writes JUnit XML (pytest, Jest, Vitest, JUnit, Go, .NET, Cypress). See [ROADMAP.md](ROADMAP.md) for the full plan.
+A triage agent for failing tests, for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pytest, unittest), Java and Kotlin (JUnit, TestNG), Go, .NET, Ruby, PHP and Rust, each checked against its real runner's report ([the full list](QUICKSTART.md#not-using-playwright-every-stack-works)), plus Playwright in depth with traces, selector drift and verified fixes. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
 **Status: phases 1 to 4 are built, and Phase 5 (auto-fix) is in progress.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, and multi-role views. The agent runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
 

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="4" time="0.128" timestamp="2026-09-19T13:30:09.478689+00:00" hostname="runnervmlun5p"><testcase classname="test_shop.ShopTests" name="test_adds_numbers" time="0.001" /><testcase classname="test_shop.ShopTests" name="test_computes_the_total" time="0.001" /><testcase classname="test_shop.ShopTests" name="test_computes_the_total" time="0.001"><failure message="AssertionError: 3 != 4">self = &lt;test_shop.ShopTests testMethod=test_computes_the_total&gt;
+
+    def test_computes_the_total(self):
+&gt;       self.assertEqual(2 + 2 - 1, 4)
+E       AssertionError: 3 != 4
+
+test_shop.py:14: AssertionError</failure></testcase><testcase classname="test_shop.ShopTests" name="test_reaches_the_pricing_service" time="0.002" /><testcase classname="test_shop.ShopTests" name="test_reaches_the_pricing_service" time="0.001"><failure message="ConnectionRefusedError: [Errno 111] Connection refused">self = &lt;test_shop.ShopTests testMethod=test_reaches_the_pricing_service&gt;
+
+    def test_reaches_the_pricing_service(self):
+&gt;       socket.create_connection(("127.0.0.1", 9), timeout=2)
+
+test_shop.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/socket.py:865: in create_connection
+    raise exceptions[0]
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+address = ('127.0.0.1', 9), timeout = 2, source_address = None
+all_errors = False
+
+    def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT,
+                          source_address=None, *, all_errors=False):
+        """Connect to *address* and return the socket object.
+    
+        Convenience function.  Connect to *address* (a 2-tuple ``(host,
+        port)``) and return the socket object.  Passing the optional
+        *timeout* parameter will set the timeout on the socket instance
+        before attempting to connect.  If no *timeout* is supplied, the
+        global default timeout setting returned by :func:`getdefaulttimeout`
+        is used.  If *source_address* is set it must be a tuple of (host, port)
+        for the socket to bind as a source address before making the connection.
+        A host of '' or port 0 tells the OS to use the default. When a connection
+        cannot be created, raises the last error if *all_errors* is False,
+        and an ExceptionGroup of all errors if *all_errors* is True.
+        """
+    
+        host, port = address
+        exceptions = []
+        for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket(af, socktype, proto)
+                if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+                    sock.settimeout(timeout)
+                if source_address:
+                    sock.bind(source_address)
+&gt;               sock.connect(sa)
+E               ConnectionRefusedError: [Errno 111] Connection refused
+
+/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/socket.py:850: ConnectionRefusedError</failure></testcase><testcase classname="test_shop" name="test_flaky_once" time="0.001" /><testcase classname="test_shop" name="test_flaky_once" time="0.000" /></testsuite></testsuites>

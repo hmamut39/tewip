@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="2" errors="0" time="0.009636079">
+    <testsuite name="vitest.test.mjs" timestamp="2026-09-19T13:30:31.371Z" hostname="runnervmlun5p" tests="3" failures="2" errors="0" skipped="0" time="0.009636079">
+        <testcase classname="vitest.test.mjs" name="shop &gt; adds numbers" time="0.000920853">
+        </testcase>
+        <testcase classname="vitest.test.mjs" name="shop &gt; computes the total" time="0.003664429">
+            <failure message="Expected: 4
+Received: 3" type="AssertionError">
+AssertionError: Expected: 4
+Received: 3
+ ❯ same vitest.test.mjs:4:15
+ ❯ vitest.test.mjs:11:34
+            </failure>
+        </testcase>
+        <testcase classname="vitest.test.mjs" name="shop &gt; reaches the pricing service" time="0.003820258">
+            <failure message="fetch failed" type="TypeError">
+TypeError: fetch failed
+Caused by: Error: bad port
+ ❯ vitest.test.mjs:12:57
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>

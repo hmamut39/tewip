@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="3" skipped="0" failures="2" errors="0" uuid="5f50bc56-4c70-4715-bd4c-9fb6048044b5" timestamp="2026-09-19T13:30:20.691+00:00" time="0.010">
+    <testsuite name="shop" tests="3" skipped="0" errors="0" failures="2">
+        <testcase name="tests::computes_the_total" classname="shop" timestamp="2026-09-19T13:30:20.691+00:00" time="0.005">
+            <failure message="thread &apos;tests::computes_the_total&apos; (2112) panicked at src/lib.rs:10:9" type="test failure with exit code 101">thread &apos;tests::computes_the_total&apos; (2112) panicked at src/lib.rs:10:9:
+assertion `left == right` failed
+  left: 3
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test tests::computes_the_total ... FAILED
+
+failures:
+
+failures:
+    tests::computes_the_total
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;tests::computes_the_total&apos; (2112) panicked at src/lib.rs:10:9:
+assertion `left == right` failed
+  left: 3
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+        <testcase name="tests::adds_numbers" classname="shop" timestamp="2026-09-19T13:30:20.692+00:00" time="0.008"/>
+        <testcase name="tests::reaches_the_pricing_service" classname="shop" timestamp="2026-09-19T13:30:20.697+00:00" time="0.004">
+            <failure message="thread &apos;tests::reaches_the_pricing_service&apos; (2115) panicked at src/lib.rs:15:53" type="test failure with exit code 101">thread &apos;tests::reaches_the_pricing_service&apos; (2115) panicked at src/lib.rs:15:53:
+called `Result::unwrap()` on an `Err` value: Os { code: 111, kind: ConnectionRefused, message: &quot;Connection refused&quot; }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</failure>
+            <system-out>
+running 1 test
+test tests::reaches_the_pricing_service ... FAILED
+
+failures:
+
+failures:
+    tests::reaches_the_pricing_service
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+</system-out>
+            <system-err>
+thread &apos;tests::reaches_the_pricing_service&apos; (2115) panicked at src/lib.rs:15:53:
+called `Result::unwrap()` on an `Err` value: Os { code: 111, kind: ConnectionRefused, message: &quot;Connection refused&quot; }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+</system-err>
+        </testcase>
+    </testsuite>
+</testsuites>

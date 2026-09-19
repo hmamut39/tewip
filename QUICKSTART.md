@@ -64,29 +64,39 @@ env:
   TRIAGE_LLM_PRICE_OUT: '2'      # per million output tokens, so every run prints what it cost
 ```
 
-## Not using Playwright? Any language or framework works
+## Not using Playwright? Every stack works
 
-Point the agent at a **JUnit XML** report instead of a Playwright blob report. Almost every test runner writes one:
+Point the agent at your test runner's **JUnit XML** report (or .NET's **TRX**) instead of a Playwright blob report. Each runner marked *verified* was run for real in CI (`fixtures/polyglot`) and its report is checked by the test suite on every change.
 
-| Runner | Flag or plugin |
-|---|---|
-| pytest (also runs `unittest` tests) | `pytest --junitxml=report.xml` |
-| Jest / Vitest | `jest-junit` reporter / `--reporter=junit` |
-| Maven / Gradle (JUnit, TestNG) | written by default under `target/surefire-reports` / `build/test-results` |
-| Go | `go test -v 2>&1 \| go-junit-report > report.xml` |
-| .NET | `dotnet test --logger junit` (JunitXml.TestLogger) |
-| Cypress | `mocha-junit-reporter` |
+| Stack | Runner | How to write the report | Status |
+|---|---|---|---|
+| **Node.js** | node:test (built in) | `node --test --test-reporter=junit --test-reporter-destination=report.xml` | verified |
+| Node.js, React, Vue, Angular, Next.js, NestJS, Express | Jest | `jest --reporters=default --reporters=jest-junit` | verified |
+| Vite, Vue, Svelte, Nuxt, React | Vitest | `vitest run --reporter=junit --outputFile=report.xml` | verified |
+| Node.js, Express | Mocha | `mocha --reporter mocha-junit-reporter` | verified |
+| **Python**, Django, Flask, FastAPI | pytest (also runs `unittest`) | `pytest --junitxml=report.xml` (retries: `pytest-rerunfailures`) | verified |
+| **Java**, Spring, Kotlin | JUnit 4/5, TestNG via Maven Surefire | written by default to `target/surefire-reports/` (retries: `rerunFailingTestsCount`) | verified |
+| Java, Kotlin, Android | Gradle | written by default to `build/test-results/test/` | same format as Surefire |
+| **Go** | gotestsum | `gotestsum --junitfile report.xml` | verified |
+| **.NET** (C#, F#), ASP.NET | xUnit, NUnit, MSTest | `dotnet test --logger trx` (native) or `--logger junit` | both verified |
+| **Ruby**, Rails | RSpec | `rspec --format RspecJunitFormatter --out report.xml` | verified |
+| **PHP**, Laravel, Symfony | PHPUnit | `phpunit --log-junit report.xml` | verified |
+| **Rust** | cargo-nextest | `[profile.ci.junit]` in `.config/nextest.toml` | verified |
+| End-to-end | Cypress, WebdriverIO | `mocha-junit-reporter` / `@wdio/junit-reporter` | JUnit format |
+| End-to-end | **Playwright** | blob reporter (step 1) — adds traces, selector drift and verified fixes | verified on 5 real projects |
 
 ```yaml
       - name: triage-agent
         if: always()
         uses: hmamut39/triage-agent@main
         with:
-          junit-report: report.xml     # a file, or a directory of them
+          junit-report: report.xml     # a file, or a directory of them (.xml and .trx)
           suite: unit                  # only needed when one workflow triages several suites
 ```
 
-It reads the failure text, retries and each test's history exactly as for Playwright, and gives the same comment, board, grouped environment issue, corrections and editor queries. What it cannot do without Playwright's traces is look at the page, so it does not diagnose renamed selectors or fix them.
+What it reads from any of these: the failure text, retries, and each test's history. From that it tells apart a wrong value (a real bug once the test has a passing history), an unreachable service (environment), a data collision, and a test that failed then passed on a retry (timing), in the wording each language uses: `expected: <4> but was: <3>` in Java, `got 3, want 4` in Go, `AssertionError: 3 != 4` in Python, `Expected: 4 / Actual: 3` in .NET, and so on. What it cannot do without Playwright's traces is look at the page, so selector drift and automatic fixes stay Playwright-only.
+
+A wrong value on a test's **first** recorded failure stays undecided rather than guessed: one failure alone does not show whether the test was reliable before. It becomes a real-bug diagnosis once the test's history shows it passing and then failing the same way.
 
 When one workflow triages several suites (say `unit` and `e2e`), give each a `suite` name: each then keeps its own history and its own comment, and corrections name the suite, as in `/triage TIMING unit#2 flaky on CI`.
 

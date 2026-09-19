@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="3" failures="2" errors="0" time="0.002357">
+	<testsuite tests="3" failures="2" time="0.002000" name="example.com/shop" timestamp="2026-09-19T13:30:48Z">
+		<properties>
+			<property name="go.version" value="go1.22.12 linux/amd64"></property>
+		</properties>
+		<testcase classname="example.com/shop" name="TestComputesTheTotal" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestComputesTheTotal&#xA;    shop_test.go:16: got 3, want 4&#xA;--- FAIL: TestComputesTheTotal (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="example.com/shop" name="TestReachesThePricingService" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestReachesThePricingService&#xA;    shop_test.go:23: dial tcp 127.0.0.1:9: connect: connection refused&#xA;--- FAIL: TestReachesThePricingService (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="example.com/shop" name="TestAddsNumbers" time="0.000000"></testcase>
+	</testsuite>
+</testsuites>

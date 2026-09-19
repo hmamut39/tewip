@@ -55,6 +55,17 @@ Received: 3
     assert.match(record.errorMessage, /Expected: 4\nReceived: 3/);
   });
 
+  it('drops what is left of terminal colour codes, so the rules read the plain message', () => {
+    const xml = `<testsuites><testsuite name="VotePill" file="components/VotePill.test.tsx">
+      <testcase classname="VotePill" name="shows the score" time="0.1"><failure><![CDATA[Error: [2mexpect([22m[31melement[39m[2m).toHaveTextContent()[22m
+
+Expected: [32m"12"[39m
+Received: [31m"11"[39m]]></failure></testcase></testsuite></testsuites>`;
+    const [record] = importJunit(report(xml), META).records;
+    assert.match(record.errorMessage, /expect\(element\)\.toHaveTextContent\(\)/);
+    assert.match(record.errorMessage, /Expected: "12"\nReceived: "11"/);
+  });
+
   it('reads Maven Surefire retries: a flaky failure followed by a pass is two attempts, one failed', () => {
     const xml = `<testsuite name="com.shop.CheckoutTest"><testcase name="pays" classname="com.shop.CheckoutTest" time="1.5">
       <flakyFailure message="Read timed out" type="java.net.SocketTimeoutException"><stackTrace>java.net.SocketTimeoutException: Read timed out

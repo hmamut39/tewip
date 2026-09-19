@@ -32,7 +32,12 @@ const FAILURE = new Set(['failure', 'error']);
 const RETRY_FAILURE = new Set(['flakyFailure', 'flakyError', 'rerunFailure', 'rerunError']);
 
 /** A failure's message and detail; runners disagree on which of the two holds what. */
-function failure(message: string, detail: string): Attempt {
+function failure(rawMessage: string, rawDetail: string): Attempt {
+  // Terminal colour codes: XML cannot hold the escape character, so runners often write what is left
+  // of them ("[2mexpect([22m"); both forms are noise to the rules.
+  const plain = (s: string) => s.replace(/?\[(?:\d{1,3};)*\d{1,3}m/g, '');
+  const message = plain(rawMessage);
+  const detail = plain(rawDetail);
   const head = message.trim() || detail.split('\n').find((l) => l.trim() !== '') || 'failed';
   const stack = detail.trim();
   // The full detail goes into the message too: outside Playwright the useful part (the assertion,

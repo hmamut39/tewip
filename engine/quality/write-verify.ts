@@ -116,12 +116,23 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
     mutant = mutate(draft);
   }
   if ('problem' in mutant) return { draft, outcome: { kind: 'rejected', reason: `could not prove it can fail: ${mutant.problem}`, repairs, passedReliably: true } };
-  let broken: RunResult;
-  try {
-    writeFileSync(file, mutant.code, 'utf8');
-    broken = run(ctx.framework, file);
-  } finally {
-    writeFileSync(file, draft.code, 'utf8');
+  const runBroken = (code: string): RunResult => {
+    try {
+      writeFileSync(file, code, 'utf8');
+      return run(ctx.framework, file);
+    } finally {
+      writeFileSync(file, draft.code, 'utf8');
+    }
+  };
+  let broken = runBroken(mutant.code);
+  // A break that does not compile (a type error, a syntax slip) proves nothing: ask once for another,
+  // showing the compiler's complaint.
+  if (!broken.passed && DID_NOT_RUN.test(broken.output)) {
+    log('    the deliberate break did not compile; asking once more');
+    draft = await remutate(model, draft, `the broken version did not compile or run: ${failureHead(broken.output)}`);
+    const again = mutate(draft);
+    if ('problem' in again) return { draft, outcome: { kind: 'rejected', reason: `could not prove it can fail: ${again.problem}`, repairs, passedReliably: true } };
+    broken = runBroken(again.code);
   }
   if (broken.environment) return { draft, outcome: { kind: 'rejected', reason: 'the test runner broke while checking the deliberate break (environment), so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
   if (broken.skipped) return { draft, outcome: { kind: 'rejected', reason: 'the broken version was skipped, so the check was not proven', repairs, passedReliably: true } };

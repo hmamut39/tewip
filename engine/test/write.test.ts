@@ -253,3 +253,20 @@ describe('when the test runner itself breaks', () => {
     assert.doesNotMatch((outcome as { reason: string }).reason, /flaky/);
   });
 });
+
+describe('a deliberate break that does not compile', () => {
+  it('asks once for another, and keeps the test when that one fails properly', async () => {
+    const answers: object[] = [draft({ find: "'3 results'", replace: '{}' }), { mutation: { find: "'3 results'", replace: "'4 results'" } }];
+    const model = { model: 'fake', complete: async () => JSON.stringify(answers.shift()) } as LlmClient;
+    const file = join(mkdtempSync(join(tmpdir(), 'tewip-run-')), 't.spec.ts');
+    const run = (_f: Framework, path: string): RunResult => {
+      const code = readFileSync(path, 'utf8');
+      if (code.includes('getByText({})')) return { passed: false, output: "Error: t.spec.ts:3:30 - error TS2345: Argument of type '{}' is not assignable" };
+      if (code.includes("'4 results'")) return { passed: false, output: 'Error: expect(locator).toBeVisible() failed' };
+      return { passed: true, output: '1 passed' };
+    };
+    const { outcome } = await writeAndVerify(model, { framework: FRAMEWORK, fileName: 'x', pages: [], feature: 'f' }, SCENARIO, file, { runs: 1, repairs: 0, run });
+    assert.equal(outcome.kind, 'kept');
+    assert.equal((outcome as { mutation: string }).mutation, "'3 results' → '4 results'");
+  });
+});

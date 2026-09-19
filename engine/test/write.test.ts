@@ -1,0 +1,151 @@
+// Unit tests for `tewip write`: finding the project's framework, and the rules that decide whether
+// a drafted test is kept. The model and the test runs are faked; what is tested is the judging.
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it } from 'node:test';
+import type { LlmClient } from '../llm/client.ts';
+import { chooseFramework, detectFrameworks, type Framework } from '../quality/frameworks.ts';
+import { mutate, type Draft, type Scenario } from '../quality/write.ts';
+import { writeAndVerify, type RunResult } from '../quality/write-verify.ts';
+
+function files(tree: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), 'tewip-write-'));
+  for (const [path, content] of Object.entries(tree)) {
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
+  return root;
+}
+
+describe('finding the framework to write in', () => {
+  it('finds Playwright in a subfolder and pytest at the root, browser tests first', () => {
+    const root = files({
+      'e2e/playwright.config.ts': "export default { testDir: './tests' };",
+      'e2e/tests/app.spec.ts': "test('x', () => {});",
+      'requirements.txt': 'pytest\nfastapi\n',
+      'tests/test_api.py': 'def test_x(): pass',
+    });
+    const found = detectFrameworks(root);
+    assert.deepEqual(found.map((f) => f.id), ['playwright', 'pytest']);
+    const pw = chooseFramework(found)!;
+    assert.equal(pw.testDir, join(root, 'e2e', 'tests'));
+    assert.equal(pw.fileFor('LS-002'), 'tewip-ls-002.spec.ts');
+    assert.match(pw.command(join(pw.testDir, 'tewip-ls-002.spec.ts')), /^npx playwright test "tests\/tewip-ls-002\.spec\.ts" --retries=0/);
+    assert.equal(chooseFramework(found, 'pytest')!.fileFor('LS-002'), 'test_tewip_ls_002.py');
+  });
+
+  it('reads Selenium on Maven, with a class name that matches the file', () => {
+    const root = files({ 'pom.xml': '<artifactId>selenium-java</artifactId>', 'src/test/java/com/shop/LoginTest.java': 'class LoginTest {}' });
+    const f = chooseFramework(detectFrameworks(root))!;
+    assert.equal(f.id, 'maven');
+    assert.equal(f.label, 'JUnit via Maven with Selenium (Java)');
+    assert.equal(f.browser, true);
+    assert.equal(f.fileFor('LS-002'), 'TewipLs002Test.java');
+    assert.match(f.command(join(f.testDir, 'TewipLs002Test.java')), /-Dtest=TewipLs002Test /);
+  });
+
+  it('finds Cypress, and never takes its own earlier tests as the style example', () => {
+    const root = files({ 'cypress.config.ts': '', 'cypress/e2e/tewip-a.cy.ts': '', 'cypress/e2e/login.cy.ts': '' });
+    const f = chooseFramework(detectFrameworks(root))!;
+    assert.equal(f.id, 'cypress');
+    assert.equal(f.example, join(root, 'cypress', 'e2e', 'login.cy.ts'));
+  });
+
+  it('says nothing was found rather than guessing', () => {
+    assert.equal(chooseFramework(detectFrameworks(files({ 'README.md': '' }))), null);
+  });
+});
+
+const CODE = "test('search', async ({ page }) => {\n  await page.goto('/library');\n  await expect(page.getByText('3 results')).toBeVisible();\n});\n";
+const draft = (mutation: Draft['mutation'], code = CODE): Draft => ({ code, checks: 'three results show', mutation });
+
+describe('the broken-on-purpose version', () => {
+  it('changes the expected value inside the check', () => {
+    const m = mutate(draft({ find: "'3 results'", replace: "'4 results'" }));
+    assert.ok('code' in m && m.code.includes("getByText('4 results')"));
+  });
+
+  it('refuses a change outside a check, a missing piece, or no change at all', () => {
+    assert.match((mutate(draft({ find: "'/library'", replace: "'/home'" })) as { problem: string }).problem, /not in a check/);
+    assert.match((mutate(draft({ find: 'nowhere', replace: 'x' })) as { problem: string }).problem, /exactly once/);
+    assert.match((mutate(draft({ find: "'3 results'", replace: "'3 results'" })) as { problem: string }).problem, /changes nothing/);
+  });
+});
+
+const FRAMEWORK = { id: 'playwright', label: 'Playwright', browser: true, cwd: '.', testDir: '.', example: null, fileFor: (id: string) => id, command: () => '' } as Framework;
+const SCENARIO: Scenario = { id: 'LS-002', title: 'search', type: 'functional', priority: 'P0', preconditions: '', steps: [], expected: 'three results', automate: true, covered_by: '', grounded_on: '' };
+
+/** A model that answers from a queue, and a runner that passes or fails by what the file contains. */
+function fakes(answers: object[], passes: (code: string) => boolean) {
+  const model: LlmClient = { model: 'fake', complete: async () => JSON.stringify(answers.shift()) } as LlmClient;
+  const dir = mkdtempSync(join(tmpdir(), 'tewip-run-'));
+  const file = join(dir, 'tewip-ls-002.spec.ts');
+  const run = (_f: Framework, path: string): RunResult => ({ passed: passes(readFileSync(path, 'utf8')), output: 'Error: expect(locator).toBeVisible() failed' });
+  const go = (runs = 3) => writeAndVerify(model, { framework: FRAMEWORK, fileName: 'x', pages: [], feature: 'f' }, SCENARIO, file, { runs, repairs: 2, run });
+  return { go, file };
+}
+
+describe('deciding whether a drafted test is kept', () => {
+  const GOOD = draft({ find: "'3 results'", replace: "'4 results'" });
+
+  it('keeps a test that passes every run and fails when its check is broken', async () => {
+    const { go, file } = fakes([GOOD], (code) => code.includes("'3 results'"));
+    const { outcome } = await go();
+    assert.equal(outcome.kind, 'kept');
+    assert.equal(readFileSync(file, 'utf8'), CODE, 'the file ends as the real test, not the broken one');
+  });
+
+  it('drops a test that still passes with its check broken: it cannot catch the bug', async () => {
+    const { go } = fakes([GOOD], () => true);
+    const { outcome } = await go();
+    assert.equal(outcome.kind, 'rejected');
+    assert.match((outcome as { reason: string }).reason, /still passes with its check broken/);
+  });
+
+  it('drops a flaky test', async () => {
+    let n = 0;
+    const { go } = fakes([GOOD], () => ++n !== 2);
+    assert.match(((await go()).outcome as { reason: string }).reason, /flaky/);
+  });
+
+  it('repairs from the real error, and reports a possible bug instead of weakening the check', async () => {
+    const repaired = { ...draft({ find: "'3 results'", replace: "'4 results'" }, CODE.replace('/library', '/library?q=a')), fault: 'test', reason: 'wrong path' };
+    const kept = fakes([draft({ find: "'3 results'", replace: "'4 results'" }, CODE.replace('/library', '/lib')), repaired], (code) => code.includes('?q=a') && code.includes("'3 results'"));
+    const k = await kept.go();
+    assert.equal(k.outcome.kind, 'kept');
+    assert.equal((k.outcome as { repairs: number }).repairs, 1);
+
+    const bug = fakes([GOOD, { ...GOOD, fault: 'app', reason: 'the page shows 0 results for a word the library has' }], () => false);
+    const b = await bug.go();
+    assert.equal(b.outcome.kind, 'possible-bug');
+    assert.match((b.outcome as { reason: string }).reason, /0 results/);
+  });
+
+  it('gives up after the allowed repairs and says so', async () => {
+    const { go } = fakes([GOOD, { ...GOOD, fault: 'test', reason: '' }, { ...GOOD, fault: 'test', reason: '' }], () => false);
+    assert.match(((await go()).outcome as { reason: string }).reason, /still failing after 2 repair/);
+  });
+});
+
+describe('a run where every test skipped', () => {
+  it('is not a pass, in any runner', async () => {
+    const { onlySkipped } = await import('../quality/write-verify.ts');
+    assert.equal(onlySkipped('  1 skipped\n'), true);
+    assert.equal(onlySkipped('1 skipped, 1 passed'), false);
+    assert.equal(onlySkipped('0 passing (2ms)\n  1 pending'), true);
+    assert.equal(onlySkipped('Tests run: 1, Failures: 0, Errors: 0, Skipped: 1'), true);
+    assert.equal(onlySkipped('Tests run: 2, Failures: 0, Errors: 0, Skipped: 1'), false);
+    assert.equal(onlySkipped('1 passed (3.1s)'), false);
+  });
+
+  it('never counts as proof that a test can fail', async () => {
+    const answers = [draft({ find: "'3 results'", replace: "'4 results'" })];
+    const model = { model: 'fake', complete: async () => JSON.stringify(answers.shift()) } as LlmClient;
+    const file = join(mkdtempSync(join(tmpdir(), 'tewip-run-')), 't.spec.ts');
+    const run = (_f: Framework, path: string): RunResult => (readFileSync(path, 'utf8').includes("'3 results'") ? { passed: true, output: '1 passed' } : { passed: false, skipped: true, output: '1 skipped' });
+    const { outcome } = await writeAndVerify(model, { framework: FRAMEWORK, fileName: 'x', pages: [], feature: 'f' }, SCENARIO, file, { runs: 1, repairs: 0, run });
+    assert.match((outcome as { reason: string }).reason, /broken version was skipped/);
+  });
+});

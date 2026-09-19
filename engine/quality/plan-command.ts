@@ -1,5 +1,5 @@
 // `tewip plan`: gather the facts, ask the writing model for a plan, render it, and keep it in
-// .tewip/plans so the team can review it and `tewip write` can build tests from it later.
+// .tewip/plans (Markdown to review, JSON for `tewip write` to build tests from).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { usageLine } from '../llm/usage.ts';
@@ -28,6 +28,8 @@ export async function runPlan(cmd: PlanCommand): Promise<void> {
   const out = cmd.out ?? join(cmd.root, '.tewip', 'plans', `${slug(plan.title)}.md`);
   mkdirSync(join(out, '..'), { recursive: true });
   writeFileSync(out, markdown, 'utf8');
+  // The same plan as data, for `tewip write`: its scenarios, and the pages it read.
+  writeFileSync(out.replace(/\.md$/, '') + '.json', JSON.stringify({ plan, feature: facts.feature, urls: facts.pages.map((p) => p.url), model: model.model }, null, 2), 'utf8');
   console.log(markdown);
   console.error(`\nSaved to ${out}\n${usageLine()}`);
 }

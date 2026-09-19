@@ -2,12 +2,14 @@
 // Tewip on the command line. One command, a few verbs:
 //   tewip explain <report>          why each test in a report failed, and what to do next
 //   tewip ci <owner/repo> [--pr N]  the latest Tewip report from a repository's CI
+//   tewip plan "<feature>"          a test plan grounded in the project
+//   tewip write [--only IDs]        tests for a plan's scenarios, kept only when verified
 //   tewip mcp                       serve Tewip to an AI assistant or editor over MCP (stdio)
 //   tewip --version | --help
 // The verbs reuse the same code as the GitHub Action and the MCP server: one engine, many outlets.
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 // cli/ in the source tree, dist/cli/ in the published package: package.json is one or two levels up.
 const ROOT = [join(import.meta.dirname, '..'), join(import.meta.dirname, '..', '..')].find((d) => existsSync(join(d, 'package.json'))) ?? join(import.meta.dirname, '..');
@@ -26,6 +28,12 @@ Usage:
   tewip plan "<feature>" [--diff main...HEAD] [--url <page> ...] [--out plan.md]
                                     Write a test plan grounded in the project: its existing tests,
                                     the change, the live pages and Tewip's failure history.
+  tewip write [--plan plan.json] [--only LS-002,LS-003] [--framework playwright] [--runs 3]
+                                    Write tests for the plan's scenarios in the project's own
+                                    framework (Playwright, Cypress, WebdriverIO, Jest, Vitest,
+                                    pytest, JUnit, .NET, Go). Keeps a test only if it passes every
+                                    run and fails when its check is broken on purpose.
+      --move-to <folder>            Move kept tests there afterwards, leaving the project as it was.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -63,6 +71,22 @@ async function main(): Promise<void> {
       const urls = args.flatMap((a, i) => (args[i - 1] === '--url' ? [a] : []));
       const { runPlan } = await import('../engine/quality/plan-command.ts');
       await runPlan({ feature, root: process.cwd(), diffRange: flag(args, 'diff'), urls, out: flag(args, 'out') });
+      return;
+    }
+    case 'write': {
+      const number = (name: string, fallback: number) => (flag(args, name) === undefined ? fallback : Math.max(0, Number(flag(args, name)) || 0));
+      const { runWrite } = await import('../engine/quality/write-command.ts');
+      await runWrite({
+        root: process.cwd(),
+        plan: flag(args, 'plan'),
+        only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+        framework: flag(args, 'framework'),
+        urls: args.flatMap((a, i) => (args[i - 1] === '--url' ? [a] : [])),
+        runs: Math.max(1, number('runs', 3)),
+        repairs: number('repairs', 2),
+        max: Math.max(1, number('max', 10)),
+        moveTo: flag(args, 'move-to') ? resolve(flag(args, 'move-to')!) : undefined,
+      });
       return;
     }
     case 'mcp':

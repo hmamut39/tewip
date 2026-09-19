@@ -126,6 +126,19 @@ Point the entry at this checkout with an absolute path (the server resolves its 
 
 Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are flaky in checkout?"*, *"is the main branch safe to release?"*. Every tool is read-only, and `github_ci_report` reads the report the Action uploaded, so you can ask about a repository's CI **without cloning it or opening the Actions page** (it uses your `gh` login).
 
+## Plan and write tests (Phases 6 and 7, new)
+
+Run these inside your project. Both need `OPENAI_API_KEY`, and both print what they cost.
+
+```bash
+tewip plan "Checkout: a signed-in shopper pays by card and gets a receipt" --url http://localhost:3000/checkout
+tewip write                        # tests for the plan's "to automate next" scenarios
+tewip write --only CO-002,CO-004 --framework pytest
+```
+
+- **`tewip plan`** reads what is really there: the tests you already have (in any language), the change (`--diff main...HEAD`), the live pages (what a user sees on each page, via Playwright), and the failures Tewip has diagnosed in this project before. The plan lists risks and scenarios by priority. A claim that a scenario is "already covered" is checked against your real test names, and dropped if no such test exists. Saved to `.tewip/plans/` as Markdown to review and JSON for `write`.
+- **`tewip write`** writes each scenario as a test in **your** framework and style: Playwright, Cypress, WebdriverIO, Jest, Vitest, pytest (with Selenium or Playwright), JUnit on Maven or Gradle (Selenium, Spring Boot), .NET or Go. It copies the style of an existing test and uses only elements seen on the real page. Then it runs the test. A draft is **kept only if** it passes every run (3 by default) **and** fails once its main check is broken on purpose, because a test that cannot fail is worse than no test. A failing draft is repaired from the real error, twice at most. If the test looks right and the app does something else, Tewip reports a **possible bug** instead of weakening the test until it passes. Kept tests are new files beside yours, for you to review and commit; nothing is committed, and no application code is touched.
+
 ## Where it has been tried
 
 | Project | How | Result |

@@ -150,3 +150,38 @@ describe('real-world variants seen in public issues', () => {
     assert.equal(driverStaleElement('org.openqa.selenium.TimeoutException: Expected condition failed: waiting for element (<body>) to become stale'), null);
   });
 });
+
+describe('component tests: Testing Library, Vue Test Utils, jest-dom, Jasmine', () => {
+  const CASES: Array<[string, string | null]> = [
+    ['TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Add to my account"', "getByRole('button', { name: 'Add to my account' })"],
+    ['TestingLibraryElementError: Unable to find an accessible element with the role "img" and name `/^included$/i`', "getByRole('img', { name: /^included$/i })"],
+    ['TestingLibraryElementError: Unable to find role="button" and name "Continue"', "getByRole('button', { name: 'Continue' })"],
+    ['Unable to find role="alert"', "getByRole('alert')"],
+    ['TestingLibraryElementError: Unable to find an element with the text: /2 albums/. This could be because the text is broken up by multiple elements.', 'getByText(/2 albums/)'],
+    ['TestingLibraryElementError: Unable to find an element with the text: Not A Member', "getByText('Not A Member')"],
+    ['TestingLibraryElementError: Unable to find an element by: [data-testid="save-btn"]', "getByTestId('save-btn')"],
+    ['TestingLibraryElementError: Unable to find a label with the text of: Previous books', "getByLabel('Previous books')"],
+    ['Unable to find an element with the placeholder text of: /search/i', 'getByPlaceholder(/search/i)'],
+    ['Error: [vue-test-utils]: find did not return input[type="text"], cannot call setValue() on empty Wrapper', 'input[type="text"]'],
+    ['Error: Cannot call trigger on an empty DOMWrapper.', null],
+    ['received value must be an HTMLElement or an SVGElement.\nReceived has type:  Null', null],
+  ];
+  for (const [message, locator] of CASES) {
+    it(`not found: ${message.slice(0, 70).replace(/\n/g, ' ')}`, () => {
+      assert.equal(isElementNotFound(message), true);
+      assert.equal(extractLocator(message), locator);
+    });
+  }
+
+  it('gives drift a name to look for on the page', () => {
+    assert.equal(locatorName("getByRole('button', { name: 'Add to my account' })"), 'Add to my account');
+    assert.equal(locatorName("getByLabel('Previous books')"), 'Previous books');
+  });
+
+  it("reads Jasmine's wrong value, also inside an object, and not a spy's call count", async () => {
+    const { valueMismatch } = await import('../error-parse.ts');
+    assert.deepEqual(valueMismatch("Error: Expected $[0] = 'Dashboard' to equal 'Screenshots'."), { expected: "'Screenshots'", received: "'Dashboard'" });
+    assert.deepEqual(valueMismatch("Expected 'Off' to equal 'Of'."), { expected: "'Of'", received: "'Off'" });
+    assert.equal(valueMismatch('Expected spy deliver to have been called 4 times. It was called 3 times.'), null);
+  });
+});

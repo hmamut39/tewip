@@ -1,9 +1,11 @@
-// Deterministic readers for the error wording of browser tools other than Playwright: Selenium
-// (Java, Python, JavaScript, C#), WebdriverIO and Cypress. Each tool says "element not found",
+// Deterministic readers for the error wording of browser and component-test tools other than
+// Playwright: Selenium (Java, Python, JavaScript, C#), WebdriverIO, Cypress, Testing Library (React,
+// Vue, Angular, Svelte), Vue Test Utils and jest-dom. Each tool says "element not found",
 // "something else took the click" and "the element went stale" in its own words; these map them
 // onto the same signals the rules read from Playwright. None of them guess: no match, no signal.
-// The patterns were checked against 264 real messages pasted into public GitHub issues and pull
-// requests (old and new driver versions, every Selenium language binding).
+// The patterns were checked against real messages pasted into public GitHub issues and pull
+// requests: 264 from browser tools (old and new driver versions, every Selenium binding) and 260
+// from component tests (Testing Library, Vue Test Utils, jest-dom, Jasmine).
 
 /** The element was looked for and never found, as each tool reports it, with the locator used. */
 const NOT_FOUND: Array<{ pattern: RegExp; locator: (m: RegExpMatchArray) => string }> = [
@@ -31,10 +33,29 @@ const NOT_FOUND: Array<{ pattern: RegExp; locator: (m: RegExpMatchArray) => stri
   { pattern: /Expected to find element:\s*[`']?([^`'\n]+?)[`']?(?:\s+containing text:\s*'((?:[^'\\]|\\.)*)')?,?\s+but never found it/, locator: (m) => (m[2] !== undefined ? `cy.contains('${m[1]}', '${m[2]}')` : m[1]) },
   // Cypress: Expected to find content: 'Save' [within the element: <h1>] but never did.
   { pattern: /Expected to find content:\s*'((?:[^'\\]|\\.)*)'[\s\S]{0,300}?but never did/, locator: (m) => `cy.contains('${m[1]}')` },
+  // Testing Library (React, Vue, Angular, Svelte component tests), written as the same getBy... query
+  // Playwright uses, so the drift rules can read its name: Unable to find an accessible element with
+  // the role "button" and name "Save".
+  { pattern: /Unable to find an accessible element with the role "([^"]+)"(?: and name (?:"([^"\n]*)"|`([^`\n]*)`))?/, locator: (m) => (m[2] ?? m[3]) !== undefined ? `getByRole('${m[1]}', { name: ${arg(m[2] ?? m[3])} })` : `getByRole('${m[1]}')` },
+  // Older Testing Library: Unable to find role="button" and name "Save"
+  { pattern: /Unable to find role="([^"]+)"(?: and name (?:"([^"\n]*)"|`([^`\n]*)`))?/, locator: (m) => (m[2] ?? m[3]) !== undefined ? `getByRole('${m[1]}', { name: ${arg(m[2] ?? m[3])} })` : `getByRole('${m[1]}')` },
+  { pattern: /Unable to find an element by: \[data-testid="([^"]+)"\]/, locator: (m) => `getByTestId('${m[1]}')` },
+  { pattern: /Unable to find a label with the text of: (.+?)\.?$/m, locator: (m) => `getByLabel(${arg(m[1])})` },
+  { pattern: /Unable to find an element with the (placeholder text|alt text|title|display value)(?: of)?: (.+?)\.?$/m, locator: (m) => `getBy${{ 'placeholder text': 'Placeholder', 'alt text': 'AltText', title: 'Title', 'display value': 'DisplayValue' }[m[1]]}(${arg(m[2])})` },
+  { pattern: /Unable to find an element with the text: (.+?)\.?(?: This could be| \.\.\.|$)/m, locator: (m) => `getByText(${arg(m[1])})` },
+  // Vue Test Utils 1: [vue-test-utils]: find did not return button.save, cannot call trigger() on empty Wrapper
+  { pattern: /find did not return (.+?), cannot call/, locator: (m) => m[1] },
 ];
 
-/** A no-such-element exception that printed no locator (Selenium's Python bindings often do). */
-const NOT_FOUND_BARE = /\bNoSuchElement(?:Exception|Error)\b|\bno such element\b/i;
+/** A Testing Library argument: a /regex/ stays as written, text is quoted. */
+const arg = (s: string) => (/^\/.*\/[a-z]*$/.test(s.trim()) ? s.trim() : `'${s.trim().replaceAll("'", "\\'")}'`);
+
+/**
+ * Not found, with no locator printed: Selenium's Python bindings, Vue Test Utils 2 ("Cannot call text
+ * on an empty DOMWrapper") and jest-dom given a query that found nothing ("received value must be an
+ * HTMLElement", "element could not be found in the document").
+ */
+const NOT_FOUND_BARE = /\bNoSuchElement(?:Exception|Error)\b|\bno such element\b|Cannot call \w+ on an empty (?:DOM)?Wrapper|received value must be an HTMLElement or an SVGElement|element could not be found in the document/i;
 
 export function driverElementNotFound(message: string): boolean {
   return NOT_FOUND_BARE.test(message) || NOT_FOUND.some(({ pattern }) => pattern.test(message));

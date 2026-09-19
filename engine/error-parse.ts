@@ -58,6 +58,9 @@ const MISMATCH_PATTERNS: Array<{ pattern: RegExp; expected: number; received: nu
   { pattern: /Failed asserting that (.+?) (?:is identical to|is equal to|matches expected) (.+?)\.?$/m, expected: 2, received: 1 },
   // Chai (Mocha): "expected 3 to equal 4".
   { pattern: /expected (.+?) to (?:deeply )?(?:equal|be|eql) (.+)$/m, expected: 2, received: 1 },
+  // Jasmine (Angular's Karma default): "Expected 3 to equal 4." or, inside an object or array,
+  // "Expected $[0] = 'Dashboard' to equal 'Screenshots'.".
+  { pattern: /^\s*(?:Error: )?Expected (?:\$[^\s=]*\s*=\s*)?(.+?) to (?:equal|be) (.+?)\.$/m, expected: 2, received: 1 },
 ];
 
 /** A comparison that found the value (or element) but not the expected one, in any language. */

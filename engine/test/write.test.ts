@@ -127,6 +127,10 @@ describe('deciding whether a drafted test is kept', () => {
     const u = await unfounded.go();
     assert.equal(u.outcome.kind, 'rejected');
     assert.match((u.outcome as { reason: string }).reason, /could not quote/);
+
+    // A bare label is in every failure: it is not evidence.
+    const bare = fakes([GOOD, { ...GOOD, fault: 'app', reason: 'no pressed state', observed: 'Error:' }], () => false);
+    assert.equal((await bare.go()).outcome.kind, 'rejected');
   });
 
   it('gives up after the allowed repairs and says so', async () => {

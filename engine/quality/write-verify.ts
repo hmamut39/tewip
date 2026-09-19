@@ -20,6 +20,8 @@ export interface RunResult {
  * a pass. Playwright, pytest and Jest print "1 skipped", Mocha "1 pending", Maven "Skipped: 1".
  */
 export function onlySkipped(output: string): boolean {
+  const karma = output.match(/Executed (\d+) of (\d+) \(skipped (\d+)\)/);
+  if (karma) return karma[1] === '0';
   const maven = output.match(/Tests run: (\d+), Failures: 0, Errors: 0, Skipped: (\d+)/);
   if (maven) return maven[1] === maven[2] && maven[1] !== '0';
   return /\b[1-9]\d* (?:skipped|pending)\b/i.test(output) && !/\b[1-9]\d* pass(?:ed|ing)\b/i.test(output);
@@ -34,7 +36,7 @@ function pageAtFailure(output: string, cwd: string): string {
 }
 
 export function runTest(framework: Framework, file: string, timeoutMs = 180_000): RunResult {
-  const r = spawnSync(framework.command(file), { cwd: framework.cwd, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
+  const r = spawnSync(framework.command(file), { cwd: framework.cwd, env: { ...process.env, ...framework.env }, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
   const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.trim();
   if (r.status === 0 && onlySkipped(output)) return { passed: false, skipped: true, output: `The test was skipped, so nothing was checked. Make it run here.\n${output.slice(-3000)}` };
   return { passed: r.status === 0, output: output.slice(-6000) + (r.status === 0 ? '' : pageAtFailure(output, framework.cwd)) };

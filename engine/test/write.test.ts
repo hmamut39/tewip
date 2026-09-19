@@ -144,6 +144,8 @@ describe('a run where every test skipped', () => {
     assert.equal(onlySkipped('Tests run: 1, Failures: 0, Errors: 0, Skipped: 1'), true);
     assert.equal(onlySkipped('Tests run: 2, Failures: 0, Errors: 0, Skipped: 1'), false);
     assert.equal(onlySkipped('1 passed (3.1s)'), false);
+    assert.equal(onlySkipped('Chrome Headless 153 (Windows 10): Executed 0 of 1 (skipped 1) SUCCESS'), true);
+    assert.equal(onlySkipped('Chrome Headless 153 (Windows 10): Executed 2 of 3 (skipped 1) SUCCESS'), false);
   });
 
   it('never counts as proof that a test can fail', async () => {

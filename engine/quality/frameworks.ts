@@ -23,6 +23,23 @@ export interface Framework {
   fileFor(id: string): string;
   /** The shell command that runs just this test file, from `cwd`. */
   command(file: string): string;
+  /** Extra environment for the runner, e.g. a browser for Karma. */
+  env?: Record<string, string>;
+}
+
+/**
+ * A Chrome for Karma when CHROME_BIN is not set: the Chromium Playwright installed, if any. Karma
+ * cannot start without one, and many machines have Playwright's browsers but no Chrome.
+ */
+function karmaChrome(): Record<string, string> {
+  if (process.env.CHROME_BIN) return {};
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH ?? (process.platform === 'win32' ? join(process.env.LOCALAPPDATA ?? '', 'ms-playwright') : process.platform === 'darwin' ? join(home, 'Library', 'Caches', 'ms-playwright') : join(home, '.cache', 'ms-playwright'));
+  if (!existsSync(root)) return {};
+  const builds = readdirSync(root).filter((d) => /^chromium-\d+$/.test(d)).sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+  const exe = ['chrome-win64/chrome.exe', 'chrome-win/chrome.exe', 'chrome-linux64/chrome', 'chrome-linux/chrome', 'chrome-mac/Chromium.app/Contents/MacOS/Chromium', 'chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium'];
+  for (const build of builds) for (const e of exe) if (existsSync(join(root, build, e))) return { CHROME_BIN: join(root, build, e) };
+  return {};
 }
 
 const SKIP = new Set(['node_modules', '.git', '.tewip', 'dist', 'build', 'target', 'venv', '.venv', '__pycache__', 'bin', 'obj', 'vendor']);

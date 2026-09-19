@@ -20,6 +20,7 @@ import { loadCorrections, saveCorrections } from '../engine/corrections.ts';
 import { readCiContext } from './context.ts';
 import { readCorrections } from './corrections.ts';
 import { autofixAndOpenPr } from './fix-pr.ts';
+import { gate, gateSummary, writeGateOutputs } from './gate.ts';
 import { GitHub, type IssueRef } from './github.ts';
 import { postEnvIssue, postPrComment, prCommentBody, writeStepSummary } from './publish.ts';
 
@@ -46,12 +47,14 @@ async function main(): Promise<void> {
     // Any other framework: a JUnit XML report. No traces, so no page evidence and no selector fixes.
     if (!existsSync(ctx.junitReport)) {
       log(`no JUnit report at ${ctx.junitReport}. Point junit-report at the file your test runner writes (e.g. pytest --junitxml=report.xml)`);
+      if (ctx.gate) process.exitCode = 1;
       return;
     }
     imported = importJunit(ctx.junitReport, meta);
   } else {
     if (!existsSync(ctx.blobDir)) {
       log(`no blob report at ${ctx.blobDir}. Add Playwright's blob reporter: reporter: [['list'], ['blob']], or set junit-report for other frameworks`);
+      if (ctx.gate) process.exitCode = 1; // a gate with nothing to read cannot vouch for the run
       return;
     }
     imported = importBlobReportDir(ctx.blobDir, meta, join(ctx.outDir, 'files'));
@@ -104,6 +107,14 @@ async function main(): Promise<void> {
   writeFileSync(history.runs, runs.map((s) => JSON.stringify(s)).join('\n') + '\n', 'utf8');
   writeFileSync(history.triage, [...pastRecords, ...diagnosed].filter((r) => kept.has(r.runId)).map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
 
+  // The smart merge gate: counts always go to the step outputs; the step fails only when asked to.
+  const decision = gate(items);
+  writeGateOutputs(ctx.outputFile, decision);
+  if (ctx.gate === 'real-failures') {
+    log(gateSummary(decision));
+    if (decision.blocking.length > 0) process.exitCode = 1;
+  }
+
   const byCategory = [...new Set(items.map((i) => i.diagnosis.category))].map((c) => `${c} ${items.filter((i) => i.diagnosis.category === c).length}`);
   log(`${items.length} failing test(s): ${byCategory.join(', ') || 'none'}; LLM layer ${llm?.model ?? 'off'}; fixes kept ${fixes.filter((f) => f.applied).length}, suggestions checked ${fixes.filter((f) => !f.applied && f.status !== 'not-eligible').length}`);
 }
@@ -112,4 +123,6 @@ try {
   await main();
 } catch (error) {
   console.warn(`::warning::triage-agent could not finish: ${String(error).slice(0, 600)}`);
+  // A gate that could not decide must not let the run through.
+  if (process.env.TRIAGE_GATE?.trim()) process.exitCode = 1;
 }

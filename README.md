@@ -128,6 +128,36 @@ Then ask, in plain language: *"why did CI fail on my PR?"*, *"which tests are fl
 
 Shadow runs are how the agent is tried on public projects without touching them: `npm run harvest -- <source>`, then `node scripts/shadow.ts <source> [--publish your/private-repo]`.
 
+## How it compares (September 2026)
+
+Other tools cover parts of this job. This table is what each is known for from its own public material, and where triage-agent differs; it is not a benchmark of them.
+
+| Tool | What it does | Where triage-agent differs |
+|---|---|---|
+| [Playwright Test Agents](https://playwright.dev) — the Healer | Rewrites a broken selector and re-runs the test; its makers report about 75% success on selector failures | triage-agent first decides **whether** it is a changed selector at all (real bug, race, environment and test data are ruled out first), then fixes only what a deterministic rule matched and a re-run proved: 14 real fixes with none wrong. A healer that repairs every selector failure will also "repair" a removed feature |
+| [Trunk](https://docs.trunk.io/flaky-tests/detection), [BuildPulse](https://buildpulse.io/products/flaky-tests), [Datadog Test Optimization](https://www.getpanto.ai/blog/best-flaky-test-tools) | Detect flaky tests from pass/fail history and quarantine them so they stop blocking merges | Same core signal (a test that failed and passed on the same code), plus a cause for **every** failure, not only flaky ones, and a per-failure merge gate. Measured on 2,296 real failures (below) |
+| [ReportPortal](https://reportportal.io/docs/analysis/AutoAnalysisOfLaunches/) | Classifies failures as product bug, automation bug or system issue by matching earlier human classifications | Same idea of learning from people (`/triage` corrections), plus deterministic rules that need no training data, so it is useful from the first run |
+| [Develocity](https://develocity.ai/product/failure-analytics/) | Groups build and test failures by root cause across history (Gradle and Maven) | Any language through JUnit XML or TRX, and it acts on each failure: comment, grouped environment issue, verified fix, gate |
+
+What it does not have, and they do: dashboards and hosted history (it keeps history in the Actions cache), and years of production use.
+
+## Smart merge gate
+
+With `gate: real-failures`, the triage step fails the build only when a failing test needs someone: a real bug, a changed selector, a test-data problem, or anything undecided. Failures that a deterministic rule or a person classified as flaky or environment do not block. AI-only verdicts still block, because the model is the less reliable half.
+
+```yaml
+      - name: Tests
+        continue-on-error: true      # let the gate decide the outcome
+        run: npx playwright test     # or pytest, jest, mvn test, go test ...
+      - name: triage-agent
+        if: always()
+        uses: hmamut39/triage-agent@main
+        with:
+          gate: real-failures
+```
+
+Measured on 2,296 labelled real failures from five projects, the gate lets **1,823** failures through and **none of them is a real bug**, a changed selector or a test-data problem; **84%** of all flaky and environment failures (1,823 of 2,160) stop blocking merges. Read the zero with care: the first measurement let one real bug through (a new test on a feature branch hit a server error from new backend code), and the server-error rule was then changed to step back when a test has never passed. The zero is measured on the same data that exposed the gap, so it is optimistic; the weekly job keeps checking it on new data. The counts are also step outputs (`blocking`, `flaky`, `environment`) for later steps to use.
+
 ## How it works
 
 - `reporters/triage-reporter.ts` is a custom Playwright reporter. It runs alongside `list`. For every attempt with status `failed` or `timedOut`, it captures the error, stack, duration, retry, trace, screenshot and `error-context.md` paths, run id and git SHA. It runs the rule engine on each failure and **appends** the records, each with its `diagnosis`, to `data/triage.jsonl`. It also appends one summary line per run to `data/runs.jsonl`, which records how many times each test ran.
@@ -165,6 +195,7 @@ The first matching rule, in this order, decides the category. If a lower-priorit
 | `locator-drift-strict` | LOCATOR_DRIFT | an action's locator now matches several elements, and exactly one of them carries the locator's name as a whole word (`name: 'Edit'` → "Editor canvas", "Edit link"). The fix is the locator Playwright printed for that element. |
 | `timing-intercepted` | TIMING | the element was ready, but the error says another element (a snackbar, menu or overlay) intercepts pointer events, so the click could not land |
 | `timing-retry-pass` | TIMING | another attempt of the same code in the same run passed |
+| `timing-known-flaky` | TIMING | a known flaky test: in an earlier run it failed with this same error and then passed on a retry. Steps back when a request failed during the test |
 | `locator-drift` | LOCATOR_DRIFT | the element was never found, but the page snapshot has an element with a similar name (similarity ≥ 0.6). Declines when the test has no recorded passing run: nothing then shows the element ever matched. |
 | `timing-flaky` | TIMING | the failure rate is 20%-80% over at least 3 runs, and the error message varies |
 | `real-bug-assertion` | REAL_BUG | a value mismatch on a test whose history is stable: it was clean before and has failed the same way since |

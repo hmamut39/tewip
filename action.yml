@@ -37,12 +37,31 @@ inputs:
   tests-dir:
     description: Directory auto-fix may edit. Files outside it are never changed.
     default: tests
+  gate:
+    description: >-
+      'real-failures' turns this step into a smart merge gate: it fails only when a failing test is
+      a real bug, a changed selector, a test-data problem or undecided, and lets through failures
+      that a deterministic rule or a person classified as flaky (TIMING) or environment (ENV).
+      AI-only verdicts still block. Put continue-on-error: true on the test step so the gate decides.
+      Empty (the default) never fails the workflow.
+    default: ''
   suite:
     description: >-
       A short name for this test suite, when one workflow triages more than one (e.g. "unit" and
       "e2e"). Each suite then keeps its own history, its own pull request comment and its own
       report artifact instead of overwriting the other's.
     default: ''
+
+outputs:
+  blocking:
+    description: Failing tests that are real bugs, changed selectors, test-data problems or undecided.
+    value: ${{ steps.triage.outputs.blocking }}
+  flaky:
+    description: Failing tests a rule or a person classified as flaky (TIMING).
+    value: ${{ steps.triage.outputs.flaky }}
+  environment:
+    description: Failing tests a rule or a person classified as environment (ENV).
+    value: ${{ steps.triage.outputs.environment }}
 
 runs:
   using: composite
@@ -60,6 +79,7 @@ runs:
         restore-keys: triage-agent-history-${{ inputs.suite }}${{ inputs.suite && '-' || '' }}
 
     - name: Diagnose failures and deliver
+      id: triage
       shell: bash
       run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || 'run' }}.ts"
       env:
@@ -73,6 +93,7 @@ runs:
         TRIAGE_VERIFY_COMMAND: ${{ inputs.verify-command }}
         TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
         TRIAGE_SUITE: ${{ inputs.suite }}
+        TRIAGE_GATE: ${{ inputs.gate }}
 
     - name: Save triage history
       if: always() && inputs.mode != 'report'

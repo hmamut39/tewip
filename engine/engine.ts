@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { PROJECT_ROOT } from '../reporters/store.ts';
 
 /** Bump whenever a rule or threshold changes, so stored diagnoses can be recomputed. */
-export const ENGINE_VERSION = 'rules-7';
+export const ENGINE_VERSION = 'rules-8';
 
 /** Subtracted when rules disagree on the category, so the decision is less likely to trigger an autonomous action. */
 const CONFLICT_PENALTY = 0.1;

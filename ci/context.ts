@@ -29,6 +29,10 @@ export interface CiContext {
   junitReport: string | null;
   /** Name of this test suite when a workflow triages several; '' for a single suite. */
   suite: string;
+  /** 'real-failures': fail the step only on failures that are not a rule's or a person's flaky/ENV. */
+  gate: '' | 'real-failures';
+  /** Where step outputs go (GITHUB_OUTPUT); null outside Actions. */
+  outputFile: string | null;
   historyDir: string;
   outDir: string;
   postPrComment: boolean;
@@ -65,6 +69,8 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     blobDir: inWorkspace(env.TRIAGE_BLOB_DIR || 'blob-report'),
     junitReport: env.TRIAGE_JUNIT_REPORT ? inWorkspace(env.TRIAGE_JUNIT_REPORT) : null,
     suite: (env.TRIAGE_SUITE ?? '').trim(),
+    gate: env.TRIAGE_GATE?.trim() === 'real-failures' ? 'real-failures' : '',
+    outputFile: env.GITHUB_OUTPUT || null,
     historyDir: inWorkspace(env.TRIAGE_HISTORY_DIR || '.triage-agent/history'),
     outDir: inWorkspace(env.TRIAGE_OUT_DIR || '.triage-agent/out'),
     postPrComment: flag(env.TRIAGE_POST_PR_COMMENT, true),

@@ -1,7 +1,7 @@
 // Point-in-time history: what the agent knew about a test when a given run finished.
 // Rules must never see runs that happened after the failure they are judging.
 import type { RunSummary, TriageRecord } from '../reporters/types.ts';
-import { errorSignature } from './signature.ts';
+import { errorShape, errorSignature } from './signature.ts';
 
 /** How many of a test's most recent runs the rules look at. */
 export const HISTORY_WINDOW = 50;
@@ -38,6 +38,11 @@ export interface TestHistory {
    * order. A test broken by one change flips once; a flaky test keeps flipping.
    */
   alternations: number;
+  /**
+   * Error shapes of this test's earlier flakes: runs before this one where it failed and then
+   * passed on a retry of the same code. A test that has flaked before is a known flaky test.
+   */
+  earlierFlakeShapes: string[];
 }
 
 export interface RunContext {
@@ -142,6 +147,13 @@ export class HistoryIndex {
       passesBeforeStreak: before.reduce((sum, e) => sum + e.attempts, 0) - failuresBeforeStreak,
       // Counted within this run's own branch. Across branches the same test legitimately passes on
       // one line of work and fails on another, which looks like flipping but is not.
+      earlierFlakeShapes: [
+        ...new Set(
+          (current ? entries.slice(0, -1) : entries)
+            .filter((e) => e.failures.length > 0 && e.failures.length < e.attempts)
+            .flatMap((e) => e.failures.map((f) => errorShape(f.errorMessage))),
+        ),
+      ],
       alternations: entries
         .filter((e) => e.branch === this.runs[until].branch)
         .reduce<{ count: number; last: boolean | null }>(

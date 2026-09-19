@@ -69,7 +69,7 @@ describe('the broken-on-purpose version', () => {
 
   it('refuses a change outside a check, a missing piece, or no change at all', () => {
     assert.match((mutate(draft({ find: "'/library'", replace: "'/home'" })) as { problem: string }).problem, /not in a check/);
-    assert.match((mutate(draft({ find: 'nowhere', replace: 'x' })) as { problem: string }).problem, /exactly once/);
+    assert.match((mutate(draft({ find: 'nowhere', replace: 'x' })) as { problem: string }).problem, /is not in the test/);
     assert.match((mutate(draft({ find: "'3 results'", replace: "'3 results'" })) as { problem: string }).problem, /changes nothing/);
   });
 });
@@ -160,5 +160,19 @@ describe('checks that may break when the data changes', () => {
       "await expect(page.getByText('page 12')).toBeVisible();",
     ].join('\n');
     assert.deepEqual(brittleChecks(code), ["await expect(page.getByText('21 books · 7236 passages searchable')).toBeVisible();"]);
+  });
+});
+
+describe('placing the deliberate break', () => {
+  it('uses the one place inside a check when the value also appears as input', () => {
+    const code = "const input = 'a%26b';\nexpect(parse(input)).toEqual('a%26b');\n";
+    const m = mutate({ code, checks: '', mutation: { find: "'a%26b'", replace: "'zzz'" } });
+    assert.ok('code' in m && m.code === "const input = 'a%26b';\nexpect(parse(input)).toEqual('zzz');\n");
+  });
+
+  it('counts the expected column of a table-driven test as a check', () => {
+    const code = "const cases = [\n  { input: '/?a=1', out: '/?a=2' },\n];\n";
+    const m = mutate({ code, checks: '', mutation: { find: "out: '/?a=2'", replace: "out: '/?a=3'" } });
+    assert.ok('code' in m);
   });
 });

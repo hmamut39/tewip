@@ -104,12 +104,39 @@ export async function repairTest(model: LlmClient, ctx: WriteContext, scenario: 
 export function mutate(draft: Draft): { code: string } | { problem: string } {
   const { find, replace } = draft.mutation;
   if (!find || find === replace) return { problem: 'the mutation changes nothing' };
-  const at = draft.code.indexOf(find);
-  if (at < 0 || draft.code.indexOf(find, at + 1) >= 0) return { problem: `the piece to change ("${find.slice(0, 60)}") does not appear exactly once` };
-  const end = draft.code.indexOf('\n', at);
-  const line = draft.code.slice(draft.code.lastIndexOf('\n', at) + 1, end < 0 ? undefined : end);
-  if (!/expect|assert|should|verify|Assert|toHave|toBe|toEqual|toContain|toMatch|contains|Equal/.test(line)) return { problem: `the piece to change is not in a check: ${line.trim().slice(0, 100)}` };
+  const lineAt = (at: number) => {
+    const end = draft.code.indexOf('\n', at);
+    return draft.code.slice(draft.code.lastIndexOf('\n', at) + 1, end < 0 ? undefined : end);
+  };
+  const places: number[] = [];
+  for (let at = draft.code.indexOf(find); at >= 0; at = draft.code.indexOf(find, at + 1)) places.push(at);
+  if (places.length === 0) return { problem: `the piece to change ("${find.slice(0, 60)}") is not in the test` };
+  // Several places: fine when exactly one of them is in a check (the same value is often both the
+  // input and the expected result).
+  const inChecks = places.filter((at) => CHECK_LINE.test(lineAt(at)));
+  if (inChecks.length !== 1) {
+    return { problem: inChecks.length === 0 ? `the piece to change is not in a check: ${lineAt(places[0]).trim().slice(0, 100)}` : `the piece to change ("${find.slice(0, 60)}") is in ${inChecks.length} checks; pick one exact place` };
+  }
+  const at = inChecks[0];
   return { code: draft.code.slice(0, at) + replace + draft.code.slice(at + find.length) };
+}
+
+/** A line that checks a result: an assertion, or the expected column of a table-driven test. */
+const CHECK_LINE = /expect|assert|should|verify|Assert|toHave|toBe|toEqual|toContain|toMatch|contains|Equal|\b(?:out|output|expected|want|result)\s*[:=]/;
+
+const MUTATION_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['mutation'],
+  properties: { mutation: DRAFT_PROPS.mutation },
+} as const;
+
+/** One more try at a usable deliberate break, when the first could not be applied. */
+export async function remutate(model: LlmClient, draft: Draft, problem: string): Promise<Draft> {
+  const user = JSON.stringify({ test: draft.code, yourMutation: draft.mutation, problem });
+  const system = 'You chose a deliberate break for this test so Tewip can prove it can fail, but it could not be applied. Choose again: mutation.find must be an exact substring of the test, inside the main check (an assertion, or the expected value in a table of cases), appearing exactly once inside a check; mutation.replace must make a correct test fail while keeping the code valid.';
+  const raw = await model.complete({ system, user, schemaName: 'tewip_mutation', schema: MUTATION_SCHEMA });
+  return { ...draft, mutation: (JSON.parse(raw) as { mutation: Draft['mutation'] }).mutation };
 }
 
 /**

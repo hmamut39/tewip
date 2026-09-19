@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
-import { brittleChecks, draftTest, failureHead, mutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
+import { brittleChecks, draftTest, failureHead, mutate, remutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
 
 export interface RunResult {
   passed: boolean;
@@ -81,7 +81,12 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   }
   log(`    passed ${opts.runs} of ${opts.runs} runs; breaking its check on purpose`);
 
-  const mutant = mutate(draft);
+  let mutant = mutate(draft);
+  if ('problem' in mutant) {
+    log(`    the deliberate break could not be applied (${mutant.problem}); asking once more`);
+    draft = await remutate(model, draft, mutant.problem);
+    mutant = mutate(draft);
+  }
   if ('problem' in mutant) return { draft, outcome: { kind: 'rejected', reason: `could not prove it can fail: ${mutant.problem}`, repairs, passedReliably: true } };
   let broken: RunResult;
   try {

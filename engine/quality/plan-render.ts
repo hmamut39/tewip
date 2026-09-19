@@ -49,7 +49,7 @@ export function renderPlan(plan: Plan, facts: PlanFacts, model: string): string 
     `- Feature description: ${facts.feature.length > 200 ? `${facts.feature.slice(0, 200)}…` : facts.feature}`,
     `- Change: ${facts.change ? `${facts.change.range}, ${facts.change.files.length} file(s)` : 'none given'}`,
     `- Pages read: ${facts.pages.length ? facts.pages.map((p) => p.url).join(', ') : facts.pagesNote ?? 'none given'}`,
-    `- Existing tests: ${facts.tests.tests.length} named in ${facts.tests.files} file(s)`,
+    `- Existing tests: ${facts.tests.tests.length} named in ${facts.tests.files} file(s)${facts.testSources?.length ? `; read in full: ${facts.testSources.map((t) => t.file).join(', ')}` : ''}`,
     `- Failure history: ${facts.history.length ? `${facts.history.length} test(s) Tewip diagnosed before` : 'none recorded yet'}`,
     '',
   );

@@ -8,9 +8,9 @@ import { join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import { readJsonl } from '../../reporters/store.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
-import { changeSummary, existingTests, readPages, type ChangeSummary, type ExistingTests, type PageFacts } from './grounding.ts';
+import { changeSummary, existingTests, readPages, relatedTestSources, type ChangeSummary, type ExistingTests, type PageFacts, type TestSource } from './grounding.ts';
 
-export const PLAN_PROMPT_VERSION = 'plan-2';
+export const PLAN_PROMPT_VERSION = 'plan-3';
 
 export interface PlanInput {
   feature: string;
@@ -25,6 +25,8 @@ export interface PlanFacts {
   pages: PageFacts[];
   pagesNote: string | null;
   tests: ExistingTests;
+  /** The full text of the test files most related to the feature, so table-driven cases count. */
+  testSources: TestSource[];
   /** Tests that failed before in this project, with what Tewip decided they were. */
   history: string[];
 }
@@ -50,6 +52,7 @@ export async function gatherPlanFacts(input: PlanInput): Promise<PlanFacts> {
     pages,
     pagesNote: note,
     tests: existingTests(input.root),
+    testSources: relatedTestSources(input.root, input.feature),
     history: failureHistory(input.root),
   };
 }
@@ -58,7 +61,7 @@ const SYSTEM = `You are Tewip's test planner, a senior QA lead. Write a test pla
 
 Use only the facts given: the feature description, the change (files and diff), the pages of the running app (accessibility snapshots: the roles and names a user sees), the tests that already exist, and the project's failure history.
 - Name page elements only as they appear in a snapshot. If a scenario needs something no snapshot shows, say so in grounded_on ("not seen on the pages read; confirm").
-- Do not plan what an existing test already covers. covered_by is either an entry copied exactly from existingTests.names that fully covers the scenario, or an empty string. Partial or related coverage goes in grounded_on, never in covered_by.
+- Do not plan what an existing test already covers. Read existingTests.relatedSources: a table-driven test (a list of cases, test.each, parametrize) covers every case in its table. covered_by is either an entry copied exactly from existingTests.names, or a file from relatedSources followed by ": " and the exact case that covers the scenario (e.g. "test/query.test.ts: { input: '/?foo=1', query: { foo: undefined }, out: '/' }"), or an empty string. Partial or related coverage goes in grounded_on, never in covered_by.
 - Weigh the failure history: an area whose tests failed or flaked before deserves a scenario for that risk.
 - Cover more than the happy path: negative cases, boundaries, accessibility, and security where the feature touches input, access or data.
 - Prioritise: P0 breaks the feature for everyone, P1 breaks it for some or corrupts data, P2 is a lesser problem.
@@ -115,7 +118,7 @@ function factsForModel(f: PlanFacts): string {
     feature: f.feature,
     change: f.change ? { range: f.change.range, files: f.change.files, diff: f.change.patch } : 'no change given',
     pages: f.pages.length ? f.pages.map((p) => ({ url: p.url, title: p.title, accessibilitySnapshot: p.aria })) : f.pagesNote ?? 'no pages given',
-    existingTests: { files: f.tests.files, names: f.tests.tests },
+    existingTests: { files: f.tests.files, names: f.tests.tests, relatedSources: f.testSources },
     failureHistory: f.history.length ? f.history : 'none recorded yet',
   });
 }
@@ -127,11 +130,18 @@ function factsForModel(f: PlanFacts): string {
  */
 export function verifyCoverage(plan: Plan, facts: PlanFacts): Plan {
   const known = new Set(facts.tests.tests);
+  const sources = facts.testSources ?? [];
+  // A cited case must appear in the file it names: its code-like parts, at least.
+  const inSource = (claim: string) => sources.some((src) => {
+    if (!claim.startsWith(`${src.file}: `)) return false;
+    const quoted = claim.slice(src.file.length + 2).match(/[A-Za-z0-9_$./?=&%+-]{3,}/g) ?? [];
+    return quoted.length > 0 && quoted.every((part) => src.content.includes(part));
+  });
   return {
     ...plan,
     scenarios: plan.scenarios.map((s) => {
       const claim = s.covered_by.trim();
-      if (!claim || known.has(claim)) return { ...s, covered_by: claim };
+      if (!claim || known.has(claim) || inSource(claim)) return { ...s, covered_by: claim };
       return { ...s, covered_by: '', grounded_on: `${s.grounded_on} (related, not a full cover: ${claim})` };
     }),
   };

@@ -2,10 +2,10 @@
 // framework. Kept tests stay beside the project's tests for the team to review and commit; every
 // other draft is moved to .tewip/drafts with the reason, and nothing is committed or pushed.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, extname, join, relative } from 'node:path';
 import { usageLine } from '../llm/usage.ts';
 import { chooseFramework, detectFrameworks } from './frameworks.ts';
-import { readPages } from './grounding.ts';
+import { readPages, relatedTestSources } from './grounding.ts';
 import { writerFromEnv } from './model.ts';
 import type { Plan } from './plan.ts';
 import { writeAndVerify, type Outcome } from './write-verify.ts';
@@ -43,11 +43,16 @@ export async function runWrite(cmd: WriteCommand): Promise<void> {
   const saved = JSON.parse(readFileSync(planPath, 'utf8')) as SavedPlan;
 
   const found = detectFrameworks(cmd.root);
-  const framework = chooseFramework(found, cmd.framework);
-  if (!framework) {
+  const detected = chooseFramework(found, cmd.framework);
+  if (!detected) {
     const seen = found.map((f) => f.id).join(', ') || 'none';
     throw new Error(`no ${cmd.framework ?? 'test'} framework found to write in (found: ${seen}). Tewip writes Playwright, Cypress, WebdriverIO, Jest, Vitest, pytest, JUnit (Maven/Gradle), .NET and Go tests.`);
   }
+  // Copy the style of the existing test closest to the feature, when it is one of this framework's
+  // tests: it shows the helpers and conventions this part of the code base is tested with.
+  const sameKind = (f: string) => detected.example !== null && extname(f) === extname(detected.example) && f.startsWith(detected.cwd);
+  const closest = relatedTestSources(cmd.root, saved.feature, 10).map((t) => join(cmd.root, t.file)).find(sameKind);
+  const framework = closest ? { ...detected, example: closest, testDir: dirname(closest) } : detected;
 
   const wanted = new Set(cmd.only.map((s) => s.toUpperCase()));
   const scenarios = saved.plan.scenarios.filter((s) => (wanted.size ? wanted.has(s.id.toUpperCase()) : s.automate && !s.covered_by)).slice(0, cmd.max);

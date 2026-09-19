@@ -54,6 +54,48 @@ export function existingTests(root: string, cap = 300): ExistingTests {
   return { files, tests };
 }
 
+export interface TestSource {
+  file: string;
+  content: string;
+}
+
+const STOPWORDS = new Set(['with', 'that', 'this', 'from', 'into', 'when', 'then', 'them', 'they', 'their', 'each', 'what', 'which', 'reads', 'back', 'sees', 'must', 'should', 'have', 'does', 'test', 'tests', 'user', 'page', 'able', 'also', 'only', 'other', 'more', 'than', 'will']);
+
+/**
+ * The full text of the tests most related to a feature. Test names alone hide what table-driven
+ * tests (test.each, parametrize, @ParameterizedTest, a list of cases in a loop) already check, so
+ * the planner also reads the files that mention the feature's words most. Code-like words
+ * (withQuery, parse_query) count five times as much as plain ones.
+ */
+export function relatedTestSources(root: string, feature: string, maxFiles = 4, maxChars = 8_000): TestSource[] {
+  const terms = [...new Set(feature.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? [])].filter((t) => !STOPWORDS.has(t.toLowerCase()));
+  if (terms.length === 0) return [];
+  const scored: Array<{ file: string; score: number; content: string }> = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 8) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) walk(path, depth + 1);
+      } else if (TEST_FILE.test(entry.name) && statSync(path).size <= 1_000_000) {
+        const content = readFileSync(path, 'utf8');
+        const lower = content.toLowerCase();
+        let score = 0;
+        for (const term of terms) {
+          const hits = Math.min(20, lower.split(term.toLowerCase()).length - 1);
+          score += hits * (/[a-z][A-Z]|_/.test(term) ? 5 : 1);
+        }
+        if (score > 0) scored.push({ file: relative(root, path).replaceAll('\\', '/'), score, content });
+      }
+    }
+  };
+  walk(root, 0);
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxFiles)
+    .map(({ file, content }) => ({ file, content: content.length > maxChars ? `${content.slice(0, maxChars)}\n... (cut)` : content }));
+}
+
 export interface ChangeSummary {
   range: string;
   files: string[];

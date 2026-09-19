@@ -29,7 +29,7 @@ describe('reading the existing tests of a project', () => {
   });
 });
 
-const facts: PlanFacts = { feature: 'cart', change: null, pages: [], pagesNote: null, tests: { files: 1, tests: ['e2e/shop.spec.ts: adds to cart'] }, history: [] };
+const facts: PlanFacts = { feature: 'cart', change: null, pages: [], pagesNote: null, tests: { files: 1, tests: ['e2e/shop.spec.ts: adds to cart'] }, testSources: [{ file: 'test/query.test.ts', content: "{ input: '/?foo=1', query: { foo: undefined }, out: '/' }," }], history: [] };
 const scenario = (id: string, covered_by: string) => ({ id, title: `scenario ${id}`, type: 'functional', priority: 'P0' as const, preconditions: '', steps: ['do it'], expected: 'it works', automate: true, covered_by, grounded_on: 'feature' });
 const plan = (scenarios: Plan['scenarios']): Plan => ({ title: 'Cart', summary: 's', scope: [], out_of_scope: [], risks: [], scenarios, open_questions: [] });
 
@@ -46,5 +46,23 @@ describe("checking the model's coverage claims", () => {
     const next = md.split('## To automate next')[1];
     assert.match(next, /B scenario B/);
     assert.doesNotMatch(next, /A scenario A/);
+  });
+});
+
+describe('coverage by a case in a table-driven test', () => {
+  it('keeps a cited case that is in the file, and drops one that is not', () => {
+    const real = "test/query.test.ts: { input: '/?foo=1', query: { foo: undefined }, out: '/' }";
+    const made = "test/query.test.ts: { input: '/?bar=2', query: { bar: undefined }, out: '/' }";
+    const checked = verifyCoverage(plan([scenario('A', real), scenario('B', made)]), facts);
+    assert.equal(checked.scenarios[0].covered_by, real);
+    assert.equal(checked.scenarios[1].covered_by, '');
+  });
+
+  it('reads the test files that mention the feature most, code-like words first', async () => {
+    const { relatedTestSources } = await import('../quality/grounding.ts');
+    const root = project();
+    writeFileSync(join(root, 'tests', 'test_query.py'), 'def test_with_query():\n    assert with_query("/", {"a": 1}) == "/?a=1"\n');
+    const found = relatedTestSources(root, 'with_query adds parameters to a cart URL');
+    assert.equal(found[0].file, 'tests/test_query.py');
   });
 });

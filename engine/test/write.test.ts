@@ -176,3 +176,12 @@ describe('placing the deliberate break', () => {
     assert.ok('code' in m);
   });
 });
+
+describe('a check written over several lines', () => {
+  it('finds the expected value on the line under `out:` or inside a multi-line expect', () => {
+    const table = "const cases = [\n  {\n    input: '/page',\n    out:\n      '/page?a=1',\n  },\n];\n";
+    assert.ok('code' in mutate({ code: table, checks: '', mutation: { find: "'/page?a=1'", replace: "'/page?a=2'" } }));
+    const multi = "expect(\n  withQuery('/page', { a: 1 }),\n).toBe(\n  '/page?a=1',\n);\n";
+    assert.ok('code' in mutate({ code: multi, checks: '', mutation: { find: "'/page?a=1'", replace: "'/x'" } }));
+  });
+});

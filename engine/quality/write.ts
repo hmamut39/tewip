@@ -113,7 +113,14 @@ export function mutate(draft: Draft): { code: string } | { problem: string } {
   if (places.length === 0) return { problem: `the piece to change ("${find.slice(0, 60)}") is not in the test` };
   // Several places: fine when exactly one of them is in a check (the same value is often both the
   // input and the expected result).
-  const inChecks = places.filter((at) => CHECK_LINE.test(lineAt(at)));
+  // A check may span lines (a multi-line expect, or `out:` above the expected value), so the two
+  // lines before the piece count too.
+  const withContext = (at: number) => {
+    const start = draft.code.lastIndexOf('\n', at);
+    const before = draft.code.slice(0, Math.max(0, start)).split('\n').slice(-2).join('\n');
+    return `${before}\n${lineAt(at)}`;
+  };
+  const inChecks = places.filter((at) => CHECK_LINE.test(withContext(at)));
   if (inChecks.length !== 1) {
     return { problem: inChecks.length === 0 ? `the piece to change is not in a check: ${lineAt(places[0]).trim().slice(0, 100)}` : `the piece to change ("${find.slice(0, 60)}") is in ${inChecks.length} checks; pick one exact place` };
   }

@@ -117,10 +117,16 @@ describe('deciding whether a drafted test is kept', () => {
     assert.equal(k.outcome.kind, 'kept');
     assert.equal((k.outcome as { repairs: number }).repairs, 1);
 
-    const bug = fakes([GOOD, { ...GOOD, fault: 'app', reason: 'the page shows 0 results for a word the library has' }], () => false);
+    const bug = fakes([GOOD, { ...GOOD, fault: 'app', reason: 'the page shows 0 results for a word the library has', observed: 'expect(locator).toBeVisible() failed' }], () => false);
     const b = await bug.go();
     assert.equal(b.outcome.kind, 'possible-bug');
     assert.match((b.outcome as { reason: string }).reason, /0 results/);
+
+    // Blaming the app with a quote the run never printed is not a bug report.
+    const unfounded = fakes([GOOD, { ...GOOD, fault: 'app', reason: 'the heading is missing', observed: 'No heading on the page' }], () => false);
+    const u = await unfounded.go();
+    assert.equal(u.outcome.kind, 'rejected');
+    assert.match((u.outcome as { reason: string }).reason, /could not quote/);
   });
 
   it('gives up after the allowed repairs and says so', async () => {

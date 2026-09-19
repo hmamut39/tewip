@@ -71,7 +71,12 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
     log(`    failed; repair ${repairs} of ${opts.repairs} from the real error`);
     const repaired = await repairTest(model, ctx, scenario, draft, result.output, earlier);
     earlier.push(failureHead(result.output));
-    if (repaired.fault === 'app') return { draft, outcome: { kind: 'possible-bug', reason: repaired.reason, repairs, lastError: result.output } };
+    if (repaired.fault === 'app') {
+      // The model's word is not enough: its quote must really be in what the run printed.
+      const quote = (repaired.observed ?? '').trim();
+      if (quote.length >= 8 && result.output.includes(quote)) return { draft, outcome: { kind: 'possible-bug', reason: `${repaired.reason} (seen: "${quote.slice(0, 200)}")`, repairs, lastError: result.output } };
+      return { draft, outcome: { kind: 'rejected', reason: `the model blamed the app but could not quote the run's output to show it, so it is not reported as a bug: ${repaired.reason.slice(0, 200)}`, repairs, lastError: result.output, passedReliably: false } };
+    }
     draft = repaired;
   }
 

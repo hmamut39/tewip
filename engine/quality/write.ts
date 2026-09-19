@@ -9,7 +9,7 @@ import type { Framework } from './frameworks.ts';
 import type { PageFacts } from './grounding.ts';
 import type { Plan } from './plan.ts';
 
-export const WRITE_PROMPT_VERSION = 'write-5';
+export const WRITE_PROMPT_VERSION = 'write-6';
 
 export type Scenario = Plan['scenarios'][number];
 
@@ -25,6 +25,8 @@ export interface Repair extends Draft {
   /** "test" when the draft was wrong; "app" when the page does not do what the scenario expects. */
   fault: 'test' | 'app';
   reason: string;
+  /** For an app fault: an exact quote from the real error or page showing what the app did. Checked. */
+  observed: string;
 }
 
 const RULES = `Rules:
@@ -40,7 +42,7 @@ const DRAFT_SYSTEM = `You are Tewip's test writer, a senior SDET. Write one auto
 
 const REPAIR_SYSTEM = `You are Tewip's test writer, a senior SDET. Your test failed when run against the working app. Read the real error and decide:
 - fault "test": the test is wrong (a locator, a wait, a wrong assumption about the page). Return the corrected full test.
-- fault "app": the test is right and the app does not do what the scenario expects. Return the test unchanged and say in reason what the app did instead.
+- fault "app": the test is right and the app does not do what the scenario expects. Return the test unchanged, say in reason what the app did instead, and put in observed an exact quote (copied character for character) from the real error or the page snapshot that shows it. Without such a quote, it is not an app fault. For fault "test", observed is empty.
 If the code documents the behaviour the app showed (a comment or doc saying so), the scenario's expectation was wrong: the fault is "test"; correct the check to the documented behaviour and say so in reason.
 Never weaken the check of the scenario's expected result to make it pass: that would hide the bug the test exists to catch. If the only way to pass is to stop checking the expected result, the fault is "app".\n\n${RULES}`;
 
@@ -54,8 +56,8 @@ const DRAFT_SCHEMA = { type: 'object', additionalProperties: false, required: ['
 const REPAIR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['fault', 'reason', 'code', 'checks', 'mutation'],
-  properties: { fault: { type: 'string', enum: ['test', 'app'] }, reason: { type: 'string' }, ...DRAFT_PROPS },
+  required: ['fault', 'reason', 'observed', 'code', 'checks', 'mutation'],
+  properties: { fault: { type: 'string', enum: ['test', 'app'] }, reason: { type: 'string' }, observed: { type: 'string' }, ...DRAFT_PROPS },
 } as const;
 
 export interface WriteContext {

@@ -140,7 +140,7 @@ export function renderWriteReport(results: Array<{ id: string; title: string; fi
   const lines = [
     '# Tewip: tests written',
     '',
-    `From ${relative(meta.root, meta.planPath)}, in ${meta.framework}, by ${meta.model}. A test is kept only if it passed ${meta.runs} of ${meta.runs} runs against the working app **and** failed once its main check was broken on purpose.`,
+    `From ${relative(meta.root, meta.planPath)}, in ${meta.framework}, by ${meta.model}. A test is kept only if it passed every run against the working app (${meta.runs} runs, or 2 where a single run takes over 90 seconds) **and** failed once its main check was broken on purpose.`,
     '',
     `- **Kept: ${kept.length} of ${results.length} drafts.**`,
     `- Mutation check: ${kept.length} of ${reliable.length} test(s) that passed reliably also failed when their check was broken.${cannotFail ? ` ${cannotFail} still passed with it broken, so they could not catch the bug and were dropped.` : ''}${unproven ? ` ${unproven} could not be checked (the break could not be applied or did not run) and were dropped unproven.` : ''}`,
@@ -151,7 +151,7 @@ export function renderWriteReport(results: Array<{ id: string; title: string; fi
     ...results.map((r) => {
       const o = r.outcome;
       const watch = o.kind === 'kept' && o.watch.length ? ` **Review:** may break when the data changes, not the app: \`${o.watch.join('`, `')}\`` : '';
-      const why = o.kind === 'kept' ? `checks: ${o.checks}${o.repairs ? ` (after ${o.repairs} repair(s))` : ''}${watch}` : o.reason;
+      const why = o.kind === 'kept' ? `passed ${o.runs} run(s); checks: ${o.checks}${o.repairs ? ` (after ${o.repairs} repair(s))` : ''}${watch}` : o.reason;
       const where = o.kind === 'kept' ? `kept: \`${relative(meta.root, r.file).replaceAll('\\', '/')}\`` : o.kind === 'possible-bug' ? '**possible bug**' : 'not kept';
       return `| ${r.id} ${r.title.replaceAll('|', '/')} | ${where} | ${why.replace(/\s+/g, ' ').replaceAll('|', '/')} |`;
     }),

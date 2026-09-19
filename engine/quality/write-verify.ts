@@ -60,6 +60,9 @@ function runOnce(framework: Framework, file: string, timeoutMs: number): RunResu
 }
 
 /** The broken version did not run at all, so its failure proves nothing about the check. */
+/** Above this, one run of the test is slow enough to trade a reliability run for time. */
+const SLOW_RUN_MS = 90_000;
+
 const DID_NOT_RUN = /SyntaxError|error TS\d{4}|IndentationError|NameError|ReferenceError|Unexpected token|compilation (?:error|failure)|cannot find symbol|error CS\d{4}/;
 
 export type Outcome =
@@ -81,9 +84,12 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   let repairs = 0;
   let result: RunResult;
   const earlier: string[] = [];
+  let slowest = 0;
   for (;;) {
     writeFileSync(file, draft.code, 'utf8');
+    const startedAt = Date.now();
     result = run(ctx.framework, file);
+    slowest = Math.max(slowest, Date.now() - startedAt);
     if (result.passed) break;
     if (result.environment) return { draft, outcome: { kind: 'rejected', reason: 'the test runner could not start (environment: browser, server or port), so the test was not judged', repairs, lastError: result.output, passedReliably: false } };
     if (repairs >= opts.repairs) return { draft, outcome: { kind: 'rejected', reason: `still failing after ${repairs} repair(s)`, repairs, lastError: result.output, passedReliably: false } };
@@ -102,12 +108,16 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
     draft = repaired;
   }
 
-  for (let i = 2; i <= opts.runs; i++) {
+  // A runner that takes minutes per run (Angular rebuilds the app each time) gets one reliability run
+  // less: the report always says how many runs a kept test passed.
+  const runs = slowest > SLOW_RUN_MS ? Math.min(opts.runs, 2) : opts.runs;
+  if (runs < opts.runs) log(`    each run takes about ${Math.round(slowest / 1000)}s here, so ${runs} runs instead of ${opts.runs}`);
+  for (let i = 2; i <= runs; i++) {
     const again = run(ctx.framework, file);
     if (again.environment) return { draft, outcome: { kind: 'rejected', reason: `the test runner broke on run ${i} (environment: browser, server or port), so reliability was not judged`, repairs, lastError: again.output, passedReliably: false } };
     if (!again.passed) return { draft, outcome: { kind: 'rejected', reason: `flaky: passed ${i - 1} time(s), then failed on run ${i}`, repairs, lastError: again.output, passedReliably: false } };
   }
-  log(`    passed ${opts.runs} of ${opts.runs} runs; breaking its check on purpose`);
+  log(`    passed ${runs} of ${runs} runs; breaking its check on purpose`);
 
   let mutant = mutate(draft);
   if ('problem' in mutant) {
@@ -138,5 +148,5 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   if (broken.skipped) return { draft, outcome: { kind: 'rejected', reason: 'the broken version was skipped, so the check was not proven', repairs, passedReliably: true } };
   if (broken.passed) return { draft, outcome: { kind: 'rejected', reason: `still passes with its check broken (${draft.mutation.find} → ${draft.mutation.replace}): it could not catch the bug it is for`, repairs, passedReliably: true } };
   if (DID_NOT_RUN.test(broken.output)) return { draft, outcome: { kind: 'rejected', reason: 'the broken version did not even run, so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
-  return { draft, outcome: { kind: 'kept', runs: opts.runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: brittleChecks(draft.code) } };
+  return { draft, outcome: { kind: 'kept', runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: brittleChecks(draft.code) } };
 }

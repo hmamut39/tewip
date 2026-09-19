@@ -135,7 +135,7 @@ export function mutate(draft: Draft): { code: string } | { problem: string } {
 }
 
 /** A line that checks a result: an assertion, or the expected column of a table-driven test. */
-const CHECK_LINE = /expect|assert|should|verify|Assert|toHave|toBe|toEqual|toContain|toMatch|contains|Equal|\b(?:out|output|expected|want|result)\s*[:=]/;
+const CHECK_LINE = /expect|assert|should|verify|Assert|toHave|toBe|toEqual|toContain|toMatch|contains|Equal|raises|Raises|Throws|toThrow|[=!]==?|\b(?:out|output|expected|want|result)\s*[:=]/;
 
 const MUTATION_SCHEMA = {
   type: 'object',

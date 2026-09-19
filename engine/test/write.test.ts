@@ -191,3 +191,12 @@ describe('a check written over several lines', () => {
     assert.ok('code' in mutate({ code: multi, checks: '', mutation: { find: "'/page?a=1'", replace: "'/x'" } }));
   });
 });
+
+describe('checks in Python style', () => {
+  it('counts pytest.raises and a comparison line of a multi-line assert as checks', () => {
+    const raises = 'def test_x():\n    with pytest.raises(ValueError):\n        naturalsize("not-a-number")\n';
+    assert.ok('code' in mutate({ code: raises, checks: '', mutation: { find: 'ValueError', replace: 'KeyError' } }));
+    const multi = 'def test_y():\n    assert (\n        intcomma("12x34"),\n        intcomma("abc"),\n    ) == ("12x34", "abc")\n';
+    assert.ok('code' in mutate({ code: multi, checks: '', mutation: { find: '("12x34", "abc")', replace: '("x", "abc")' } }));
+  });
+});

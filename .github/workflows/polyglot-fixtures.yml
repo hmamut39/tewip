@@ -1,0 +1,122 @@
+# Runs the tiny test project for each language in fixtures/polyglot with its real test runner and
+# uploads the reports those runners write. The JUnit/TRX importer is then checked against these
+# real files instead of hand-made samples. The tests fail on purpose; the step never fails the job.
+name: polyglot fixtures
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/node } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '24' }
+      - run: npm install --no-audit --no-fund
+      - name: node:test
+        run: node --test --test-reporter=junit --test-reporter-destination=out/node-test.xml node-test.test.mjs || true
+      - name: Jest
+        env: { JEST_JUNIT_OUTPUT_DIR: out, JEST_JUNIT_OUTPUT_NAME: jest.xml }
+        run: npx jest --ci --testMatch '**/jest.test.cjs' --reporters=default --reporters=jest-junit || true
+      - name: Vitest
+        run: npx vitest run vitest.test.mjs --reporter=junit --outputFile=out/vitest.xml || true
+      - name: Mocha
+        run: npx mocha mocha.spec.cjs --reporter mocha-junit-reporter --reporter-options mochaFile=out/mocha.xml || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-node, path: fixtures/polyglot/node/out }
+
+  python:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/python } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pytest pytest-rerunfailures
+      - name: pytest (unittest and pytest styles, one rerun)
+        run: python -m pytest --reruns 1 --junitxml=out/pytest.xml || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-python, path: fixtures/polyglot/python/out }
+
+  java:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/java } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Maven Surefire (JUnit 5, one rerun)
+        run: mvn -B -q test || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-java, path: fixtures/polyglot/java/target/surefire-reports/*.xml }
+
+  go:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/go } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+      - run: go install gotest.tools/gotestsum@latest
+      - name: gotestsum
+        run: mkdir -p out && gotestsum --junitfile out/go.xml ./... || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-go, path: fixtures/polyglot/go/out }
+
+  dotnet:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/dotnet } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '8.0.x' }
+      - name: dotnet test (TRX and JUnit)
+        run: dotnet test --results-directory out --logger "trx;LogFileName=dotnet.trx" --logger "junit;LogFilePath=out/dotnet-junit.xml" || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-dotnet, path: fixtures/polyglot/dotnet/out }
+
+  ruby:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/ruby } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: '3.3', bundler-cache: true, working-directory: fixtures/polyglot/ruby }
+      - name: RSpec
+        run: bundle exec rspec --format progress --format RspecJunitFormatter --out out/rspec.xml || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-ruby, path: fixtures/polyglot/ruby/out }
+
+  php:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/php } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.3', tools: composer }
+      - run: composer install --no-interaction --no-progress
+      - name: PHPUnit
+        run: mkdir -p out && vendor/bin/phpunit tests --log-junit out/phpunit.xml || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-php, path: fixtures/polyglot/php/out }
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: fixtures/polyglot/rust } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - name: cargo nextest
+        run: cargo nextest run --profile ci --no-fail-fast || true
+      - uses: actions/upload-artifact@v4
+        with: { name: polyglot-rust, path: fixtures/polyglot/rust/target/nextest/ci/junit.xml }

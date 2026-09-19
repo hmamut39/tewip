@@ -23,3 +23,10 @@ eval/ground-truth.aug2.jsonl
 eval/ground-truth.jupyterlab.jsonl
 eval/ground-truth.lxdui.jsonl
 eval/ground-truth.nextcloud.jsonl
+
+# Polyglot fixtures: installed packages and runner outputs.
+fixtures/polyglot/**/node_modules/
+fixtures/polyglot/**/out/
+fixtures/polyglot/java/target/
+fixtures/polyglot/rust/target/
+fixtures/polyglot/php/vendor/

@@ -125,6 +125,8 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
     }
   }
 
+  for (const line of calibration(cases)) console.log(line);
+
   const realCount = labels.filter((l) => l.dataset === 'real').length;
   const claudeLabelled = labels.some((l) => /claude/i.test(l.labeledBy));
   console.log(`\nLabels: ${file}, ${labels.length} label line(s) covering ${cases.length} failure record(s).`);
@@ -183,3 +185,32 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) await main();
+
+/**
+ * Is the confidence honest? Each diagnosis carries one, and people act on it: the merge gate trusts
+ * 0.7 and above from a rule, auto-fix needs 0.85. Grouping diagnoses by the confidence they claimed
+ * and showing how often they were actually right says whether those lines mean anything. A tool that
+ * says 0.9 and is right two thirds of the time is worse than one that says 0.6 and means it.
+ */
+export function calibration(cases: Case[]): string[] {
+  const scored = cases.filter((c) => c.diagnosis.category !== 'UNKNOWN');
+  if (scored.length === 0) return [];
+  const edges = [0.5, 0.6, 0.7, 0.8, 0.9, 1.01];
+  const lines = ['', 'Is the confidence honest? (diagnoses grouped by what they claimed)', '  claimed        cases  right   observed   gap'];
+  let weighted = 0;
+  for (const [i, low] of edges.slice(0, -1).entries()) {
+    const high = edges[i + 1];
+    const group = scored.filter((c) => c.diagnosis.confidence >= low && c.diagnosis.confidence < high);
+    if (group.length === 0) continue;
+    const right = group.filter(correct).length;
+    const observed = right / group.length;
+    const claimed = group.reduce((sum, c) => sum + c.diagnosis.confidence, 0) / group.length;
+    weighted += Math.abs(observed - claimed) * group.length;
+    const gap = observed - claimed;
+    lines.push(
+      `  ${low.toFixed(1)}-${high >= 1 ? '1.0' : high.toFixed(1)}        ${String(group.length).padStart(5)}  ${String(right).padStart(5)}   ${(observed * 100).toFixed(1).padStart(6)}%   ${gap >= 0 ? '+' : ''}${(gap * 100).toFixed(1)}%`,
+    );
+  }
+  lines.push(`  Average gap between claimed and observed: ${((weighted / scored.length) * 100).toFixed(1)} points (0 would be perfect).`);
+  return lines;
+}

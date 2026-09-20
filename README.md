@@ -17,6 +17,8 @@ Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub re
 
 ## Use it in your project
 
+**Giving it to your team (or another company): [TEAM-GUIDE.md](TEAM-GUIDE.md)** — what to install, what each role uses it for, and what it never does.
+
 **Putting it on a real repository: [QUICKSTART.md](QUICKSTART.md)** — ten minutes, copy-paste, and what to check on the first failing run.
 
 ### 1. In GitHub CI (developers, SDETs, DevOps)

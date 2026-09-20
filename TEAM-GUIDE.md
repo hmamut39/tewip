@@ -1,0 +1,219 @@
+# Using Tewip in your team
+
+**Tewip reads your failing tests and tells you why each one failed** — a real bug, a flaky test, a
+broken environment, bad test data, or a renamed element on the page — with the evidence for each
+answer and one next step. It also writes test plans and new tests, and checks them by running them.
+
+It works with any language and any test framework, because it reads the test report your CI already
+produces (JUnit XML, which almost every runner can write) — Java, .NET, Python, JavaScript and
+TypeScript, Go, Ruby, PHP, Rust, and the browser and mobile tools on top of them.
+
+---
+
+## 1. First, the honest status
+
+Tewip is **private**. It is not on the VS Code Marketplace and not on the npm registry, so you
+cannot install it with `code --install-extension tewip` or `npm install -g tewip`. Nothing is
+published publicly yet, on purpose.
+
+That means there are exactly three ways for you to get it, and all of them start with Hasan
+(the author) sending you something or giving you access.
+
+| How you get it | What you need from Hasan | Good for |
+|---|---|---|
+| **A. Two files** (recommended to start) | `tewip-0.4.0.tgz` and `tewip-0.4.0.vsix` | Anyone, any company. Nothing is shared with anyone else. |
+| **B. Access to the private repository** | An invite to `hmamut39/tewip` on GitHub | People who want to run it inside GitHub CI on a repo in the **same** GitHub account |
+| **C. A copy inside your own company** | A copy of the source to put in your company's own GitHub or GitLab | Companies whose policy forbids outside tools |
+
+**Which one applies to you?**
+
+- You work at CVS or another company, and your code lives in your employer's repositories →
+  **option A**, and run it from the command line or in your pipeline. This keeps everything inside
+  your company; nothing touches Hasan's account.
+- You are working with Hasan on his own GitHub repositories → **option B**, and add the ready-made
+  GitHub Action.
+- Your company needs to own the tool itself → **option C**.
+
+> **Why not just the Marketplace?** A published extension is public forever. Tewip stays private
+> until its owner decides otherwise. This guide is written for that reality, not around it.
+
+---
+
+## 2. What you need on your machine
+
+- **Node.js 22.18 or newer** (`node --version`). This is the only hard requirement.
+- **An OpenAI API key** — *optional*. Without it, Tewip still works: its built-in rules answer most
+  failures. With it, the harder failures get an answer too, and `plan` and `write` become available.
+- **The GitHub CLI (`gh`), logged in** — only for `tewip ci`, which fetches a report from GitHub.
+
+### Privacy, in plain words
+
+This matters for a company laptop, so it is stated exactly:
+
+- Without an OpenAI key, **Tewip sends nothing anywhere**. It runs entirely on your machine.
+- With a key, it sends only the **failure text** (the error message and test name) of the failures
+  its rules could not settle, to OpenAI, and nothing else. It never sends your source code.
+- `tewip plan` and `tewip write` do send more: the feature description you type, the names of your
+  tests, and the related test and source files, because they cannot write a useful test without
+  them. Use these two only where your company allows an AI service to read source code.
+- Tewip stores its history in a `.tewip` folder inside your project. Add `.tewip/` to `.gitignore`.
+
+---
+
+## 3. Install
+
+### The command line (works everywhere: any OS, any CI, any company)
+
+```bash
+npm install -g ./tewip-0.4.0.tgz     # the file Hasan sent you
+tewip --help                          # check it worked
+```
+
+### VS Code, Cursor, Windsurf or VSCodium
+
+1. Open the Extensions panel.
+2. Click the `…` menu at the top of the panel → **Install from VSIX…**
+3. Choose the `tewip-0.4.0.vsix` file Hasan sent you.
+
+You now have two commands (press `Ctrl+Shift+P` and type "Tewip"):
+
+- **Tewip: Explain a test report…** — pick a test report file, get the diagnosis.
+- **Tewip: Why did CI fail on this branch?** — reads the report from your GitHub CI run.
+
+The extension also connects Tewip to your editor's AI assistant, so you can just ask it questions
+in plain language ("why did the checkout test fail?").
+
+### JetBrains (IntelliJ, WebStorm, PyCharm, Rider), Claude, or any other AI assistant
+
+Add one MCP server entry. The command is `tewip mcp`. Example for Claude Code:
+
+```bash
+claude mcp add tewip -- tewip mcp
+```
+
+### GitHub CI (only with option B or C above)
+
+```yaml
+      - name: Tewip
+        if: always()
+        uses: hmamut39/tewip@main       # option C: point this at your own copy
+        with:
+          junit-report: report.xml      # a file, or a folder of them
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}   # optional
+```
+
+On every failing run it comments on the pull request, writes the triage board into the run summary,
+collects environment failures in one issue, and (optionally) opens a fix pull request.
+
+---
+
+## 4. What you can actually do with it
+
+| Command | What it does | When you use it |
+|---|---|---|
+| `tewip explain report.xml` | Explains every failing test in a report: cause, confidence, evidence, next step | Right after a test run fails, local or CI |
+| `tewip ci owner/repo --pr 12` | The same, for a GitHub pull request, without leaving the terminal | "Why is CI red on my PR?" |
+| `tewip plan "<feature>"` | Writes a test plan: risks, scenarios by priority, what is already covered, what to automate next | Before building or testing a feature |
+| `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
+| `tewip mcp` | Serves all of the above to your editor's AI assistant | Set up once |
+
+Notes that save you time:
+
+- `explain` needs a report file. Any runner can write one: `pytest --junitxml=report.xml`,
+  `jest --reporters=jest-junit`, `mvn test` (Surefire writes them by itself), `dotnet test --logger trx`.
+- `write` never touches your application code. It only adds new test files, and you review and
+  commit them yourself.
+- Everything it writes locally goes to the `.tewip` folder in your project.
+
+---
+
+## 5. Which role uses which part
+
+**Developer** — "is this failure my fault?"
+- `tewip ci your-org/repo --pr 12`, or the editor command *Why did CI fail on this branch?*
+- In CI, the pull request comment tells you which failures your change likely caused and which it
+  did not, with the reason.
+
+**QA engineer / SDET** — the daily driver
+- `tewip explain` for the triage board: every failing test grouped by what to do next (fix the
+  locator, stabilise the test, fix the data, file a bug, re-run the environment).
+- `tewip plan` before writing tests for a feature, then `tewip write` to draft them.
+- Correct it when it is wrong: reply to its pull-request comment with `/triage TIMING #2 flaky on CI`.
+  It remembers that and answers with your decision next time, naming you.
+
+**DevOps / SRE** — "is the pipeline broken, or the code?"
+- Environment failures (a service that was down, a refused connection, a container that never
+  started, a missing emulator) are collected in **one** issue instead of paging you per test.
+- The merge gate (`gate: real-failures`) blocks a merge only for real failures, and lets known
+  noise through — so a broken test environment does not stop the team.
+
+**Engineering manager / team lead**
+- The release readiness view, in plain words: READY, WAIT or NOT READY, and which product areas are
+  broken.
+- The risk digest: which areas got worse between the first and second half of the period.
+
+**Software architect / principal engineer**
+- The architecture view: fragile areas, single commits that broke many suites, failing service
+  dependencies.
+- The quality view: flakiness hotspots and test-design debt, ranked by the CI time they waste.
+
+**Security** — planned, not built yet (`tewip secure`, Phase 9 in ROADMAP.md).
+
+Managers, architects and leads do not need to install anything: those views are produced by the CI
+job and kept in a GitHub issue, or can be asked for through an AI assistant.
+
+---
+
+## 6. What Tewip will never do
+
+These are enforced in the code, not promises in a document:
+
+- It **never edits your application code**. It changes only test files, and only inside the folder
+  you allow.
+- It **never merges anything**. Fixes are opened as a pull request for a person to review.
+- It **never keeps a test it has not proved**: a written test is kept only if it passed every run
+  and failed when its main check was deliberately broken.
+- It **never reports a bug it cannot show you**: a "possible bug" must quote the real output of the
+  run.
+- It **never silently accepts a report it cannot read**. It says so, instead of reporting "no
+  failures" for a run that failed.
+
+---
+
+## 7. What it costs
+
+The built-in rules are free and answer most failures. Only what they cannot settle goes to the AI
+model, and every answer is cached, so asking twice costs nothing. Every run prints its own cost.
+
+Measured examples: a run of 41 real failures cost about 30 seconds of model time; writing 10 tests
+for a feature costs roughly $0.50 to $1.50 in OpenAI usage.
+
+---
+
+## 8. How good is it, honestly
+
+On six sets of real failures from public projects (WordPress Gutenberg, Supabase, JupyterLab and
+others), Tewip's answers were right **86% to 99.7%** of the time, depending on the project.
+
+Two caveats the project states openly:
+
+- Those labels were written by an AI reviewer, not by a human expert, so treat them as provisional.
+- When Tewip says it is 70% sure, it is right about 90% of the time — it is *under*-confident, which
+  is the safer direction, but it means it sometimes asks for a human where it did not need to.
+
+The full numbers, including what is **not** measured yet, are in `eval/README.md` and `ROADMAP.md`.
+
+---
+
+## 9. If something goes wrong
+
+| What you see | What it means |
+|---|---|
+| `tewip: command not found` | The npm install did not finish, or your PATH does not include npm's global folder |
+| `no test report Tewip can read` | The file is not JUnit XML, NUnit or TRX. Make your runner write JUnit XML |
+| `writing a plan needs a model` | `plan` and `write` need `OPENAI_API_KEY` set |
+| `Playwright is not installed in this project` | Only affects reading live pages for `plan`/`write`; everything else still works |
+| Tewip says a failure is UNKNOWN | It refuses to guess. With an API key set, fewer failures end up here |
+
+Questions, or you think a diagnosis is wrong: tell Hasan — a wrong answer with its evidence is the
+most useful thing you can send, because corrections are how it gets better.

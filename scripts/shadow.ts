@@ -83,6 +83,13 @@ async function main(): Promise<void> {
 
   const target = arg('publish');
   if (!target) return;
+  // A shadow report is Tewip's reading of someone else's public CI failures. It goes to a private
+  // repository only: posting it in a public one would publish judgements about another project's
+  // code where its maintainers never asked for them. Checked here, so no workflow can get it wrong.
+  const visibility = JSON.parse((await ghRaw(['api', `repos/${target}`, '--jq', '{private: .private}'])).toString('utf8')) as { private?: boolean };
+  if (visibility.private !== true) {
+    throw new Error(`refusing to publish a shadow report to ${target}: it is a public repository. Shadow reports read other projects' CI and belong in a private repository.`);
+  }
   // Posted through the gh CLI (same login as the harvester), one request at a time: GitHub's
   // secondary rate limit rejects issues and comments created back to back.
   const post = async <T>(path: string, body: Record<string, string>): Promise<T> => {

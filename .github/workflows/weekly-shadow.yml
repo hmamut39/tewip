@@ -89,7 +89,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node scripts/shadow.ts "${{ matrix.source }}" --dataset "${{ matrix.source }}-weekly" --publish ${{ github.repository }}
+        # SHADOW_REPO must name a PRIVATE repository: these reports read other projects' CI.
+        # Without it, nothing is published. shadow.ts refuses a public target as well.
+        run: |
+          if [ -z "${{ vars.SHADOW_REPO }}" ]; then
+            echo "vars.SHADOW_REPO is not set: keeping the report in the artifact instead of publishing it"
+            exit 0
+          fi
+          node scripts/shadow.ts "${{ matrix.source }}" --dataset "${{ matrix.source }}-weekly" --publish "${{ vars.SHADOW_REPO }}"
 
       - name: Keep the data for next week
         if: always() && steps.pick.outputs.run == 'true'

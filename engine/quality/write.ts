@@ -163,3 +163,25 @@ export function brittleChecks(code: string): string[] {
     .filter((line) => /expect|assert|should|Assert/.test(line) && /(['"`])[^'"`\n]*\b\d{3,}\b[^'"`\n]*\1/.test(line) && !/timeout|status|toBeLessThan|toBeGreaterThan/i.test(line))
     .map((line) => line.trim().slice(0, 140));
 }
+
+/** Lines that check something: an assertion, or an expected value in a table of cases. */
+const checkLines = (code: string) => code.split('\n').filter((line) => /expect|assert|should|Assert|verify/.test(line) && !/^\s*(?:\/\/|\*|#)/.test(line));
+
+/** A check that can only say something is absent: it passes as long as the thing never appears. */
+const NEGATIVE = /\.not[.\s(]|not\.to|toBeNull|toBeUndefined|toBeFalsy|assertFalse|assertNull|toHaveLength\(0\)|isNull|isFalse|\bnot_/;
+/** A check that is true of almost any value: it proves the code ran, not that it is right. */
+const SHALLOW = /toBeDefined\(\)|toBeTruthy\(\)|not\.toBeNull\(\)|toBeInstanceOf\(|typeof\s|assertIsNotNone|is not None|toBeGreaterThanOrEqual\(0\)/;
+
+/**
+ * Checks worth a second look, though the test passes and fails when broken: a test whose every
+ * check only says something is absent, or only that a value exists, can keep passing while the
+ * behaviour it is named for disappears. The deliberate break cannot see this, because it changes
+ * one check and that check does fail.
+ */
+export function weakChecks(code: string): string | null {
+  const lines = checkLines(code);
+  if (lines.length === 0) return null;
+  if (lines.every((l) => NEGATIVE.test(l))) return `every check only says something is absent (${lines.length} check(s)), so it passes while the feature is missing`;
+  if (lines.every((l) => SHALLOW.test(l))) return `every check only says a value exists (${lines.length} check(s)), not that it is right`;
+  return null;
+}

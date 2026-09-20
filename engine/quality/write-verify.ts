@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
-import { brittleChecks, draftTest, failureHead, mutate, remutate, repairTest, type Draft, type Scenario, type WriteContext } from './write.ts';
+import { brittleChecks, draftTest, failureHead, mutate, remutate, repairTest, weakChecks as weakOf, type Draft, type Scenario, type WriteContext } from './write.ts';
 
 export interface RunResult {
   passed: boolean;
@@ -59,10 +59,10 @@ function runOnce(framework: Framework, file: string, timeoutMs: number): RunResu
   return { passed: r.status === 0, output: output.slice(-6000) + (r.status === 0 ? '' : pageAtFailure(output, framework.cwd)) };
 }
 
-/** The broken version did not run at all, so its failure proves nothing about the check. */
 /** Above this, one run of the test is slow enough to trade a reliability run for time. */
 const SLOW_RUN_MS = 90_000;
 
+/** The broken version did not run at all, so its failure proves nothing about the check. */
 const DID_NOT_RUN = /SyntaxError|error TS\d{4}|IndentationError|NameError|ReferenceError|Unexpected token|compilation (?:error|failure)|cannot find symbol|error CS\d{4}/;
 
 export type Outcome =
@@ -148,5 +148,6 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   if (broken.skipped) return { draft, outcome: { kind: 'rejected', reason: 'the broken version was skipped, so the check was not proven', repairs, passedReliably: true } };
   if (broken.passed) return { draft, outcome: { kind: 'rejected', reason: `still passes with its check broken (${draft.mutation.find} → ${draft.mutation.replace}): it could not catch the bug it is for`, repairs, passedReliably: true } };
   if (DID_NOT_RUN.test(broken.output)) return { draft, outcome: { kind: 'rejected', reason: 'the broken version did not even run, so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
-  return { draft, outcome: { kind: 'kept', runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: brittleChecks(draft.code) } };
+  const weak = weakOf(draft.code);
+  return { draft, outcome: { kind: 'kept', runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: [...brittleChecks(draft.code), ...(weak ? [weak] : [])] } };
 }

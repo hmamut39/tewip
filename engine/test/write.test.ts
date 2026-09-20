@@ -270,3 +270,15 @@ describe('a deliberate break that does not compile', () => {
     assert.equal((outcome as { mutation: string }).mutation, "'3 results' → '4 results'");
   });
 });
+
+describe('checks that cannot really fail', () => {
+  it('flags a test whose every check only says something is absent, or only that a value exists', async () => {
+    const { weakChecks } = await import('../quality/write.ts');
+    const absent = "test('x', () => {\n  expect(el).not.toHaveAttribute('aria-pressed', 'true');\n  expect(other).not.toBeVisible();\n});";
+    assert.match(weakChecks(absent)!, /only says something is absent/);
+    const exists = "test('x', () => {\n  expect(result).toBeDefined();\n  expect(list).toBeTruthy();\n});";
+    assert.match(weakChecks(exists)!, /only says a value exists/);
+    const real = "test('x', () => {\n  expect(el).not.toBeVisible();\n  expect(total).toBe(42);\n});";
+    assert.equal(weakChecks(real), null);
+  });
+});

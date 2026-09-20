@@ -9,6 +9,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 | **Terminal** | `npm install -g tewip-<version>.tgz` (from the release; Tewip is not on the npm registry yet), then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
 | **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension: registers Tewip with the editor's AI assistant and adds *Explain a test report* and *Why did CI fail on this branch?* |
 | **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
+| **Any model** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama (no account, nothing leaves the computer): `TEWIP_PROVIDER` |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
 
 Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.

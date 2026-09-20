@@ -42,17 +42,32 @@ That means there are exactly three ways for you to get it, and all of them start
 ## 2. What you need on your machine
 
 - **Node.js 22.18 or newer** (`node --version`). This is the only hard requirement.
-- **An OpenAI API key** — *optional*. Without it, Tewip still works: its built-in rules answer most
-  failures. With it, the harder failures get an answer too, and `plan` and `write` become available.
+- **A model** — *optional, and it does not have to be OpenAI*. Without any model, Tewip still works:
+  its built-in rules answer most failures on their own. With one, the harder failures get an answer
+  too, and `plan` and `write` become available. Pick whichever your company already allows:
+
+  | You have | Set this |
+  |---|---|
+  | OpenAI | `TEWIP_API_KEY=sk-...` |
+  | Claude (Anthropic) | `TEWIP_PROVIDER=anthropic` and `TEWIP_API_KEY=...` |
+  | Gemini (Google) | `TEWIP_PROVIDER=google` and `TEWIP_API_KEY=...` |
+  | Azure OpenAI | `TEWIP_PROVIDER=azure`, `TEWIP_BASE_URL=<your deployment URL>`, `TEWIP_API_KEY=...` |
+  | **Nothing, and no account** | `TEWIP_PROVIDER=ollama` — install [Ollama](https://ollama.com), run `ollama pull qwen3:8b`. The model runs on your own machine and no data leaves it |
+  | OpenRouter, Groq, Together, vLLM, LM Studio | `TEWIP_PROVIDER=custom`, `TEWIP_BASE_URL=...`, `TEWIP_API_KEY=...` |
+
+  Each person (or CI job) pays for their own model usage. There is no Tewip service in between and
+  no account with anyone to create.
 - **The GitHub CLI (`gh`), logged in** — only for `tewip ci`, which fetches a report from GitHub.
 
 ### Privacy, in plain words
 
 This matters for a company laptop, so it is stated exactly:
 
-- Without an OpenAI key, **Tewip sends nothing anywhere**. It runs entirely on your machine.
-- With a key, it sends only the **failure text** (the error message and test name) of the failures
-  its rules could not settle, to OpenAI, and nothing else. It never sends your source code.
+- Without a model, **Tewip sends nothing anywhere**. It runs entirely on your machine. The same is
+  true with `TEWIP_PROVIDER=ollama`, which runs the model locally.
+- With a hosted model (OpenAI, Claude, Gemini, Azure), it sends only the **failure text** (the error
+  message and the test name) of the failures its rules could not settle, to that provider and
+  nowhere else. It never sends your source code.
 - `tewip plan` and `tewip write` do send more: the feature description you type, the names of your
   tests, and the related test and source files, because they cannot write a useful test without
   them. Use these two only where your company allows an AI service to read source code.
@@ -211,7 +226,7 @@ The full numbers, including what is **not** measured yet, are in `eval/README.md
 |---|---|
 | `tewip: command not found` | The npm install did not finish, or your PATH does not include npm's global folder |
 | `no test report Tewip can read` | The file is not JUnit XML, NUnit or TRX. Make your runner write JUnit XML |
-| `writing a plan needs a model` | `plan` and `write` need `OPENAI_API_KEY` set |
+| `writing a plan needs a model` | `plan` and `write` need a model: the message lists every way to set one up |
 | `Playwright is not installed in this project` | Only affects reading live pages for `plan`/`write`; everything else still works |
 | Tewip says a failure is UNKNOWN | It refuses to guess. With an API key set, fewer failures end up here |
 

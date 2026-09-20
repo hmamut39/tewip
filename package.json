@@ -1,7 +1,6 @@
 {
   "name": "tewip",
   "version": "0.4.0",
-  "private": true,
   "description": "Tewip finds why each failing test failed - real bug, flaky test, environment, test data or changed selector - for any stack, from the command line, CI, or your editor.",
   "keywords": [
     "test-failures",
@@ -35,9 +34,11 @@
     "tewip": "dist/cli/tewip.js"
   },
   "files": [
-    "dist/",
+    "LICENSE",
+    "QUICKSTART.md",
     "README.md",
-    "QUICKSTART.md"
+    "TEAM-GUIDE.md",
+    "dist/"
   ],
   "scripts": {
     "test": "playwright test",
@@ -63,7 +64,7 @@
     "prepack": "npm run build",
     "tewip": "node cli/tewip.ts"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.5.1",
@@ -72,5 +73,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.6.5"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/hmamut39/tewip/issues"
+  },
+  "author": "Hasan Mamut"
 }

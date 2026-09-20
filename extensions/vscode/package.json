@@ -4,18 +4,54 @@
   "description": "Finds why each failing test failed (real bug, flaky, environment, test data or changed selector) for any stack, and connects Tewip to your editor's AI assistant.",
   "version": "0.4.0",
   "publisher": "hmamut39",
-  "license": "SEE LICENSE IN LICENSE.txt",
-  "repository": { "type": "git", "url": "https://github.com/hmamut39/tewip.git" },
-  "engines": { "vscode": "^1.101.0" },
-  "categories": ["Testing", "AI", "Other"],
-  "keywords": ["test failures", "flaky tests", "triage", "root cause", "playwright", "pytest", "jest", "junit", "ci", "mcp"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hmamut39/tewip.git",
+    "directory": "extensions/vscode"
+  },
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Testing",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "test failures",
+    "flaky tests",
+    "triage",
+    "playwright",
+    "pytest",
+    "jest",
+    "junit",
+    "ci",
+    "root cause",
+    "sdet"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
-    "mcpServerDefinitionProviders": [{ "id": "tewip", "label": "Tewip" }],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "tewip",
+        "label": "Tewip"
+      }
+    ],
     "commands": [
-      { "command": "tewip.explainReport", "title": "Explain a test report…", "category": "Tewip" },
-      { "command": "tewip.ciReport", "title": "Why did CI fail on this branch?", "category": "Tewip" }
+      {
+        "command": "tewip.explainReport",
+        "title": "Explain a test report\u2026",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.ciReport",
+        "title": "Why did CI fail on this branch?",
+        "category": "Tewip"
+      }
     ],
     "configuration": {
       "title": "Tewip",
@@ -27,5 +63,9 @@
         }
       }
     }
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/hmamut39/tewip/issues"
+  },
+  "homepage": "https://github.com/hmamut39/tewip#readme"
 }

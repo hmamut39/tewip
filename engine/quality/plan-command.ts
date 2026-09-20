@@ -3,6 +3,7 @@
 // serves the command line and the MCP server, so an editor's assistant gets the same plan.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { noModelHelp } from '../llm/providers.ts';
 import { usageLine } from '../llm/usage.ts';
 import { writerFromEnv } from './model.ts';
 import { gatherPlanFacts, writePlan } from './plan.ts';
@@ -21,7 +22,8 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 /** Writes the plan into the project's .tewip/plans and returns it as Markdown, with where it went. */
 export async function planProject(cmd: PlanCommand, progress: (line: string) => void = () => {}): Promise<{ markdown: string; out: string }> {
   const model = writerFromEnv(cmd.root);
-  if (!model) throw new Error('writing a plan needs a model: set OPENAI_API_KEY (in the environment or a .env file)');
+  if (!model) throw new Error(`writing a plan needs a model.
+${noModelHelp()}`);
   progress('Tewip is reading the project...');
   const facts = await gatherPlanFacts(cmd);
   progress(`  ${facts.tests.tests.length} existing test(s), ${facts.pages.length} page(s) read${facts.change ? `, ${facts.change.files.length} changed file(s)` : ''}${facts.history.length ? `, ${facts.history.length} past failure(s)` : ''}. Writing the plan...`);

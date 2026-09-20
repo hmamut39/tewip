@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { appendJsonl, DATA_DIR, PROJECT_ROOT, readJsonl } from '../../reporters/store.ts';
 import { truncate } from '../signature.ts';
+import { clientFor, modelChoiceFromEnv } from './providers.ts';
 import { recordCacheHit, recordCall, recordRefusal } from './usage.ts';
 
 export interface LlmRequest {
@@ -133,14 +134,10 @@ export function cachedClient(inner: LlmClient, file = CACHE_FILE): LlmClient {
  */
 export function llmFromEnv(): LlmClient | null {
   loadDotEnv();
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (process.env.TRIAGE_LLM === 'off' || !apiKey) return null;
-  const client = openAiClient({
-    apiKey,
-    model: process.env.TRIAGE_LLM_MODEL || DEFAULT_MODEL,
-    reasoningEffort: process.env.TRIAGE_LLM_REASONING || DEFAULT_REASONING,
-    baseUrl: process.env.OPENAI_BASE_URL || undefined,
-  });
+  if (process.env.TRIAGE_LLM === 'off') return null;
+  const choice = modelChoiceFromEnv('triage');
+  if (!choice) return null;
+  const client = clientFor(choice);
   // The budget sits inside the cache: a cached answer never reaches it, so it is free, and only
   // real calls to the model count against TRIAGE_LLM_MAX_CALLS.
   const budget = Number(process.env.TRIAGE_LLM_MAX_CALLS);

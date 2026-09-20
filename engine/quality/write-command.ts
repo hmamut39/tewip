@@ -3,6 +3,7 @@
 // other draft is moved to .tewip/drafts with the reason, and nothing is committed or pushed.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
+import { noModelHelp } from '../llm/providers.ts';
 import { usageLine } from '../llm/usage.ts';
 import { chooseFramework, detectFrameworks } from './frameworks.ts';
 import { readPages, relatedCodeSources, relatedTestSources } from './grounding.ts';
@@ -38,7 +39,8 @@ function latestPlan(root: string): string {
 
 export async function runWrite(cmd: WriteCommand): Promise<void> {
   const model = writerFromEnv(cmd.root);
-  if (!model) throw new Error('writing tests needs a model: set OPENAI_API_KEY (in the environment or a .env file)');
+  if (!model) throw new Error(`writing tests needs a model.
+${noModelHelp()}`);
   const planPath = cmd.plan ?? latestPlan(cmd.root);
   const saved = JSON.parse(readFileSync(planPath, 'utf8')) as SavedPlan;
 

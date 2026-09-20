@@ -185,3 +185,45 @@ describe('component tests: Testing Library, Vue Test Utils, jest-dom, Jasmine', 
     assert.equal(valueMismatch('Expected spy deliver to have been called 4 times. It was called 3 times.'), null);
   });
 });
+
+describe('mobile tests: Appium, Espresso, Detox, Maestro, XCUITest, Flutter', () => {
+  it('reads an element that was never found, with what it looked for', async () => {
+    const cases: Array<[string, string | null]> = [
+      ['androidx.test.espresso.NoMatchingViewException: No views in hierarchy found matching: (view.getId() is <2131296257/app:id/save>)', '(view.getId() is <2131296257/app:id/save>)'],
+      ['Test Failed: No elements found for “MATCHER(identifier == “non-existent id”)”', 'MATCHER(identifier == “non-existent id”)'],
+      ['[ERROR] maestro.MaestroException$ElementNotFound: Element not found: Text matching regex: Save', 'Text matching regex: Save'],
+      ['Failed to get matching snapshot: No matches found for Element at index 25', 'Element at index 25'],
+      ['selenium.common.exceptions.NoSuchElementException: Message: An element could not be located on the page using the given search parameters.', null],
+    ];
+    for (const [message, locator] of cases) {
+      assert.equal(isElementNotFound(message), true, message.slice(0, 40));
+      assert.equal(extractLocator(message), locator);
+    }
+  });
+
+  it("does not call Flutter's missing widget a wrong value, which read as a real bug", async () => {
+    const { valueMismatch } = await import('../error-parse.ts');
+    const flutter = 'Expected: exactly one matching candidate\n  Actual: Found 0 widgets with widget matching predicate: []   // identifier(\'L1 O\')\n   Which: means none were found but one was expected';
+    assert.equal(isElementNotFound(flutter), true);
+    assert.equal(valueMismatch(flutter), null);
+  });
+
+  it('calls a missing device, a crashed app or an unbuildable sandbox an environment problem', async () => {
+    const { deviceEnvSignal } = await import('../device-errors.ts');
+    assert.equal(deviceEnvSignal("[AndroidUiautomator2Driver] [ 'Device emulator-5554 was not in the list of connected devices' ]")?.kind, 'no-device');
+    assert.equal(deviceEnvSignal('wda.WDAError: WDAError(status=889, value=Application is not running, possibly crashed)')?.kind, 'app-crashed');
+    assert.equal(deviceEnvSignal('Error Domain=IDETestOperationsObserverErrorDomain Code=4 "Failed to install or launch the test runner"')?.kind, 'install-failed');
+    assert.equal(deviceEnvSignal('java.lang.UnsupportedOperationException: Failed to create a Robolectric sandbox: Android SDK 36 requires Java 21 (have Java 17)')?.kind, 'sandbox');
+    // Detox prints the same error for a crash and for a test that timed out: only the hint differs.
+    assert.equal(deviceEnvSignal('error: Failed to run application on the device\n HINT: your tests have timed out and called detox.cleanup()'), null);
+    assert.equal(deviceEnvSignal("expected 'Hello' to equal 'Hi'"), null);
+  });
+
+  it('reads an HTTP status mismatch from REST Assured, Newman, supertest and Karate', async () => {
+    const { valueMismatch } = await import('../error-parse.ts');
+    assert.deepEqual(valueMismatch('java.lang.AssertionError: 1 expectation failed.\nExpected status code <200> but was <500>.'), { expected: '200', received: '500' });
+    assert.deepEqual(valueMismatch('expected response to have status code 201 but got 405'), { expected: '201', received: '405' });
+    assert.deepEqual(valueMismatch('Error: expected 200 "OK", got 500 "Internal Server Error"'), { expected: '200', received: '500' });
+    assert.deepEqual(valueMismatch('status code was: 500, expected: 200'), { expected: '200', received: '500' });
+  });
+});

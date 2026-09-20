@@ -66,6 +66,31 @@ Received: [31m"11"[39m]]></failure></testcase></testsuite></testsuites>`;
     assert.match(record.errorMessage, /Expected: "12"\nReceived: "11"/);
   });
 
+  it("reads NUnit 3's own result file, which NUnit writes instead of JUnit XML", () => {
+    const xml = `<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-run id="2" testcasecount="2" result="Failed" total="2" passed="1" failed="1" start-time="2026-09-20T08:00:00Z">
+  <test-suite type="TestFixture" name="CartTests" fullname="Shop.CartTests">
+    <test-case id="1000" name="Total" fullname="Shop.CartTests.Total" methodname="Total" classname="Shop.CartTests" result="Failed" duration="0.031">
+      <failure><message><![CDATA[  Assert.That(cart.Total, Is.EqualTo(4))
+  Expected: 4
+  But was:  3
+]]></message><stack-trace><![CDATA[   at Shop.CartTests.Total() in C:\src\CartTests.cs:line 21]]></stack-trace></failure>
+    </test-case>
+    <test-case id="1001" name="Empty" fullname="Shop.CartTests.Empty" classname="Shop.CartTests" result="Passed" duration="0.001"/>
+  </test-suite>
+</test-run>`;
+    const { records, summary } = importJunit(report(xml, 'TestResult.xml'), META);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].testId, 'Shop.CartTests.Total');
+    assert.match(records[0].errorMessage, /Expected: 4/);
+    assert.deepEqual(Object.keys(summary.attempts).sort(), ['Shop.CartTests.Empty', 'Shop.CartTests.Total']);
+  });
+
+  it('refuses to call an unreadable report a clean run', () => {
+    const testng = '<testng-results failed="1" passed="0"><suite name="s"><test name="t"/></suite></testng-results>';
+    assert.throws(() => importJunit(report(testng, 'testng-results.xml'), META), /no test report Tewip can read[\s\S]*NUnit 3/);
+  });
+
   it('reads Maven Surefire retries: a flaky failure followed by a pass is two attempts, one failed', () => {
     const xml = `<testsuite name="com.shop.CheckoutTest"><testcase name="pays" classname="com.shop.CheckoutTest" time="1.5">
       <flakyFailure message="Read timed out" type="java.net.SocketTimeoutException"><stackTrace>java.net.SocketTimeoutException: Read timed out

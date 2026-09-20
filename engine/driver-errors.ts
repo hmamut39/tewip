@@ -1,6 +1,7 @@
 // Deterministic readers for the error wording of browser and component-test tools other than
 // Playwright: Selenium (Java, Python, JavaScript, C#), WebdriverIO, Cypress, Testing Library (React,
-// Vue, Angular, Svelte), Vue Test Utils and jest-dom. Each tool says "element not found",
+// Vue, Angular, Svelte), Vue Test Utils, jest-dom, and the mobile tools (Appium, Espresso, Detox,
+// Maestro, XCUITest, Flutter). Each tool says "element not found",
 // "something else took the click" and "the element went stale" in its own words; these map them
 // onto the same signals the rules read from Playwright. None of them guess: no match, no signal.
 // The patterns were checked against real messages pasted into public GitHub issues and pull
@@ -43,6 +44,17 @@ const NOT_FOUND: Array<{ pattern: RegExp; locator: (m: RegExpMatchArray) => stri
   { pattern: /Unable to find a label with the text of: (.+?)\.?$/m, locator: (m) => `getByLabel(${arg(m[1])})` },
   { pattern: /Unable to find an element with the (placeholder text|alt text|title|display value)(?: of)?: (.+?)\.?$/m, locator: (m) => `getBy${{ 'placeholder text': 'Placeholder', 'alt text': 'AltText', title: 'Title', 'display value': 'DisplayValue' }[m[1]]}(${arg(m[2])})` },
   { pattern: /Unable to find an element with the text: (.+?)\.?(?: This could be| \.\.\.|$)/m, locator: (m) => `getByText(${arg(m[1])})` },
+  // Espresso (Android): NoMatchingViewException: No views in hierarchy found matching: (view.getId() is <2131296257/app:id/save>...)
+  { pattern: /No views in hierarchy found matching:[ \t]*([^\n]+)/, locator: (m) => m[1].trim() },
+  // Detox: No elements found for "MATCHER(identifier == "save-button")"
+  // The matcher itself holds quotes, so this takes everything up to the last one on the line.
+  { pattern: /No elements found for[ \t]*[“"']([^\n]+)[”"']/, locator: (m) => m[1].trim() },
+  // Maestro: Element not found: Text matching regex: Save
+  { pattern: /Element not found:[ \t]*([^\n]+)/, locator: (m) => m[1].trim() },
+  // XCUITest: No matches found for Element at index 25
+  { pattern: /No matches found for[ \t]*([^\n]+)/, locator: (m) => m[1].trim() },
+  // Flutter: Actual: Found 0 widgets with widget matching predicate: [] // identifier('L1 O')
+  { pattern: /Found 0 widgets with[ \t]*([^\n]+)/, locator: (m) => m[1].trim() },
   // Vue Test Utils 1: [vue-test-utils]: find did not return button.save, cannot call trigger() on empty Wrapper
   { pattern: /find did not return (.+?), cannot call/, locator: (m) => m[1] },
 ];
@@ -55,7 +67,7 @@ const arg = (s: string) => (/^\/.*\/[a-z]*$/.test(s.trim()) ? s.trim() : `'${s.t
  * on an empty DOMWrapper") and jest-dom given a query that found nothing ("received value must be an
  * HTMLElement", "element could not be found in the document").
  */
-const NOT_FOUND_BARE = /\bNoSuchElement(?:Exception|Error)\b|\bno such element\b|Cannot call \w+ on an empty (?:DOM)?Wrapper|received value must be an HTMLElement or an SVGElement|element could not be found in the document/i;
+const NOT_FOUND_BARE = /\bNoSuchElement(?:Exception|Error)\b|\bno such element\b|Cannot call \w+ on an empty (?:DOM)?Wrapper|received value must be an HTMLElement or an SVGElement|element could not be found in the document|An element could not be located on the page using the given search parameters/i;
 
 export function driverElementNotFound(message: string): boolean {
   return NOT_FOUND_BARE.test(message) || NOT_FOUND.some(({ pattern }) => pattern.test(message));

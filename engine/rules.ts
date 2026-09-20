@@ -2,6 +2,7 @@
 // A rule returns null when it doesn't apply, or an outcome with category null when it
 // looked and declined; the declined evidence tells phase 3 what was already ruled out.
 import type { Evidence, RootCause, TriageRecord } from '../reporters/types.ts';
+import { deviceEnvSignal } from './device-errors.ts';
 import { isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
 import { locatorDrift, locatorDriftStrict } from './drift-rules.ts';
 import { timingFlaky, timingIntercepted, timingIntermittent, timingKnownFlaky, timingRetryPass, timingStaleElement } from './timing-rules.ts';
@@ -79,6 +80,27 @@ const envMassFailure: Rule = {
       return declined(this.id, `${failing.size} of ${attempted} tests failed in this run, but with ${shapes} different errors, not one shared cause`);
     }
     return null;
+  },
+};
+
+/**
+ * A mobile run that failed because of the device, not the app: no emulator or simulator, the app
+ * never installed or crashed on launch, the automation server unreachable, the test sandbox not
+ * buildable. The same kind of answer as a refused connection, and as safe to act on: re-run it
+ * somewhere healthy. Detox reports a crash and a test timeout with the same error, so the reader
+ * declines the timeout case and this rule never sees it.
+ */
+const envDevice: Rule = {
+  id: 'env-device',
+  evaluate({ record }) {
+    const signal = deviceEnvSignal(record.errorMessage);
+    if (!signal) return null;
+    const what = { 'no-device': 'no device or simulator was available', 'app-crashed': 'the app under test was not running', 'install-failed': 'the app or test runner could not be installed', 'driver-unreachable': 'the automation server could not be reached', sandbox: 'the test sandbox could not be built' }[signal.kind];
+    return {
+      category: 'ENV',
+      confidence: signal.confidence,
+      evidence: [{ source: this.id, message: `${what}: "${truncate(signal.match, 80)}"`, data: { ...signal } }],
+    };
   },
 };
 
@@ -182,4 +204,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, envDevice, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];

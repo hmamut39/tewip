@@ -134,6 +134,28 @@ function trxCases(root: XmlElement): Case[] {
     });
 }
 
+/**
+ * NUnit 3's own result file (`nunit3-console --result=x.xml`), whose root is <test-run>. NUnit does
+ * not write JUnit XML at all - its console offers only the nunit3 and nunit2 formats - so a .NET
+ * team on NUnit has nothing else to hand Tewip.
+ */
+function nunitCases(root: XmlElement): Case[] {
+  return descendants(root, 'test-case')
+    .filter((t) => t.attrs.result !== 'Skipped' && t.attrs.result !== 'Inconclusive')
+    .map((t) => {
+      const failureEl = t.children.find((c) => c.name === 'failure');
+      const child = (parent: XmlElement | undefined, name: string) => parent?.children.find((c) => c.name === name)?.text ?? '';
+      const testId = (t.attrs.fullname ?? '').trim() || [t.attrs.classname, t.attrs.methodname ?? t.attrs.name].filter(Boolean).join(' > ');
+      const seconds = Number(t.attrs.duration);
+      return {
+        testId,
+        file: (t.attrs.classname ?? '').trim(),
+        duration: Number.isFinite(seconds) ? Math.round(seconds * 1000) : 0,
+        attempts: [t.attrs.result === 'Failed' ? failure(child(failureEl, 'message'), child(failureEl, 'stack-trace')) : PASSED],
+      };
+    });
+}
+
 const REPORT_FILE = /\.(xml|trx)$/i;
 
 /** Report files under `path` (a file, or a directory searched recursively). */
@@ -156,6 +178,8 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
   const now = new Date().toISOString();
   let startedAt = '';
   let anyFailed = false;
+  const unread: string[] = [];
+  let parsedFiles = 0;
 
   for (const file of junitFiles(path)) {
     const root = parseXml(readFileSync(file, 'utf8'));
@@ -168,10 +192,18 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
       cases = junitCases(root, meta.workspace);
       const stamp = root.attrs.timestamp ?? root.children.find((c) => c.name === 'testsuite')?.attrs.timestamp;
       if (stamp && (!startedAt || stamp < startedAt)) startedAt = stamp;
+    } else if (root.name === 'test-run') {
+      cases = nunitCases(root);
+      const start = root.attrs['start-time'];
+      if (start && (!startedAt || start < startedAt)) startedAt = start;
     } else {
-      continue; // some other XML file in the same directory
+      // Not a report Tewip knows. Staying silent here would report a failing run as clean, so the
+      // file is remembered and, if nothing at all could be read, the caller is told.
+      unread.push(`${file} (root <${root.name}>)`);
+      continue;
     }
 
+    parsedFiles++;
     for (const c of cases) {
       attempts[c.testId] = (attempts[c.testId] ?? 0) + c.attempts.length;
       c.attempts.forEach((attempt, retry) => {
@@ -205,5 +237,16 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     status: anyFailed ? 'failed' : 'passed',
     attempts,
   };
+  // Never let an unreadable report look like a clean run: a run that failed would pass the gate.
+  if (unread.length > 0) {
+    const list = unread.slice(0, 5).join(', ');
+    if (parsedFiles === 0) {
+      throw new Error(
+        `no test report Tewip can read in ${path}: ${list}. It reads JUnit XML (<testsuites>/<testsuite>), NUnit 3 (<test-run>) and .NET TRX (<TestRun>). ` +
+          'Most runners can write JUnit XML; for TestNG use the Surefire report, and for NUnit use --result=x.xml.',
+      );
+    }
+    console.error(`[tewip] ignored ${unread.length} file(s) that are not a test report: ${list}`);
+  }
   return { records, summary, skippedShards: [] };
 }

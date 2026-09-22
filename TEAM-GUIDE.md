@@ -10,32 +10,20 @@ TypeScript, Go, Ruby, PHP, Rust, and the browser and mobile tools on top of them
 
 ---
 
-## 1. First, the honest status
+## 1. How to get it
 
-Tewip is **private**. It is not on the VS Code Marketplace and not on the npm registry, so you
-cannot install it with `code --install-extension tewip` or `npm install -g tewip`. Nothing is
-published publicly yet, on purpose.
+Tewip is published on the npm registry, free and open source (Apache-2.0):
 
-That means there are exactly three ways for you to get it, and all of them start with Hasan
-(the author) sending you something or giving you access.
+```bash
+npm install -g tewip-ai
+tewip --help
+```
 
-| How you get it | What you need from Hasan | Good for |
-|---|---|---|
-| **A. Two files** (recommended to start) | `tewip-0.4.0.tgz` and `tewip-0.4.0.vsix` | Anyone, any company. Nothing is shared with anyone else. |
-| **B. Access to the private repository** | An invite to `hmamut39/tewip` on GitHub | People who want to run it inside GitHub CI on a repo in the **same** GitHub account |
-| **C. A copy inside your own company** | A copy of the source to put in your company's own GitHub or GitLab | Companies whose policy forbids outside tools |
+The package is called `tewip-ai`; the command you type is `tewip`.
 
-**Which one applies to you?**
-
-- You work at CVS or another company, and your code lives in your employer's repositories →
-  **option A**, and run it from the command line or in your pipeline. This keeps everything inside
-  your company; nothing touches Hasan's account.
-- You are working with Hasan on his own GitHub repositories → **option B**, and add the ready-made
-  GitHub Action.
-- Your company needs to own the tool itself → **option C**.
-
-> **Why not just the Marketplace?** A published extension is public forever. Tewip stays private
-> until its owner decides otherwise. This guide is written for that reality, not around it.
+Nothing else is needed: no account with anyone, no licence key, and nothing of yours is sent to the
+author. The source is at <https://github.com/hmamut39/tewip>, so a company that needs to own the
+tool can keep its own copy instead.
 
 ---
 
@@ -80,15 +68,15 @@ This matters for a company laptop, so it is stated exactly:
 ### The command line (works everywhere: any OS, any CI, any company)
 
 ```bash
-npm install -g ./tewip-0.4.0.tgz     # the file Hasan sent you
-tewip --help                          # check it worked
+npm install -g tewip-ai
+tewip --help          # check it worked
 ```
 
 ### VS Code, Cursor, Windsurf or VSCodium
 
 1. Open the Extensions panel.
-2. Click the `…` menu at the top of the panel → **Install from VSIX…**
-3. Choose the `tewip-0.4.0.vsix` file Hasan sent you.
+2. Search for **Tewip** and install it.
+   (Until the Marketplace listing is live, use the `.vsix` file instead: `…` menu → **Install from VSIX…**)
 
 You now have two commands (press `Ctrl+Shift+P` and type "Tewip"):
 
@@ -106,7 +94,7 @@ Add one MCP server entry. The command is `tewip mcp`. Example for Claude Code:
 claude mcp add tewip -- tewip mcp
 ```
 
-### GitHub CI (only with option B or C above)
+### GitHub CI
 
 ```yaml
       - name: Tewip

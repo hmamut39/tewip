@@ -26,7 +26,7 @@ This file is the checklist. It says exactly what is done, what needs you, and wh
       (build output plus documentation), 122 kB.
 - [x] **Secret audit**: every commit in the history scanned for API keys and tokens, and for a
       committed `.env`. **Clean** — nothing found, and `.env` was never tracked.
-- [x] **Names are free**: `tewip` on npm, `hmamut39.tewip` on the Marketplace.
+- [x] **Published on npm**: `tewip-ai` 0.4.0, Apache-2.0. `hmamut39.tewip` is still free on the Marketplace.
 - [x] **Works without an OpenAI account**: OpenAI, Claude, Gemini, Azure, any OpenAI-compatible
       endpoint, or a local model through Ollama.
 - [x] **Documentation for newcomers**: `README.md`, `QUICKSTART.md`, `TEAM-GUIDE.md`.
@@ -35,13 +35,20 @@ This file is the checklist. It says exactly what is done, what needs you, and wh
 
 ## What needs you (about 20 minutes, both free)
 
-### 1. An npm account — for `npm install -g tewip`
+### 1. An npm account — DONE (2026-09-22)
+
+Published as **[`tewip-ai`](https://www.npmjs.com/package/tewip-ai)**: npm refused the plain name
+`tewip` as "too similar to existing packages temp, twig", so the package is `tewip-ai` while the
+command it installs is still `tewip`. Publishing needed a granular access token with "bypass 2FA",
+because npm now requires either 2FA or such a token, and its 2FA setup only offers security keys.
+
+<details><summary>The original steps, kept for reference</summary>
 
 1. Create one at <https://www.npmjs.com/signup> (free).
 2. Turn on two-factor authentication when it asks; npm requires it for publishing.
 3. On this machine, run `npm login` and follow the browser prompt.
 
-Then tell me, and I run `npm publish` for you. First publish claims the name `tewip`.
+</details>
 
 ### 2. A Marketplace publisher — for the VS Code extension
 

@@ -143,6 +143,100 @@ Phase metric: precision of "real risk" on labelled findings; noise removed witho
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 
+## Beyond diagnosis: what makes Tewip the tool a department opens every day
+
+Phases 1 to 9 make Tewip the best answer to "why did this fail, and what do I do about it". Phases
+10 to 14 are what turn that into daily use across a whole IT department: the work items people live
+in, the designs they build from, the code they fix, and the places they already are. Every one of
+them keeps the rule that makes Tewip worth trusting - **it says only what it can show** - and each
+names what it deliberately will not do, because a tool that will not lie to you is the product.
+
+### Phase 10: The Work Item Loop (`tewip jira`)
+
+Tewip already writes plans and verified tests. What stops a team using it daily is that its output
+lives in a folder while their work lives in Jira. This closes that loop in both directions:
+
+- **In:** `tewip plan --issue PROJ-123` reads the ticket (description, acceptance criteria, linked
+  designs, comments) and plans from it, as it already plans from code and pages.
+- **Out:** the plan's scenarios become real work items — a test-case issue per scenario, linked to
+  the story, with the priority and the "already covered by" evidence Tewip found.
+- **Back:** a failure Tewip diagnoses as a real bug opens (or updates) a bug issue with its
+  evidence, the run link, and the test that caught it; a failure it diagnoses as environment does
+  not, which is the whole point.
+- **Test management:** the same scenarios export to Xray and Zephyr, which is where QA departments
+  actually keep test cases.
+
+Phase metric: the share of created work items a person keeps without editing the substance (title,
+steps, expected result), measured on a real backlog. A ticket a human rewrites was noise.
+
+Refused on purpose: Tewip never moves a ticket through a workflow, never assigns people, and never
+closes anything. Writing is a suggestion; the board is the team's.
+
+### Phase 11: Design to Checks (`tewip design`)
+
+A design in Figma is a specification nobody tests against. Tewip reads a Figma file through its API
+and turns each frame into checks it can actually verify against the running page:
+
+- the accessible names and roles the design implies exist;
+- the text the design specifies, present and spelled the same;
+- **design drift**: the implemented page's accessibility snapshot compared to the design's frame,
+  reported as "the design says X, the page says Y", with no guessing about pixels.
+
+Phase metric: on a real project, the share of reported drifts a designer or developer agrees is a
+genuine difference. Anything below usefulness gets dropped rather than tuned into noise.
+
+Refused on purpose: Tewip does not generate application components from a design. Component code is
+feature code, which belongs to the general coding agents and to people, and generating it would
+break the promise that makes Tewip safe to install.
+
+### Phase 12: Verified Fixes to Application Code (`tewip fix --code`, opt-in)
+
+The hardest and most valuable extension, and the one that must be built last, because it crosses the
+line Tewip has kept since Phase 1: it never edits application code.
+
+It stays safe only under a rule with no exceptions: **the failing test is the oracle.** A change to
+application code is proposed only when
+
+1. the failure is diagnosed REAL_BUG with high confidence and a person has opted in;
+2. the change makes that failing test pass;
+3. **every other test in the file's suite still passes** (no green by breaking something else);
+4. the change is small and local, and it is opened as a pull request, never merged, never applied
+   to a branch on its own.
+
+If any of those cannot be shown, Tewip explains the bug instead of touching the code. That is not a
+lesser outcome: an explanation with evidence is what a developer wanted anyway.
+
+Phase metric: false-fix rate on real bugs with known fixes, which must be near zero, and the share
+of proposed fixes a reviewer merges unchanged. Measured on public repositories with a failing test
+and its real fix (the SWE-bench style construction), never on fixes Tewip invented the test for.
+
+### Phase 13: Where Teams Already Are (daily use)
+
+Being useful daily is a distribution problem, not a capability one:
+
+- **GitLab CI and Jenkins**, not only GitHub Actions — the engine is already platform-free; only the
+  edges (context, comments, history) are GitHub-shaped.
+- **Slack and Teams**: the morning digest, and an alert only for what needs a person.
+- **A weekly quality note** for leads and architects, written from the history Tewip already keeps.
+- **`tewip watch`**: run it beside your tests locally, and get the diagnosis the moment one fails,
+  without CI.
+
+Phase metric: a team that installed it is still using it four weeks later. Nothing else measures
+"daily".
+
+### Phase 14: Writing for People, Not Only Machines (`tewip spec`)
+
+Epics, stories and acceptance criteria from a feature description, grounded the way the test plan
+already is: in the code that exists, the tests that exist, and the failures this project has had.
+The same discipline applies — every claim about what the system already does is checked against the
+code, and anything unknown is an open question rather than a confident sentence.
+
+Phase metric: the share of generated acceptance criteria that survive review unchanged, and the
+share of "the system already does X" claims that are true.
+
+Refused on purpose: business plans, market analysis and anything Tewip cannot check. A confident
+document nobody can verify is the opposite of what this project is for.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

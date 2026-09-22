@@ -39,6 +39,7 @@ permissions:
   contents: write        # only needed for autofix
   pull-requests: write
   issues: write
+  actions: read          # lets it read the failed job's log when no test report was written
 
 steps:
   # ... checkout, install, npx playwright test ...
@@ -56,6 +57,8 @@ On every run, the action:
 - **DevOps:** collects environment failures (server errors, connection resets, outages) in **one** GitHub issue, and each new run adds a single grouped comment to it.
 - **Fixes (`autofix: true`):** for drifted locators that the deterministic rule matched to a renamed element, it rewrites the locator, re-runs that test, and opens a separate pull request with the changes that passed. It never merges and never edits application code.
 - **Every role:** uploads all role views as the `tewip-report` artifact.
+- **When the job dies before any test runs** (an image that would not pull, a runner out of disk, a service container that never came up): it reads the failed job's log and says so, instead of leaving a red X with no explanation.
+- **When the job dies before any test runs** (an image that would not pull, a runner out of disk, a service container that never came up): it reads the failed job's log and names the cause, instead of leaving a red X with no explanation.
 - **History:** keeps the run history in the Actions cache, never in git.
 - **Corrections:** reply to the agent's comment with `/triage CATEGORY #n reason` (e.g. `/triage TIMING #2 flaky on CI`). It stores that with the history and, next time that test fails the same way, gives the person's answer instead of its own, naming them and their reason. A corrected failure also costs nothing: it never goes to the model again.
 

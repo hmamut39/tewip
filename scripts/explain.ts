@@ -1,11 +1,11 @@
 // Explains a test report on your own machine, no CI needed: run your tests, then
 //   node scripts/explain.ts <report>
-// where <report> is a JUnit XML or TRX file, a directory of them, or a Playwright blob report
-// directory. Works for any stack the importer reads (see QUICKSTART.md). Each run is kept in a
+// where <report> is a JUnit XML or TRX file, a directory of them, a Playwright blob report
+// directory, or a CI job log (.log/.txt) from a job that died before any test ran. Works for any stack the importer reads (see QUICKSTART.md). Each run is kept in a
 // .tewip folder in the directory you run it from (your project, not the installed tool), so later
 // runs judge failures against their history, as CI does.
 // Options: --name <project> keeps a separate history per project (default: the report's folder).
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { loadCorrections } from '../engine/corrections.ts';
 import { HistoryIndex } from '../engine/history.ts';
@@ -30,11 +30,18 @@ function isBlobDir(path: string): boolean {
 async function main(): Promise<void> {
   const target = process.argv[2];
   if (!target || target.startsWith('--') || !existsSync(target)) {
-    console.error('usage: node scripts/explain.ts <report.xml | report.trx | reports-dir | blob-report-dir> [--name project]');
+    console.error('usage: node scripts/explain.ts <report.xml | report.trx | reports-dir | blob-report-dir | job.log> [--name project]');
     process.exitCode = 1;
     return;
   }
   const path = resolve(target);
+  // A job log rather than a test report: the job died before any test ran, and the log is the only
+  // thing left that says why. Answer from it instead of refusing.
+  if (!statSync(path).isDirectory() && /\.(log|txt)$/i.test(path)) {
+    const { diagnoseLog, renderLogDiagnosis } = await import('../engine/import/log.ts');
+    console.log(renderLogDiagnosis(diagnoseLog(readFileSync(path, 'utf8')), basename(path)));
+    return;
+  }
   const name = (arg('name') ?? basename(statSync(path).isDirectory() ? path : dirname(path))).replace(/[^\w.-]+/g, '-');
   const historyDir = join(process.cwd(), '.tewip', 'history', name);
   const history = datasetFiles(historyDir);

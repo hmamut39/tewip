@@ -27,7 +27,8 @@ If your config already uses a reporter list in CI, add `['blob']` to it.
 ```yaml
 permissions:
   pull-requests: write     # the diagnosis comment
-  issues: write            # the grouped environment issue
+  issues: write
+  actions: read          # so it can read a failed job's log when no report was written            # the grouped environment issue
   contents: write          # only if you turn autofix on
 
 steps:

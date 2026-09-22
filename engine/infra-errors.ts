@@ -41,7 +41,8 @@ const INFRA_PATTERNS: Array<{ kind: InfraSignal['kind']; confidence: number; pat
   // Something else already holds the port the test wanted.
   { kind: 'port-taken', confidence: 0.9, pattern: /port is already allocated|address already in use|EADDRINUSE|driver failed programming external connectivity[^\n]*|bind: address already in use/i },
   // The cluster or runner had nowhere to put the work.
-  { kind: 'no-capacity', confidence: 0.85, pattern: /0\/\d+ nodes are available[^\n]*|Insufficient (?:cpu|memory)\b[^\n]*|FailedScheduling[^\n]*|The runner has received a shutdown signal[^\n]*|no space available on any node/i },
+  // A shut-down runner is not a capacity problem in the cluster: log.ts reads that as a job failure.
+  { kind: 'no-capacity', confidence: 0.85, pattern: /0\/\d+ nodes are available[^\n]*|Insufficient (?:cpu|memory)\b[^\n]*|FailedScheduling[^\n]*|no space available on any node/i },
   // Last: Docker's catch-all, which also wraps the specific failures above.
   { kind: 'container-start', confidence: 0.8, pattern: /Error response from daemon: [^\n]*/i },
 ];

@@ -32,6 +32,29 @@ export class GitHub {
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
+  /**
+   * The log of the failed jobs in this workflow run, newest first. Used when no test report exists:
+   * the job died before writing one, and its log is the only place the reason is written. Returns an
+   * empty list when the token cannot read logs, which is not worth failing the run over.
+   */
+  async failedJobLogs(runId: string, limit = 2): Promise<Array<{ name: string; text: string }>> {
+    try {
+      const { jobs } = await this.request<{ jobs: Array<{ id: number; name: string; conclusion: string }> }>('GET', `/repos/{repo}/actions/runs/${runId}/jobs?per_page=100`);
+      const failed = jobs.filter((j) => j.conclusion === 'failure').slice(0, limit);
+      const out: Array<{ name: string; text: string }> = [];
+      for (const job of failed) {
+        // The logs endpoint answers with a redirect to a plain-text file, which fetch follows.
+        const res = await fetch(`${this.apiUrl}/repos/${this.repo}/actions/jobs/${job.id}/logs`, {
+          headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+        });
+        if (res.ok) out.push({ name: job.name, text: await res.text() });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
   /** Creates the PR comment carrying `marker`, or edits it in place so each PR has one. */
   async upsertComment(prNumber: number, marker: string, body: string): Promise<string> {
     const comments = await this.request<Array<{ id: number; body: string; html_url: string }>>('GET', `/repos/{repo}/issues/${prNumber}/comments?per_page=100`);

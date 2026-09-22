@@ -3,11 +3,12 @@
 // cache, write every role's view, post the developer PR comment, group environment failures
 // into one issue, optionally open a verified locator-fix PR, and save the history back.
 // It never fails the workflow itself: the test step already carries the pass/fail status.
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HistoryIndex } from '../engine/history.ts';
 import { importBlobReportDir } from '../engine/import/blob.ts';
 import { importJunit } from '../engine/import/junit.ts';
+import { diagnoseLog, renderLogDiagnosis } from '../engine/import/log.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
 import { buildItems } from '../outlets/items.ts';
 import { prCommentView } from '../outlets/views/developer.ts';
@@ -17,10 +18,11 @@ import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 import type { FixResult } from '../engine/autofix/autofix.ts';
 import { loadCorrections, saveCorrections } from '../engine/corrections.ts';
-import { readCiContext } from './context.ts';
+import { readCiContext, type CiContext } from './context.ts';
 import { readCorrections } from './corrections.ts';
 import { autofixAndOpenPr } from './fix-pr.ts';
 import { gate, gateSummary, writeGateOutputs } from './gate.ts';
+import { commentMarker } from './corrections.ts';
 import { GitHub, type IssueRef } from './github.ts';
 import { postEnvIssue, postPrComment, prCommentBody, writeStepSummary } from './publish.ts';
 
@@ -37,6 +39,29 @@ async function step<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
+/**
+ * No test report exists: the job died before writing one. Staying quiet here is the worst thing
+ * Tewip can do - the team sees a red X, no explanation, and a blocked merge - so it reads the log of
+ * the failed jobs in this run and says what happened, in the same words as an environment
+ * diagnosis. The gate still fails, because no test ran and nothing can vouch for the code, but the
+ * reason is now written down instead of guessed at.
+ */
+async function reportJobDeath(ctx: CiContext, hint: string): Promise<void> {
+  log(hint);
+  const github = ctx.token ? new GitHub(ctx.token, ctx.repo, ctx.apiUrl) : null;
+  const logs = github ? await github.failedJobLogs(ctx.runId) : [];
+  const read = logs.map((j) => ({ job: j.name, found: diagnoseLog(j.text) })).find((j) => j.found);
+  const body = read?.found
+    ? renderLogDiagnosis(read.found, `the "${read.job}" job log`)
+    : `## Tewip: no test report was produced\n\n${hint}\n\n${logs.length ? 'Nothing in the failed job logs names a cause Tewip recognises, so the failure is in the job itself rather than in a test.' : 'Tewip could not read the job logs (the token needs the actions: read permission), so it cannot say why.'}`;
+  if (ctx.stepSummary) appendFileSync(ctx.stepSummary, `${body}\n`, 'utf8');
+  if (github && ctx.pr && ctx.postPrComment) {
+    await github.upsertComment(ctx.pr.number, commentMarker(ctx.suite), body).catch((error: unknown) => log(`could not post the comment: ${String(error).slice(0, 200)}`));
+  }
+  // A gate cannot pass a run whose tests never ran, whatever the cause.
+  if (ctx.gate) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const ctx = readCiContext();
   mkdirSync(ctx.outDir, { recursive: true });
@@ -46,15 +71,13 @@ async function main(): Promise<void> {
   if (ctx.junitReport) {
     // Any other framework: a JUnit XML report. No traces, so no page evidence and no selector fixes.
     if (!existsSync(ctx.junitReport)) {
-      log(`no JUnit report at ${ctx.junitReport}. Point junit-report at the file your test runner writes (e.g. pytest --junitxml=report.xml)`);
-      if (ctx.gate) process.exitCode = 1;
+      await reportJobDeath(ctx, `no JUnit report at ${ctx.junitReport}. Point junit-report at the file your test runner writes (e.g. pytest --junitxml=report.xml)`);
       return;
     }
     imported = importJunit(ctx.junitReport, meta);
   } else {
     if (!existsSync(ctx.blobDir)) {
-      log(`no blob report at ${ctx.blobDir}. Add Playwright's blob reporter: reporter: [['list'], ['blob']], or set junit-report for other frameworks`);
-      if (ctx.gate) process.exitCode = 1; // a gate with nothing to read cannot vouch for the run
+      await reportJobDeath(ctx, `no blob report at ${ctx.blobDir}. Add Playwright's blob reporter: reporter: [['list'], ['blob']], or set junit-report for other frameworks`);
       return;
     }
     imported = importBlobReportDir(ctx.blobDir, meta, join(ctx.outDir, 'files'));

@@ -115,6 +115,7 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | Command | What it does | When you use it |
 |---|---|---|
 | `tewip explain report.xml` | Explains every failing test in a report: cause, confidence, evidence, next step | Right after a test run fails, local or CI |
+| `tewip explain job.log` | Reads a CI job log when the job died before any test ran, and names the cause (image pull, disk, container, runner) | "CI is red but there are no test results" |
 | `tewip ci owner/repo --pr 12` | The same, for a GitHub pull request, without leaving the terminal | "Why is CI red on my PR?" |
 | `tewip plan "<feature>"` | Writes a test plan: risks, scenarios by priority, what is already covered, what to automate next | Before building or testing a feature |
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |

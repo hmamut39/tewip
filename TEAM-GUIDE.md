@@ -119,6 +119,8 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip ci owner/repo --pr 12` | The same, for a GitHub pull request, without leaving the terminal | "Why is CI red on my PR?" |
 | `tewip plan "<feature>"` | Writes a test plan: risks, scenarios by priority, what is already covered, what to automate next | Before building or testing a feature |
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
+| `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
+| `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
 | `tewip mcp` | Serves all of the above to your editor's AI assistant | Set up once |
 
 Notes that save you time:
@@ -128,6 +130,8 @@ Notes that save you time:
 - `write` never touches your application code. It only adds new test files, and you review and
   commit them yourself.
 - Everything it writes locally goes to the `.tewip` folder in your project.
+- `tewip jira` shows what it *would* file and creates nothing until you add `--create`. It never
+  files the same scenario twice, and never moves, assigns or closes a ticket.
 
 ---
 

@@ -25,7 +25,7 @@ Usage:
   tewip ci <owner/repo> [--pr N | --branch B]
                                     Show the latest report Tewip's GitHub Action uploaded (uses
                                     your gh login). Without --pr or --branch: the newest run.
-  tewip plan "<feature>" [--diff main...HEAD] [--url <page> ...] [--out plan.md]
+  tewip plan "<feature>" | --issue PROJ-123 [--diff main...HEAD] [--url <page> ...] [--out plan.md]
                                     Write a test plan grounded in the project: its existing tests,
                                     the change, the live pages and Tewip's failure history.
   tewip write [--plan plan.json] [--only LS-002,LS-003] [--framework playwright] [--runs 3]
@@ -36,6 +36,10 @@ Usage:
       --move-to <folder>            Move kept tests there afterwards, leaving the project as it was.
       --mutate-source               Also change the code under test and check the test notices
                                     (unit tests only; needs the project's own mutation tool).
+  tewip jira <plan.json> --project PROJ [--issue PROJ-123] [--create]
+                                    File the plan's scenarios as test-case issues, linked to the
+                                    story. Shows what it would create; --create actually files
+                                    them, and the same scenario is never filed twice.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -68,8 +72,20 @@ async function main(): Promise<void> {
       return;
     }
     case 'plan': {
-      const feature = args.filter((a, i) => !a.startsWith('--') && !['--diff', '--url', '--out'].includes(args[i - 1] ?? '')).join(' ').trim();
-      if (!feature) throw new Error('usage: tewip plan "<what the feature does>" [--diff main...HEAD] [--url http://localhost:3000/page ...] [--out plan.md]');
+      // A ticket says what was asked for better than a sentence typed twice: read it and plan from it.
+      const issueKey = flag(args, 'issue');
+      const typed = args.filter((a, i) => !a.startsWith('--') && !['--diff', '--url', '--out', '--issue'].includes(args[i - 1] ?? '')).join(' ').trim();
+      let feature = typed;
+      if (issueKey) {
+        const { Jira, jiraFromEnv, jiraHelp } = await import('../engine/work/jira.ts');
+        const { featureFromIssue } = await import('../engine/work/jira-command.ts');
+        const config = jiraFromEnv();
+        if (!config) throw new Error(jiraHelp());
+        const issue = await new Jira(config).issue(issueKey);
+        console.error(`Read ${issue.key} (${issue.type}, ${issue.status})${issue.acceptanceCriteria ? ' with its acceptance criteria' : ''}.`);
+        feature = [featureFromIssue(issue), typed].filter(Boolean).join('\n\n');
+      }
+      if (!feature) throw new Error('usage: tewip plan "<what the feature does>" | --issue PROJ-123 [--diff main...HEAD] [--url http://localhost:3000/page ...] [--out plan.md]');
       const urls = args.flatMap((a, i) => (args[i - 1] === '--url' ? [a] : []));
       const { runPlan } = await import('../engine/quality/plan-command.ts');
       await runPlan({ feature, root: process.cwd(), diffRange: flag(args, 'diff'), urls, out: flag(args, 'out') });
@@ -89,6 +105,21 @@ async function main(): Promise<void> {
         max: Math.max(1, number('max', 10)),
         moveTo: flag(args, 'move-to') ? resolve(flag(args, 'move-to')!) : undefined,
         mutateSource: args.includes('--mutate-source'),
+      });
+      return;
+    }
+    case 'jira': {
+      const planFile = args.find((a) => a.endsWith('.json'));
+      const project = flag(args, 'project');
+      if (!planFile || !project) throw new Error('usage: tewip jira <plan.json> --project PROJ [--issue PROJ-123] [--type "Test"] [--only QS-001,QS-002] [--create]');
+      const { runJira } = await import('../engine/work/jira-command.ts');
+      await runJira({
+        planFile,
+        projectKey: project,
+        type: flag(args, 'type'),
+        issueKey: flag(args, 'issue'),
+        create: args.includes('--create'),
+        only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       });
       return;
     }

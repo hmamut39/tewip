@@ -118,7 +118,20 @@ different from a locator fix: a wrong locator fails every time, so one passing r
 but a race passes by luck, so a wait fix is accepted only after **three passes in a row**, and is
 refused outright when nothing is asserted after the wait. Not yet measured on real failures: the
 labelled datasets have no fixed waits in the failing tests, so the metric needs a project that uses
-them. Test-data setup is not built.
+them.
+
+The test-data half is built too (`engine/autofix/fix-data.ts`). A collision happens because a value
+was written into the test by hand, so the fix is to make that value unique per run, in the test's
+own language (a template literal, an f-string, or string concatenation), keeping an email a valid
+email. Its verification is the strongest of any fix here and costs nothing extra: **running the
+fixed test twice**. A value that is not really unique collides with the record its own first run
+created, so two passes in a row prove the property the fix is for, rather than merely suggesting it.
+
+It refuses more often than it fixes, on purpose. Postgres usually names only the constraint
+("duplicate key value violates unique constraint \"pg_extension_name_index\"", which is the real
+message from Supabase CI in the labelled data) and never prints the value; changing a test's data on
+a guess could quietly change what the test checks. It also refuses when the value comes from a
+fixture or a factory rather than the test file.
 
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 

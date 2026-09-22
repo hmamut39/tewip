@@ -6,6 +6,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
+import { relative } from 'node:path';
+import { describeMutation, mutationTool, MUTATION_BUDGET_MS, readMutationReport, sourceUnderTest, TOO_SLOW_PER_RUN_MS } from './mutation.ts';
 import { brittleChecks, draftTest, failureHead, mutate, remutate, repairTest, weakChecks as weakOf, type Draft, type Scenario, type WriteContext } from './write.ts';
 
 export interface RunResult {
@@ -66,13 +68,15 @@ const SLOW_RUN_MS = 90_000;
 const DID_NOT_RUN = /SyntaxError|error TS\d{4}|IndentationError|NameError|ReferenceError|Unexpected token|compilation (?:error|failure)|cannot find symbol|error CS\d{4}/;
 
 export type Outcome =
-  | { kind: 'kept'; runs: number; checks: string; repairs: number; mutation: string; watch: string[] }
+  | { kind: 'kept'; runs: number; checks: string; repairs: number; mutation: string; watch: string[]; sourceCheck?: string }
   | { kind: 'possible-bug'; reason: string; repairs: number; lastError: string }
   | { kind: 'rejected'; reason: string; repairs: number; lastError?: string; passedReliably: boolean };
 
 export interface WriteOptions {
   runs: number;
   repairs: number;
+  /** Also change the code under test and check this test notices (unit frameworks, opt-in). */
+  mutateSource?: boolean;
   run?: typeof runTest;
   log?: (line: string) => void;
 }
@@ -149,5 +153,25 @@ export async function writeAndVerify(model: LlmClient, ctx: WriteContext, scenar
   if (broken.passed) return { draft, outcome: { kind: 'rejected', reason: `still passes with its check broken (${draft.mutation.find} → ${draft.mutation.replace}): it could not catch the bug it is for`, repairs, passedReliably: true } };
   if (DID_NOT_RUN.test(broken.output)) return { draft, outcome: { kind: 'rejected', reason: 'the broken version did not even run, so the check was not proven', repairs, lastError: broken.output, passedReliably: true } };
   const weak = weakOf(draft.code);
-  return { draft, outcome: { kind: 'kept', runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: [...brittleChecks(draft.code), ...(weak ? [weak] : [])] } };
+  const sourceCheck = opts.mutateSource ? checkAgainstSource(ctx.framework, file, draft.code, slowest, log) : undefined;
+  return { draft, outcome: { kind: 'kept', runs, checks: draft.checks, repairs, mutation: `${draft.mutation.find} → ${draft.mutation.replace}`, watch: [...brittleChecks(draft.code), ...(weak ? [weak] : [])], sourceCheck } };
+}
+
+/**
+ * Change the code the test covers and see whether the test notices. Every way out of this returns a
+ * sentence rather than silence, because a test verified only by the cheap check must never be
+ * reported as if it had passed this one.
+ */
+function checkAgainstSource(framework: Framework, testFile: string, testCode: string, slowestMs: number, log: (line: string) => void): string {
+  const tool = mutationTool(framework);
+  if (!tool) return `not checked against changes in the code: ${framework.label} runs a whole app per test, so a mutation run would take hours`;
+  if ('missing' in tool) return `not checked against changes in the code: ${tool.missing}. To enable it: ${tool.install}`;
+  if (slowestMs > TOO_SLOW_PER_RUN_MS) return `not checked against changes in the code: one run here takes ${Math.round(slowestMs / 1000)}s, and a mutation run needs dozens`;
+  const source = sourceUnderTest(testFile, testCode, framework.cwd);
+  if (!source) return 'not checked against changes in the code: could not tell which source file this test covers from its imports';
+  log(`    changing ${relative(framework.cwd, source)} to see whether the test notices`);
+  const r = spawnSync(tool.command(source, testFile), { cwd: framework.cwd, env: { ...process.env, ...framework.env }, shell: true, encoding: 'utf8', timeout: MUTATION_BUDGET_MS, maxBuffer: 20 * 1024 * 1024 });
+  const result = readMutationReport(tool.id, framework.cwd);
+  if (!result) return `not checked against changes in the code: ${tool.id} wrote no report${r.error ? ` (${r.error.message})` : ''}`;
+  return describeMutation(result, source);
 }

@@ -20,6 +20,8 @@ export interface WriteCommand {
   runs: number;
   repairs: number;
   max: number;
+  /** Change the code under test as well, and check the test notices (unit frameworks, opt-in). */
+  mutateSource?: boolean;
   /** Move kept tests here after verifying them, leaving the project's own folders as they were. */
   moveTo?: string;
 }
@@ -97,7 +99,7 @@ ${noModelHelp()}`);
     process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing);
     let outcome: Outcome;
     try {
-      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, log: (l) => console.error(l) }));
+      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, mutateSource: cmd.mutateSource, log: (l) => console.error(l) }));
     } catch (error) {
       outcome = { kind: 'rejected', reason: `stopped: ${(error as Error).message}`, repairs: 0, passedReliably: false };
     } finally {
@@ -153,7 +155,8 @@ export function renderWriteReport(results: Array<{ id: string; title: string; fi
     ...results.map((r) => {
       const o = r.outcome;
       const watch = o.kind === 'kept' && o.watch.length ? ` **Review:** may break when the data changes, not the app: \`${o.watch.join('`, `')}\`` : '';
-      const why = o.kind === 'kept' ? `passed ${o.runs} run(s); checks: ${o.checks}${o.repairs ? ` (after ${o.repairs} repair(s))` : ''}${watch}` : o.reason;
+      const source = o.kind === 'kept' && o.sourceCheck ? ` Against the code: ${o.sourceCheck}.` : '';
+      const why = o.kind === 'kept' ? `passed ${o.runs} run(s); checks: ${o.checks}${source}${o.repairs ? ` (after ${o.repairs} repair(s))` : ''}${watch}` : o.reason;
       const where = o.kind === 'kept' ? `kept: \`${relative(meta.root, r.file).replaceAll('\\', '/')}\`` : o.kind === 'possible-bug' ? '**possible bug**' : 'not kept';
       return `| ${r.id} ${r.title.replaceAll('|', '/')} | ${where} | ${why.replace(/\s+/g, ' ').replaceAll('|', '/')} |`;
     }),

@@ -98,6 +98,14 @@ Status (2026-09-19). Datasets: three real projects, with scenarios from Tewip's 
 - False alarms: 1 "possible bug" on ufo contradicted behaviour the code documents; plan and write now read the code under test, and a possible bug must quote the run's real output.
 - Model comparison on Til-AI, same 10 scenarios and prompt: gpt-5.5 kept 9 for $1.53 ($0.17 per kept test); GPT-5.6-terra kept 5 for $0.58 ($0.12 per kept test) and raised 2 unfounded possible bugs. gpt-5.5 stays the default.
 - Cost: about $0.50 to $1.50 per plan-and-write of 10 scenarios; reruns of unchanged drafts cost nothing.
+- Mutation against the code under test (2026-09-22, opt-in `--mutate-source`, unit frameworks only):
+  measured on a test Tewip itself wrote for unjs/ufo and kept. StrykerJS made 470 changes to
+  `src/utils.ts`; 429 were in code the test never runs, and of the 41 it did exercise the test
+  noticed **3**. So the deliberate-break check, which this test passed, is much weaker than real
+  mutation: it proves the assertion matters, not that the test would catch a change in the code.
+  The run took 12 seconds narrowed to one file and one test. Reported as counts, never as a
+  mutation-score percentage (Papadakis et al., ICSE 2018: that correlation is weak once suite size
+  is controlled).
 
 ### Phase 8: Broader Verified Fixes (`tewip fix`)
 Extend auto-fix beyond renamed selectors to races (replace a fixed wait with a condition) and test-data setup, each verified by re-running, each opened as a PR, never merged.

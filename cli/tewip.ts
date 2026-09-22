@@ -34,6 +34,8 @@ Usage:
                                     pytest, JUnit, .NET, Go). Keeps a test only if it passes every
                                     run and fails when its check is broken on purpose.
       --move-to <folder>            Move kept tests there afterwards, leaving the project as it was.
+      --mutate-source               Also change the code under test and check the test notices
+                                    (unit tests only; needs the project's own mutation tool).
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -86,6 +88,7 @@ async function main(): Promise<void> {
         repairs: number('repairs', 2),
         max: Math.max(1, number('max', 10)),
         moveTo: flag(args, 'move-to') ? resolve(flag(args, 'move-to')!) : undefined,
+        mutateSource: args.includes('--mutate-source'),
       });
       return;
     }

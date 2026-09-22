@@ -3,6 +3,7 @@
 // looked and declined; the declined evidence tells phase 3 what was already ruled out.
 import type { Evidence, RootCause, TriageRecord } from '../reporters/types.ts';
 import { deviceEnvSignal } from './device-errors.ts';
+import { INFRA_MEANING, infraSignal } from './infra-errors.ts';
 import { isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
 import { locatorDrift, locatorDriftStrict } from './drift-rules.ts';
 import { timingFlaky, timingIntercepted, timingIntermittent, timingKnownFlaky, timingRetryPass, timingStaleElement } from './timing-rules.ts';
@@ -90,6 +91,25 @@ const envMassFailure: Rule = {
  * somewhere healthy. Detox reports a crash and a test timeout with the same error, so the reader
  * declines the timeout case and this rule never sees it.
  */
+/**
+ * The machinery the test runs on broke, not the code: a container that never started, an image that
+ * could not be pulled, a runner out of disk or memory, a taken port, a name that would not resolve.
+ * Re-run it somewhere healthy. These words cannot come from an application's own assertion, which is
+ * why they can be trusted deterministically.
+ */
+const envInfra: Rule = {
+  id: 'env-infra',
+  evaluate({ record }) {
+    const signal = infraSignal(record.errorMessage);
+    if (!signal) return null;
+    return {
+      category: 'ENV',
+      confidence: signal.confidence,
+      evidence: [{ source: this.id, message: `${INFRA_MEANING[signal.kind]}: "${truncate(signal.match, 80)}"`, data: { ...signal } }],
+    };
+  },
+};
+
 const envDevice: Rule = {
   id: 'env-device',
   evaluate({ record }) {
@@ -204,4 +224,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, envDevice, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMassFailure, envNetwork, envInfra, envDevice, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];

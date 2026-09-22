@@ -107,8 +107,18 @@ Status (2026-09-19). Datasets: three real projects, with scenarios from Tewip's 
   mutation-score percentage (Papadakis et al., ICSE 2018: that correlation is weak once suite size
   is controlled).
 
-### Phase 8: Broader Verified Fixes (`tewip fix`)
+### Phase 8: Broader Verified Fixes (`tewip fix`) — IN PROGRESS
 Extend auto-fix beyond renamed selectors to races (replace a fixed wait with a condition) and test-data setup, each verified by re-running, each opened as a PR, never merged.
+
+Status (2026-09-22): the race half is built (`engine/autofix/fix-wait.ts`). It replaces the fixed
+wait nearest the failure - `waitForTimeout`, `cy.wait(n)`, `Thread.sleep`, `time.sleep`,
+`browser.pause` - either by deleting it, where Playwright and Cypress already wait for the next
+step, or by an explicit wait on the element that step acts on. The safety rule that makes it
+different from a locator fix: a wrong locator fails every time, so one passing run proves the fix,
+but a race passes by luck, so a wait fix is accepted only after **three passes in a row**, and is
+refused outright when nothing is asserted after the wait. Not yet measured on real failures: the
+labelled datasets have no fixed waits in the failing tests, so the metric needs a project that uses
+them. Test-data setup is not built.
 
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 

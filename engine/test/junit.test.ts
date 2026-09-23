@@ -42,6 +42,23 @@ describe('JUnit import', () => {
     assert.equal(summary.status, 'failed');
   });
 
+  it('reads a report whose root is <testrun>, as Eclipse and Ant write it', () => {
+    // A real report in this shape - 36 results from a Java project - was rejected outright with
+    // "no test report Tewip can read", which is a poor answer to a file full of readable results.
+    const xml = `<testrun name="AllTests" project="Jnome" tests="2" failures="1">
+      <testsuite name="outer" time="9.1">
+        <testsuite name="jnome.test.TestRejuse" time="3.2">
+          <testcase name="testExpressions" classname="jnome.test.TestRejuse" time="1.1"/>
+          <testcase name="testBroken" classname="jnome.test.TestRejuse" time="2.1"><failure message="expected true">at TestRejuse.java:42</failure></testcase>
+        </testsuite>
+      </testsuite>
+    </testrun>`;
+    const { records, summary } = importJunit(report(xml), META);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].testId, 'jnome.test.TestRejuse > testBroken');
+    assert.equal(Object.keys(summary.attempts).length, 2, 'the passing test is kept for history too');
+  });
+
   it('reads a Surefire report whose timestamp names a timezone instead of an offset', () => {
     // Maven Surefire writes timestamp="2026-01-30T14:41:12 IST". No parser accepts that, and
     // `new Date(...).toISOString()` threw, so Tewip died on one of the most widely used runners

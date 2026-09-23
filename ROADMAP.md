@@ -123,8 +123,16 @@ this project happened to carry a clean timestamp, so nothing here could have fou
 Tewip cannot date is still worth reading, so an unreadable timestamp now falls back to the time of
 import. It is a test.
 
-With that fixed, **all ten read exactly as the report itself declares**, each checked against the
-report's own totals:
+The harvest then widened to the runners the first search missed. **26 real reports from 25
+repositories, across 12 runners**: Maven Surefire, Gradle, gotestsum, cargo-nextest, NUnit, vstest
+(TRX), PHPUnit, RSpec, pytest, Jest, Karma and Google Test - including protobuf's and nesper's own
+CI output. **All 26 now read exactly as the report declares**, and finding that took a second fix:
+
+A report whose root element is `<testrun>` - what Eclipse's JUnit runner and Ant write - was
+rejected with "no test report Tewip can read", though everything inside it is ordinary JUnit XML.
+36 perfectly readable results were thrown away. It now reads them.
+
+Each of the first ten was checked against the report's own totals:
 
 | Runner | What was checked |
 | --- | --- |

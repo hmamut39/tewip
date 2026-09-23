@@ -129,6 +129,9 @@ function junitCases(root: XmlElement, workspace: string | undefined): Case[] {
     }
     out.push({ testId, file: file || (testcase.attrs.classname ?? '').trim(), duration: Number.isFinite(seconds) ? Math.round(seconds * 1000) : 0, attempts });
   };
+  // <testrun> is the root Eclipse's JUnit runner and Ant write; everything inside it is ordinary
+  // JUnit XML. A real report in that shape was rejected outright as "no test report Tewip can
+  // read", which is a poor answer to a file holding 36 perfectly readable results.
   walk(root, root.name === 'testsuite' ? root : undefined);
 
   // Attempts whose error the runner did not record borrow the final one's, when there is one.
@@ -263,7 +266,7 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
       cases = trxCases(root);
       const start = descendants(root, 'Times')[0]?.attrs.start;
       if (start && (!startedAt || start < startedAt)) startedAt = start;
-    } else if (root.name === 'testsuites' || root.name === 'testsuite') {
+    } else if (root.name === 'testsuites' || root.name === 'testsuite' || root.name === 'testrun') {
       cases = junitCases(root, meta.workspace);
       const stamp = root.attrs.timestamp ?? root.children.find((c) => c.name === 'testsuite')?.attrs.timestamp;
       if (stamp && (!startedAt || stamp < startedAt)) startedAt = stamp;
@@ -327,7 +330,7 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     const list = unread.slice(0, 5).join(', ');
     if (parsedFiles === 0) {
       throw new Error(
-        `no test report Tewip can read in ${path}: ${list}. It reads JUnit XML (<testsuites>/<testsuite>), NUnit 3 (<test-run>), .NET TRX (<TestRun>), ` +
+        `no test report Tewip can read in ${path}: ${list}. It reads JUnit XML (<testsuites>/<testsuite>/<testrun>), NUnit 3 (<test-run>), .NET TRX (<TestRun>), ` +
           'Robot Framework output.xml (<robot>), JMeter .jtl (<testResults>) and a k6 summary (--summary-export). ' +
           'Most runners can write JUnit XML; for TestNG use the Surefire report, and for NUnit use --result=x.xml.',
       );

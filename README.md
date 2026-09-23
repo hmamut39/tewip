@@ -181,6 +181,22 @@ Each reader was checked against real reports published in public repositories, w
 defects were found before release - a Robot timestamp that is not a date, k6's numbers living under
 `values`, and a JMeter line that read "mostly 200" when an assertion had failed.
 
+## Tell it when it is wrong (new)
+
+```bash
+tewip correct diagnosis "checkout charges twice" TEST_DATA "the fixture has stale prices"
+tewip correct flaky "adds an item" fix-now "it is a real race, not flakiness"
+tewip correct security "src/config.ts:12" noise "that is a sample key in a fixture"
+tewip correct --list
+```
+
+Tewip answers with **your** decision from then on, and says it was yours: *"TEST_DATA, confidence
+1.00, source: corrected by a person"*. Corrections live in your project, so they belong to the team;
+the newest one wins, so changing your mind is just saying so again.
+
+**A correction changes what Tewip says, never what it does on its own** — it will not change code,
+quarantine a test or file a ticket because you corrected it.
+
 ## Build a feature, test first (new)
 
 ```bash

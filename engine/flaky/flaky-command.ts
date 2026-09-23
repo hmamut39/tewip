@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../../reporters/store.ts';
 import { flakyTests, readyToRelease, weeklyCost, type FlakyTest } from './flaky.ts';
 import { applyQuarantine, frameworkOf, quarantineFor } from './quarantine.ts';
+import { loadVerdicts, saidByAPerson, verdictFor } from '../learn/verdicts.ts';
 
 export interface FlakyCommand {
   root: string;
@@ -45,7 +46,14 @@ export async function runFlaky(cmd: FlakyCommand): Promise<FlakyTest[]> {
     const history = datasetFiles(join(cmd.root, '.tewip', 'history', name));
     const records = readTriageRecords(history.triage);
     const runs = readRunSummaries(history.runs);
-    const tests = flakyTests(records, runs, { since });
+    const computed = flakyTests(records, runs, { since });
+    // What a person already decided about a test wins over what Tewip works out, and is shown as
+    // theirs: the argument is had once, not every Monday.
+    const corrections = loadVerdicts(cmd.root);
+    const tests = computed.map((test) => {
+      const said = verdictFor('flaky', test.title, corrections) ?? verdictFor('flaky', test.testId, corrections);
+      return said ? { ...test, verdict: said.verdict as typeof test.verdict, why: `${saidByAPerson(said)} (Tewip had said ${test.verdict})` } : test;
+    });
     if (tests.length === 0) continue;
     all.push(...tests);
 

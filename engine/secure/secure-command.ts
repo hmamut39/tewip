@@ -9,6 +9,7 @@ import { auditDependencies } from './deps.ts';
 import { scanSecrets, sourceFiles } from './secrets.ts';
 import { readAccepted, triageDependency, triageSecret, triageWeb, worstFirst, type SecurityItem } from './triage.ts';
 import { isLocal, scanWeb } from './web.ts';
+import { loadVerdicts, saidByAPerson, verdictFor } from '../learn/verdicts.ts';
 import { readZapReport, zapAvailable, zapInstructions } from './zap.ts';
 
 export interface SecureCommand {
@@ -115,6 +116,14 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
     notChecked.push(`a full web scan. Tewip's own check is passive; for the deep one: ${zapInstructions(cmd.url, zapAvailable(root))}`);
   }
 
+  // A person's decision about a finding wins over Tewip's, and says whose it was.
+  const corrections = loadVerdicts(root);
+  const decided = items.map((item) => {
+    const said = verdictFor('security', item.where, corrections) ?? verdictFor('security', item.title, corrections);
+    return said ? { ...item, verdict: said.verdict as typeof item.verdict, why: `${saidByAPerson(said)} (Tewip had said ${item.verdict})` } : item;
+  });
+  items.length = 0;
+  items.push(...decided);
   items.sort(worstFirst);
   const report = renderSecurity(items, checked, notChecked, root);
   console.log(report);

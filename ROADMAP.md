@@ -401,6 +401,34 @@ truth rather than from Tewip's own diagnosis:
 case: one Gutenberg test failed in 161 of 647 runs across 109 different branches - which is the
 evidence that it is the test and not anyone's change.
 
+### The LEARN step, everywhere (`tewip correct`) (BUILT 2026-09-23)
+
+A person could already correct a *diagnosis*, by replying under Tewip's own comment in CI. Every
+other verdict it gives - quarantine this test, this secret is a real risk, the page has drifted from
+the design, this feature does not belong in this repository - had no such path, so the same argument
+had to be had again every week.
+
+`tewip correct <kind> "<what>" <verdict> ["why"]` is that path for all of them, and `--list` shows
+what the team has decided. Corrections are kept in the project (`.tewip/`), not inside Tewip, so
+they belong to the team and travel with the repository. The newest answer wins, so changing your
+mind means saying so again rather than editing a file. Every correction records who, when and why,
+and what Tewip had said - which makes each one a labelled example for later.
+
+**A correction changes what Tewip says, never what it does on its own.** Deciding a failure is a
+real bug does not make it change code; deciding a quarantined test is really broken does not make it
+un-quarantine anything. That was the rule for diagnoses and it is the rule for all of them.
+
+Proved end to end on a real report: `tewip correct diagnosis "shop computes the total" TEST_DATA`
+turns the next run's answer into *"TEST_DATA, confidence 1.00, source: corrected by a person"*, and
+`tewip correct flaky "shop reaches the pricing service" fix-now` turns that test's verdict into
+*"Afiyat decided this on 2026-09-23: the service URL is wrong in the config, not flaky (Tewip had
+said watch)"*.
+
+Building it found two faults in the existing path, both of which would have made a correction look
+accepted and do nothing: it was written one folder above where the engine reads corrections, and the
+error shape was stored truncated, so it could never equal the shape the matcher computes. Both are
+now tests.
+
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 

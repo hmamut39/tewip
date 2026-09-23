@@ -104,6 +104,11 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip correct <kind> "<what>" <verdict> ["why"] | --list
+                                    Tell Tewip it was wrong, about anything it decides: a diagnosis,
+                                    a flaky verdict, a security finding, a design difference, a
+                                    refused build. It answers with your decision from then on, and
+                                    says it was yours. It never acts on a correction by itself.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -383,6 +388,22 @@ ${proposed.status === 'opened' ? 'Opened a draft pull request.' : proposed.statu
       });
       // A difference is a finding, not a failure: the command succeeds either way, so a team can run
       // it in CI without the build going red over a design decision nobody has made yet.
+      return;
+    }
+    case 'correct': {
+      const { runCorrect } = await import('../engine/learn/correct-command.ts');
+      const words = args.filter((a) => !a.startsWith('--'));
+      console.log(
+        runCorrect({
+          root: process.cwd(),
+          kind: words[0] ?? '',
+          key: words[1],
+          verdict: words[2],
+          reason: words.slice(3).join(' ') || undefined,
+          list: args.includes('--list'),
+          by: flag(args, 'by'),
+        }),
+      );
       return;
     }
     case 'mcp':

@@ -8,6 +8,7 @@ import { readPages } from '../quality/grounding.ts';
 import { Figma, figmaHelp, figmaTokenFromEnv, parseFigmaUrl, topFrames, type FigmaNode } from './figma.ts';
 import { frameChecks, type DesignCheck } from './frame.ts';
 import { compareDesign, renderDrift, type Drift } from './drift.ts';
+import { loadVerdicts, saidByAPerson, verdictFor } from '../learn/verdicts.ts';
 
 export interface DesignCommand {
   /** A Figma link, or a path to a saved Figma node JSON. */
@@ -81,8 +82,21 @@ export async function runDesign(cmd: DesignCommand): Promise<Drift[]> {
     return [];
   }
 
-  const drifts = compareDesign(checks, pages[0].aria);
-  const report = renderDrift(drifts, design, cmd.url);
+  const found = compareDesign(checks, pages[0].aria);
+  // A difference a person has already looked at and accepted is not reported again as a surprise.
+  const corrections = loadVerdicts(cmd.root);
+  const settled: string[] = [];
+  const drifts = found.map((d) => {
+    const key = `${d.check.role ?? d.check.kind} ${d.check.name}`.trim();
+    const said = verdictFor('design', key, corrections) ?? verdictFor('design', d.check.name, corrections);
+    if (!said || said.verdict !== 'not-a-difference') return d;
+    settled.push(`${key}: ${saidByAPerson(said)}`);
+    return { ...d, verdict: 'met' as const };
+  });
+  const alreadySettled = settled.length
+    ? ['', `${settled.length} difference(s) your team has already settled, so they are not reported:`, ...settled.map((s) => `  - ${s}`)].join('\n')
+    : '';
+  const report = [renderDrift(drifts, design, cmd.url), alreadySettled].filter(Boolean).join('\n');
   console.log(report);
   if (note) console.log(`\n${note}`);
   if (cmd.out) {

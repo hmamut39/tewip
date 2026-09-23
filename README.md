@@ -282,6 +282,18 @@ Measured on **16 real commits** from two public projects, where the developers c
 its test: given only the source files, Tewip **named the right test in 16 of 16, ranked it first in
 12**.
 
+It also shows **the checks a change renegotiates** — every test assertion the diff rewrites,
+withdraws or renames, with the old text beside the new one. A test written earlier is behaviour
+someone agreed on, and this is the one thing in a review that the change's own description cannot
+account for: everything else reads the change's account of itself. It never passes judgement — tests
+change for good reasons — it asks which of them the author intended.
+
+This came out of a measurement rather than an idea. Of 18 real pull requests later found to have
+broken something, the one Tewip's test plan missed was one whose *intention* was wrong: it changed
+a freshness rule, changed the tests to match, and was reverted the next day. Run over those same 18
+pull requests, this check fires on 2 — **and both were reverted**, including the one the plan
+missed. No model is called, so it costs nothing.
+
 ## Which flaky tests to quarantine, and what they cost (new)
 
 ```bash

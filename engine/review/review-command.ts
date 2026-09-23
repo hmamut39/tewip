@@ -7,6 +7,7 @@ import { readTriageRecords, datasetFiles } from '../../reporters/store.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import { coverageFor, uncovered } from './coverage.ts';
 import { renderReview, reviewChange, type Review } from './review.ts';
+import { changedExpectations } from './expectations.ts';
 
 export interface ReviewCommand {
   root: string;
@@ -36,7 +37,7 @@ export async function runReview(cmd: ReviewCommand): Promise<Review | null> {
   const files = change.files.map((f) => f.split('\\').join('/'));
   const coverage = coverageFor(cmd.root, files);
   const past = history(cmd.root, cmd.name);
-  const review = reviewChange(cmd.diff, files, coverage, past, uncovered(files, coverage));
+  const review = reviewChange(cmd.diff, files, coverage, past, uncovered(files, coverage), changedExpectations(cmd.root, cmd.diff));
 
   // The command that runs just those tests - but only when the project's runner really owns them.
   // Printing a Playwright command for a file Playwright never runs is worse than printing nothing.

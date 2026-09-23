@@ -152,6 +152,15 @@ keeps an old reference date while the briefing is still fresh. The plan tested t
 intended and would have passed. When a pull request's *intention* is wrong, a plan grounded in that
 intention validates it rather than questioning it. Nothing in the current design would catch that.
 
+**What the miss led to (built the same day).** The blind spot is not specific to plans: every layer
+of Tewip reads the change's own description as the specification. The one place that assumption can
+be checked is a test that already existed, so `tewip review` now reports **the checks a change
+renegotiates** - each assertion the diff rewrites, withdraws or renames, with the old text beside
+the new one, and a question rather than a verdict. Run over the same 18 pull requests it fires on 2,
+and both of those were later reverted, including `budget-mvp#16` itself, where it shows five
+rewritten expectations and a crypto-window test renamed into something unrelated. It reads the diff
+only: no model, no network, nothing to configure.
+
 **Caveats, all of them.** 9 of the 18 pairs could not be judged: 4 repositories were too large to
 fetch here (vscode at 1.5 GB, dolphin at 560 MB, and two others), and in 5 the later commit was a
 revert that never said what broke - judging those would have been guessing, and guessing would have

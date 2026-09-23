@@ -7,6 +7,7 @@
 import { componentOf } from '../../outlets/items.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import type { TestCoverage } from './coverage.ts';
+import { renderExpectations, type ExpectationChange } from './expectations.ts';
 
 export interface TestRisk {
   testFile: string;
@@ -38,6 +39,8 @@ export interface Review {
   runFirst: string[];
   /** What a person should know before reading the diff, in plain sentences. */
   notes: string[];
+  /** Checks that were already agreed and this change edits, withdraws or renames. */
+  expectations: ExpectationChange[];
 }
 
 const fileOf = (record: TriageRecord): string => record.file ?? '';
@@ -48,7 +51,7 @@ const countBy = <T>(xs: T[], key: (x: T) => string): Map<string, number> => {
 };
 
 /** The review, assembled from the change, what covers it, and what has gone wrong here before. */
-export function reviewChange(range: string, changed: string[], coverage: TestCoverage[], history: TriageRecord[], notCovered: string[]): Review {
+export function reviewChange(range: string, changed: string[], coverage: TestCoverage[], history: TriageRecord[], notCovered: string[], expectations: ExpectationChange[] = []): Review {
   const byFile = new Map<string, TriageRecord[]>();
   for (const record of history) {
     const file = fileOf(record).split('\\').join('/');
@@ -113,7 +116,17 @@ export function reviewChange(range: string, changed: string[], coverage: TestCov
     notes.push('No test in this project reaches any of the changed files. Tewip can write one: `tewip plan "<what the change should do>"` then `tewip write`.');
   }
 
-  return { range, files: changed, tests, uncovered: notCovered, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
+  // A change that rewrites checks people already agreed on is worth saying before anything else:
+  // every other layer reads the change's own account of itself, and this is the one place where
+  // that account can be held against what the project had already decided.
+  if (expectations.length > 0) {
+    const withdrawn = expectations.filter((e) => e.kind === 'withdrawn').length;
+    notes.unshift(
+      `This change edits ${expectations.length} check(s) that were already agreed${withdrawn > 0 ? `, ${withdrawn} of them withdrawn outright` : ''}. Read those first: the change's description cannot tell you whether replacing them was intended.`,
+    );
+  }
+
+  return { range, files: changed, tests, uncovered: notCovered, expectations, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
 }
 
 const when = (at: string): string => {
@@ -132,6 +145,9 @@ export function renderReview(review: Review, runCommand?: (files: string[]) => s
     for (const note of review.notes) lines.push(`- ${note}`);
     lines.push('');
   }
+
+  const renegotiated = renderExpectations(review.expectations);
+  if (renegotiated.length > 0) lines.push(...renegotiated, '');
 
   lines.push('## Tests that cover this change', '');
   if (review.tests.length === 0) lines.push('None found.', '');

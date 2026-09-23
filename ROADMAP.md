@@ -151,7 +151,7 @@ in, the designs they build from, the code they fix, and the places they already 
 them keeps the rule that makes Tewip worth trusting - **it says only what it can show** - and each
 names what it deliberately will not do, because a tool that will not lie to you is the product.
 
-### Phase 10: The Work Item Loop (`tewip jira`)
+### Phase 10: The Work Item Loop (`tewip jira`) (BUILT — plan-in and test-cases-out; bugs-back and Xray/Zephyr not yet)
 
 Tewip already writes plans and verified tests. What stops a team using it daily is that its output
 lives in a folder while their work lives in Jira. This closes that loop in both directions:
@@ -172,7 +172,7 @@ steps, expected result), measured on a real backlog. A ticket a human rewrites w
 Refused on purpose: Tewip never moves a ticket through a workflow, never assigns people, and never
 closes anything. Writing is a suggestion; the board is the team's.
 
-### Phase 11: Design to Checks (`tewip design`)
+### Phase 11: Design to Checks (`tewip design`) (BUILT — measured on four real design/page pairs, see status)
 
 A design in Figma is a specification nobody tests against. Tewip reads a Figma file through its API
 and turns each frame into checks it can actually verify against the running page:
@@ -188,6 +188,33 @@ genuine difference. Anything below usefulness gets dropped rather than tuned int
 Refused on purpose: Tewip does not generate application components from a design. Component code is
 feature code, which belongs to the general coding agents and to people, and generating it would
 break the promise that makes Tewip safe to install.
+
+Status (2026-09-22). `tewip design <figma link | frame.json> --url <page>` is built. It reads a
+frame through Figma's REST API (read only, `TEWIP_FIGMA_TOKEN`) or from a saved JSON file, and makes
+three kinds of check: the words the design specifies, the controls its layer names imply, and the
+page regions its section names imply. No model is called, so a run costs nothing and gives the same
+answer twice.
+
+How the naming rules were settled: Figma API dumps from fifteen public repositories (47 frames) were
+read with the first version of the reader, which found roles in only twelve places and, in one real
+file, turned forty-nine paragraphs into "missing links" because that designer named every text style
+"Link inline". Two rules came out of that data — a text layer's name has to *be* a role word, not
+merely contain one, and a control's name has to be short enough to be a label — and both are now
+tests.
+
+Measured end to end on four real design/page pairs (paulasilvatech/Figma-to-Code-Dev: a Figma export
+and the page built from that export, in the same repository):
+
+- 38 checks across the four pages, and **0 differences reported** on the untouched pages. One false
+  positive was found during this run and fixed: a frame called "Section Header" was read as the
+  page's banner, when it is the heading of a section.
+- **8 of 8 injected drifts caught**, each named correctly: a renamed button, a dropped phrase, and a
+  region that stopped being marked up were all reported as "the design says X, the page says Y".
+
+Metric caveat, stated plainly: the phase metric asks what share of reported drifts a designer or
+developer agrees with, and no designer has judged these. What this measurement shows is narrower —
+Tewip does not cry wolf on pages that match their design, and it does notice when they stop
+matching. The designer-judged number needs a real project with a real design file.
 
 ### Phase 12: Verified Fixes to Application Code (`tewip fix --code`, opt-in)
 

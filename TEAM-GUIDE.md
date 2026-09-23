@@ -121,6 +121,7 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
 | `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
 | `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
+| `tewip design <figma link> --url <page>` | Compares a Figma frame against the running page: the words the design specifies and the controls its layer names imply | "Did we build what was designed?" |
 | `tewip mcp` | Serves all of the above to your editor's AI assistant | Set up once |
 
 Notes that save you time:
@@ -132,6 +133,9 @@ Notes that save you time:
 - Everything it writes locally goes to the `.tewip` folder in your project.
 - `tewip jira` shows what it *would* file and creates nothing until you add `--create`. It never
   files the same scenario twice, and never moves, assigns or closes a ticket.
+- `tewip design` needs a Figma read token (`TEWIP_FIGMA_TOKEN`), or a frame saved as JSON if you
+  would rather not create one. It compares words, controls and page regions - never pixels, colours
+  or spacing, because a design tool and a browser do not measure those the same way.
 
 ---
 
@@ -164,6 +168,11 @@ Notes that save you time:
 - The architecture view: fragile areas, single commits that broke many suites, failing service
   dependencies.
 - The quality view: flakiness hotspots and test-design debt, ranked by the CI time they waste.
+
+**Designer, and the developer building from a design**
+- `tewip design <figma link> --url http://localhost:3000` after building a screen: it lists what the
+  design says and what the page says, side by side, so a renamed button or a dropped sentence is
+  found before review.
 
 **Security** — planned, not built yet (`tewip secure`, Phase 9 in ROADMAP.md).
 

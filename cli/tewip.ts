@@ -40,6 +40,10 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+  tewip design <figma link | frame.json> [--url <page>] [--frame "<name>"] [--out drift.md]
+                                    Compare a Figma frame against the running page: the words the
+                                    design specifies and the controls its layer names imply. Says
+                                    "the design says X, the page says Y". No model, no cost.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 
@@ -121,6 +125,22 @@ async function main(): Promise<void> {
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       });
+      return;
+    }
+    case 'design': {
+      const design = args.find((a, i) => !a.startsWith('--') && !['--url', '--frame', '--out', '--max'].includes(args[i - 1] ?? ''));
+      if (!design) throw new Error('usage: tewip design <figma link | frame.json> [--url http://localhost:3000/page] [--frame "Checkout"] [--out drift.md]');
+      const { runDesign } = await import('../engine/design/design-command.ts');
+      await runDesign({
+        design,
+        url: flag(args, 'url'),
+        frame: flag(args, 'frame'),
+        out: flag(args, 'out'),
+        max: flag(args, 'max') ? Number(flag(args, 'max')) : undefined,
+        root: process.cwd(),
+      });
+      // A difference is a finding, not a failure: the command succeeds either way, so a team can run
+      // it in CI without the build going red over a design decision nobody has made yet.
       return;
     }
     case 'mcp':

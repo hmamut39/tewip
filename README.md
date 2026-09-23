@@ -145,6 +145,25 @@ tewip write --only CO-002,CO-004 --framework pytest
 - **`tewip plan`** reads what is really there: the tests you already have (in any language), the change (`--diff main...HEAD`), the live pages (what a user sees on each page, via Playwright), and the failures Tewip has diagnosed in this project before. The plan lists risks and scenarios by priority. A claim that a scenario is "already covered" is checked against your real test names, and dropped if no such test exists. Saved to `.tewip/plans/` as Markdown to review and JSON for `write`.
 - **`tewip write`** writes each scenario as a test in **your** framework and style: Playwright, Cypress, WebdriverIO, Angular, Jest, Vitest, pytest (with Selenium or Playwright), JUnit on Maven or Gradle (Selenium, Spring Boot), .NET or Go. It copies the style of an existing test and uses only elements seen on the real page. Front-end apps get component tests the way their own tests are written: React, Vue or Svelte with Testing Library under Jest or Vitest, and Angular through `ng test` (Karma and Jasmine, or Vitest). A project with both e2e and unit tests gets browser tests when the plan read pages, and unit or component tests when it did not. Then it runs the test. A draft is **kept only if** it passes every run (3 by default) **and** fails once its main check is broken on purpose, because a test that cannot fail is worse than no test. A failing draft is repaired from the real error, twice at most. If the test looks right and the app does something else, Tewip reports a **possible bug** instead of weakening the test until it passes. Kept tests are new files beside yours, for you to review and commit; nothing is committed, and no application code is touched.
 
+## Check the page against the design (Phase 11, new)
+
+```bash
+tewip design "https://www.figma.com/design/KEY/Checkout?node-id=12-34" --url http://localhost:3000/checkout
+tewip design frame.json --frame "Sign in"     # a saved frame, no Figma token needed
+```
+
+Tewip reads the frame (Figma's REST API, read only, `TEWIP_FIGMA_TOKEN`) and the running page
+(its accessibility snapshot, which is what a screen reader and a test both see), and says where they
+disagree: `the design says button "Sign in", the page says button "Log in"`. It checks the words the
+design specifies, the controls its layer names imply, and the regions its sections imply - never
+pixels, colours or spacing, because a design tool and a browser do not measure those the same way.
+No model is called, so it costs nothing and answers the same way every time.
+
+Measured on four real design/page pairs (a public repository's Figma exports and the pages built
+from them): 38 checks, **0 differences reported on pages that match their design**, and **8 of 8
+injected drifts caught** - a renamed button, a dropped sentence, a region that stopped being marked
+up. No designer has judged the output yet, so the roadmap's own metric is still open.
+
 ## Where it has been tried
 
 | Project | How | Result |

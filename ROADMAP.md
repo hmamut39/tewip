@@ -151,7 +151,7 @@ in, the designs they build from, the code they fix, and the places they already 
 them keeps the rule that makes Tewip worth trusting - **it says only what it can show** - and each
 names what it deliberately will not do, because a tool that will not lie to you is the product.
 
-### Phase 10: The Work Item Loop (`tewip jira`) (BUILT — plan-in and test-cases-out; bugs-back and Xray/Zephyr not yet)
+### Phase 10: The Work Item Loop (`tewip jira`) (BUILT — reading measured on 150 real tickets; bugs-back and Xray/Zephyr not yet)
 
 Tewip already writes plans and verified tests. What stops a team using it daily is that its output
 lives in a folder while their work lives in Jira. This closes that loop in both directions:
@@ -171,6 +171,25 @@ steps, expected result), measured on a real backlog. A ticket a human rewrites w
 
 Refused on purpose: Tewip never moves a ticket through a workflow, never assigns people, and never
 closes anything. Writing is a suggestion; the board is the team's.
+
+Status (2026-09-23). The half of this phase that does not need someone's board - reading a real
+ticket - is now measured, because it can be: two large public trackers (Apache's and Jenkins') are
+readable by anyone.
+
+- **Jira Server and Data Center are supported**, not only Cloud. Most companies run the first kind,
+  and it speaks a different API version and stores descriptions as wiki markup rather than as a
+  document tree. Tewip guesses the version from the address and corrects itself from the answer.
+- **A public tracker needs no account at all.** With only `TEWIP_JIRA_URL`, Tewip reads; writing
+  still needs a token. `tewip plan --issue FLINK-40699` against Apache's live tracker reads the
+  ticket, finds its acceptance criteria and plans from them, with no credentials anywhere.
+- Measured on **150 real tickets** from those two trackers: descriptions that came out as readable
+  text went from **75 of 150 to 149 of 150**, and acceptance-criteria sections written by a human
+  went from **11 of 61 to 61 of 61**, with one false positive among the 89 tickets that had none.
+  The heading styles came from the corpus, not from guessing: `h2. Acceptance Criteria`,
+  `h1. +*Acceptance criteria*+`, `h3. Suggested acceptance criteria`, `Definition of Done`.
+
+Still not measured: the phase metric itself - the share of created work items a person keeps without
+editing - which needs a real backlog and a real person.
 
 ### Phase 11: Design to Checks (`tewip design`) (BUILT — measured on four real design/page pairs, see status)
 

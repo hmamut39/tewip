@@ -136,6 +136,8 @@ Notes that save you time:
 - `write` never touches your application code. It only adds new test files, and you review and
   commit them yourself.
 - Everything it writes locally goes to the `.tewip` folder in your project.
+- Jira works with **Cloud, Server and Data Center**. To read tickets from a tracker anyone can read
+  (many open-source ones), `TEWIP_JIRA_URL` alone is enough - no account. Writing needs a token.
 - `tewip jira` shows what it *would* file and creates nothing until you add `--create`. It never
   files the same scenario twice, and never moves, assigns or closes a ticket.
 - `tewip report` posts to Slack or Teams only when a failure needs a person (`TEWIP_SLACK_WEBHOOK`,

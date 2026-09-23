@@ -429,6 +429,45 @@ accepted and do nothing: it was written one folder above where the engine reads 
 error shape was stored truncated, so it could never equal the shape the matcher computes. Both are
 now tests.
 
+### What the corrections add up to (`tewip learn`) (BUILT 2026-09-23)
+
+`tewip correct` gives one failure the right answer. It does not tell anyone *where Tewip is
+systematically wrong*, so a team could keep entering the same correction every week and nothing
+would ever change. `tewip learn` reads everything the team has corrected and reports the shapes:
+how often Tewip said X when the team said Y, which layer decided those (rules or model), which rule
+by name and how many of them it decided, what the failures had in common in their own words, and
+three real failures to read. `--labels <file>` writes the corrections out as labelled examples, so a
+change to the rules can be measured against them rather than argued about.
+
+Two rules keep it honest, and both are tests:
+
+- **Three of the same shape before it is a pattern.** Below that it says so in as many words -
+  "2 corrections turned REAL_BUG into TEST_DATA; that is not yet enough to call it a pattern".
+- **It never blames a rule it cannot name.** When one rule decided most of a group it says to go and
+  read that rule; when no rule did, it says a rule is *missing* rather than picking one to blame.
+  It also reports how many *different* tests a pattern came from, because one flaky test corrected
+  six times is one piece of evidence, not six.
+
+**Measured on real labelled data, not on corrections we invented.** On a labelled dataset, every
+case where Tewip's diagnosis differs from the human label is exactly the correction a person would
+have entered, so the two held-out Gutenberg sets were replayed and their disagreements fed in:
+
+| Dataset | Labelled failures | Disagreements | Largest pattern found |
+| --- | --- | --- | --- |
+| Gutenberg held-out | 166 | 23 (13.9%) | 7x said REAL_BUG, labelled TIMING, from 4 tests; `locator-drift` decided 4 of 7 |
+| Gutenberg August-2 | 473 | 52 (11.0%) | 45x said REAL_BUG, labelled TIMING, from 11 tests; `locator-drift` decided 27 of 45 |
+
+The same top pattern on two independently labelled sets is the finding: the real weakness is
+calling a timing failure a real bug, and `locator-drift` is the rule most often behind it. That is
+a rule to go and read, which is exactly what this report is for. Note the caveat: these are labels
+from the evaluation sets, not corrections typed by a team using Tewip day to day - no team has used
+it long enough for that yet.
+
+Building it found a real fault in the first version: it read the rule name out of the evidence text
+rather than the `ruleId` the diagnosis already carries, so every group came back "decided by 2
+different layers", naming no rule - the least useful thing the report could say. It also printed
+the same failure three times when one test had been corrected repeatedly. Both are now tests.
+
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 

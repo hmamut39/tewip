@@ -197,6 +197,22 @@ the newest one wins, so changing your mind is just saying so again.
 **A correction changes what Tewip says, never what it does on its own** — it will not change code,
 quarantine a test or file a ticket because you corrected it.
 
+## What your corrections add up to (new)
+
+```bash
+tewip learn                      # where Tewip is systematically wrong, from what you corrected
+tewip learn --labels labels.jsonl  # your corrections as labelled examples, to measure a change against
+```
+
+One correction fixes one failure. Twenty of them say which rule to change. `tewip learn` groups
+them - "45x said REAL_BUG, you said TIMING; rule `locator-drift` decided 27 of them; from 11
+different tests" - and points at the rule to read, with three of the real failures underneath.
+
+It will not pretend. Fewer than three corrections of the same shape is "not yet a pattern", not a
+finding; when no single rule is behind a group it says a rule is *missing* rather than blaming one;
+and it tells you how many different tests a pattern came from, because one flaky test corrected six
+times is one piece of evidence, not six.
+
 ## Build a feature, test first (new)
 
 ```bash

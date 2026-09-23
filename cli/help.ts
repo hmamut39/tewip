@@ -1,0 +1,110 @@
+// The text `tewip --help` prints. It lives on its own because it is prose, not logic, and it grows
+// every time a verb is added - which would otherwise push the command file past the size any of
+// these files are allowed to be.
+export const HELP = `Tewip - finds why each test failed, for any stack.
+
+Usage:
+  tewip explain <report>            Explain a test report: a JUnit XML or .trx file, a folder of
+                                    them, or a Playwright blob-report folder. Keeps history per
+                                    project, so later runs are judged against earlier ones.
+      --name <project>              Keep this project's history apart from others.
+  tewip ci <owner/repo> [--pr N | --branch B]
+                                    Show the latest report Tewip's GitHub Action uploaded (uses
+                                    your gh login). Without --pr or --branch: the newest run.
+  tewip plan "<feature>" | --issue PROJ-123 [--diff main...HEAD] [--url <page> ...] [--out plan.md]
+                                    Write a test plan grounded in the project: its existing tests,
+                                    the change, the live pages and Tewip's failure history.
+  tewip write [--plan plan.json] [--only LS-002,LS-003] [--framework playwright] [--runs 3]
+                                    Write tests for the plan's scenarios in the project's own
+                                    framework (Playwright, Cypress, WebdriverIO, Jest, Vitest,
+                                    pytest, JUnit, .NET, Go). Keeps a test only if it passes every
+                                    run and fails when its check is broken on purpose.
+      --move-to <folder>            Move kept tests there afterwards, leaving the project as it was.
+      --mutate-source               Also change the code under test and check the test notices
+                                    (unit tests only; needs the project's own mutation tool).
+  tewip jira <plan.json> --project PROJ [--issue PROJ-123] [--create]
+                                    File the plan's scenarios as test-case issues, linked to the
+                                    story. Shows what it would create; --create actually files
+                                    them, and the same scenario is never filed twice.
+      --export xray|zephyr          Write the cases as a CSV for Xray or Zephyr Scale instead.
+                                    No account needed; importing stays your step.
+  tewip bugs <report> --project PROJ [--create] [--max 5]
+                                    File a bug ticket for each failure Tewip diagnosed as a real
+                                    bug, with its evidence and run link. A flaky test or a broken
+                                    environment is deliberately not filed, and the same failure is
+                                    never filed twice.
+  tewip secure [--url http://localhost:3000] [--secrets-only] [--gate] [--out security.md]
+                                    Runs the scanners this project already has (npm audit,
+                                    pip-audit, osv-scanner) plus Tewip's own secret scan, then says
+                                    which findings need someone now and which are noise or not
+                                    reachable. No model, no cost, and it never prints a credential.
+      --url <page>                  Also check the running app: security headers, cookie flags, and
+                                    files that must never be served (.env, .git). Ordinary requests
+                                    only. An address that is not this machine needs
+                                    --i-am-authorised.
+      --zap-report zap.json         Triage the findings of an OWASP ZAP baseline scan as well.
+  tewip spec "<feature>" [--diff main...HEAD] [--url <page> ...] [--project PROJ] [--create]
+                                    An epic, its user stories and their acceptance criteria, from
+                                    this project's code, tests and failure history. Anything it
+                                    says the system already does is quoted from a file it read;
+                                    what it cannot quote becomes an open question. With --project it
+                                    shows what it would file in Jira; --create files it.
+  tewip report <report> [--gate] [--out report.md] [--name <project>] [--no-post]
+                                    The CI command for any platform: GitLab CI, Jenkins, CircleCI,
+                                    Azure, Bitbucket, Travis, Drone. Diagnoses the run, comments on
+                                    the GitLab merge request, tells Slack or Teams only when a
+                                    failure needs a person, and with --gate fails the build only on
+                                    those failures.
+  tewip build "<what it should do>" | --issue PROJ-123 [--dry-run] [--pr] [--out feature.patch]
+                                    Writes a feature, test first: the test must fail without the
+                                    code and pass with it, and every test that was passing must
+                                    still pass - otherwise everything goes back byte for byte.
+      --issue PROJ-123              Build from the ticket itself: its description and acceptance
+                                    criteria. Works with a public tracker without an account.
+      --pr                          Commit the proved work on a branch of its own and open a draft
+                                    pull request. Never merges, never commits to your branch.
+  tewip review [--diff main...HEAD] [--out review.md]
+                                    Before anyone reads the diff: which tests cover this change,
+                                    which of them have flaked before, what has gone wrong in these
+                                    areas, what nothing tests at all, and the command that runs the
+                                    telling tests first. From this project's own history, so it
+                                    costs nothing.
+  tewip watch [--cmd "npm test"] [--report <path>] [--paths src,tests]
+                                    Beside your editor: runs your tests when a file changes (or
+                                    watches for new reports) and explains each failure as it
+                                    happens, without CI.
+  tewip flaky [--days 30] [--apply] [--name <project>] [--out flaky.md]
+                                    Which tests are wasting the team's time, how much CI time they
+                                    cost, and what to do with each: quarantine, fix, or watch. Read
+                                    from runs already diagnosed, so it costs nothing. --apply puts
+                                    the quarantine line in the test file with the evidence above it.
+  tewip note [--days 7] [--name <project>] [--out note.md] [--post]
+                                    The weekly quality note for a lead, written from the runs Tewip
+                                    already diagnosed. No model calls, so it costs nothing.
+  tewip fix --code <report> [--only "<test title>"] [--max 3] [--apply] [--suite "<command>"]
+                                    Opt-in: for failures diagnosed as a real bug, propose the
+                                    smallest change to application code, and keep it only if the
+                                    failing test then passes AND the whole suite still passes. The
+                                    change is written as a patch; nothing is committed or merged.
+  tewip design <figma link | frame.json> [--url <page>] [--frame "<name>"] [--out drift.md]
+                                    Compare a Figma frame against the running page: the words the
+                                    design specifies and the controls its layer names imply. Says
+                                    "the design says X, the page says Y". No model, no cost.
+  tewip correct <kind> "<what>" <verdict> ["why"] | --list
+                                    Tell Tewip it was wrong, about anything it decides: a diagnosis,
+                                    a flaky verdict, a security finding, a design difference, a
+                                    refused build. It answers with your decision from then on, and
+                                    says it was yours. It never acts on a correction by itself.
+  tewip learn [--name <project>] [--labels labels.jsonl] [--out learn.md]
+                                    What your corrections add up to: where Tewip is wrong in the
+                                    same way more than once, which rule decided it, and the failures
+                                    it came from. Says "not yet" rather than inventing a pattern
+                                    from two cases. No model, no cost.
+  tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
+  tewip --version                   Print the version.
+
+Reports it reads: Playwright, pytest/unittest, Jest, Vitest, Mocha, node:test, JUnit/TestNG
+(Maven, Gradle), Go (gotestsum), .NET (TRX or JUnit), NUnit 3, RSpec, PHPUnit, Rust (nextest),
+Robot Framework (output.xml), JMeter (.jtl) and k6 (--summary-export). Appium, Selenium and
+WebdriverIO suites report through one of the above, and their own error messages are understood.
+Set OPENAI_API_KEY to let the AI layer decide what the rules leave open.`;

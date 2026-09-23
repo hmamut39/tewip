@@ -69,6 +69,12 @@ Usage:
                                     the GitLab merge request, tells Slack or Teams only when a
                                     failure needs a person, and with --gate fails the build only on
                                     those failures.
+  tewip review [--diff main...HEAD] [--out review.md]
+                                    Before anyone reads the diff: which tests cover this change,
+                                    which of them have flaked before, what has gone wrong in these
+                                    areas, what nothing tests at all, and the command that runs the
+                                    telling tests first. From this project's own history, so it
+                                    costs nothing.
   tewip watch [--cmd "npm test"] [--report <path>] [--paths src,tests]
                                     Beside your editor: runs your tests when a file changes (or
                                     watches for new reports) and explains each failure as it
@@ -241,6 +247,16 @@ async function main(): Promise<void> {
       });
       // The gate fails the build only for failures that are not known flaky or environment noise.
       if (args.includes('--gate') && result.blocking > 0) process.exitCode = 1;
+      return;
+    }
+    case 'review': {
+      const { runReview } = await import('../engine/review/review-command.ts');
+      await runReview({
+        root: process.cwd(),
+        diff: flag(args, 'diff') ?? 'main...HEAD',
+        out: flag(args, 'out'),
+        name: flag(args, 'name'),
+      });
       return;
     }
     case 'watch': {

@@ -166,6 +166,21 @@ that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra s
 implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
 own metric is still open.
 
+## Before anyone reads the diff (new)
+
+```bash
+tewip review --diff main...HEAD
+```
+
+Which tests cover this change and **how** (they import the file, they import the package that
+exports it, or their words merely match); which of them have flaked before, so a red run is not
+blamed on your change; what has gone wrong in these areas before; what nothing tests at all; and the
+command to run the telling tests first. From your project's own history, so it costs nothing.
+
+Measured on **16 real commits** from two public projects, where the developers changed source *and*
+its test: given only the source files, Tewip **named the right test in 16 of 16, ranked it first in
+12**.
+
 ## Which flaky tests to quarantine, and what they cost (new)
 
 ```bash

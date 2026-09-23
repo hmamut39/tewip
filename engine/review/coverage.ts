@@ -1,0 +1,195 @@
+// Which tests actually reach the code a change touched.
+//
+// Two ways of knowing, in this order: a test that imports the changed file (directly, or through
+// the package's front door) really does exercise it; a test whose name and path share the change's
+// words probably does. The first is a fact, the second a guess, and the report says which is which -
+// because "these 6 tests cover your change" is only useful if it is true.
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+
+export interface TestCoverage {
+  testFile: string;
+  /** The changed files this test reaches. */
+  covers: string[];
+  /**
+   * 'imports' when it imports the file itself; 'package' when it imports the package that
+   * re-exports it, which still reaches the code; 'name' when only the words match, which is a guess.
+   */
+  how: 'imports' | 'package' | 'name';
+}
+
+const TEST_FILE = /(?:\.|_)(?:spec|test)\.[cm]?[jt]sx?$|(?:^|[\\/])test_[^\\/]+\.py$|_test\.py$|_test\.go$|Test(?:s)?\.(?:java|kt|cs)$|\.cy\.[jt]sx?$|\.feature$|\.robot$/i;
+const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next']);
+
+/** Every test file in the project. */
+export function testFiles(root: string, limit = 4000): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    if (out.length >= limit) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry);
+      let info;
+      try {
+        info = statSync(path);
+      } catch {
+        continue;
+      }
+      if (info.isDirectory()) {
+        if (!SKIP_DIR.has(entry)) walk(path);
+      } else if (TEST_FILE.test(entry)) out.push(path);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/**
+ * Files a test could plausibly cover. Documentation, lockfiles and images change in almost every
+ * pull request; saying "nothing tests ROADMAP.md" is noise, and noise is how a review gets skipped.
+ */
+export const isCode = (file: string): boolean =>
+  /\.(?:[cm]?[jt]sx?|py|rb|go|java|kt|cs|php|rs|vue|svelte|scala|swift|sql)$/i.test(file) && !/(?:^|[\/])(?:package-lock\.json|yarn\.lock)$/i.test(file);
+
+/** The module names a file can be imported by: its path, its name, and its folder's front door. */
+function importNames(root: string, changed: string): string[] {
+  const full = resolve(root, changed);
+  const noExt = full.slice(0, full.length - extname(full).length);
+  const names = new Set<string>([basename(noExt), relative(root, noExt).split(sep).join('/')]);
+  // Python: a.b.c for src/a/b/c.py, and the package it sits in.
+  const parts = relative(root, noExt).split(sep).filter((p) => p !== 'src');
+  names.add(parts.join('.'));
+  names.add(parts.slice(0, -1).join('.'));
+  if (basename(noExt) === 'index' || basename(noExt) === '__init__') names.add(basename(dirname(noExt)));
+  return [...names].filter((n) => n.length > 1);
+}
+
+/**
+ * The package a changed file is re-exported from. In a project with one front door - which is most
+ * libraries - every test imports "../src" and nothing imports "../src/utils.ts", so without this a
+ * review finds no tests at all for a real change. Measured: 8 of 16 real commits were missed this
+ * way before.
+ */
+function packageNames(root: string, changed: string): string[] {
+  const full = resolve(root, changed);
+  const out: string[] = [];
+  let dir = dirname(full);
+  for (let up = 0; up < 3; up++) {
+    for (const entry of ['index.ts', 'index.js', 'index.mjs', 'index.tsx', '__init__.py']) {
+      const front = join(dir, entry);
+      if (!existsSync(front)) continue;
+      let source = '';
+      try {
+        source = readFileSync(front, 'utf8');
+      } catch {
+        continue;
+      }
+      const stem = basename(full).replace(/\.[^.]+$/, '');
+      // Either it names this file, or it re-exports everything beside it.
+      if (front !== full && (source.includes(stem) || /export\s+\*/.test(source))) {
+        out.push(relative(root, dir).split(sep).join('/'), basename(dir));
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return [...new Set(out)].filter(Boolean);
+}
+
+/** Does this test's source import that changed file? */
+function importsIt(source: string, names: string[]): boolean {
+  for (const name of names) {
+    const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+      new RegExp(`(?:from|import|require\\()\\s*['"][^'"]*${quoted}(?:\\.[cm]?[jt]sx?)?['"]`),
+      new RegExp(`(?:^|\\n)\\s*(?:from\\s+${quoted}\\s+import|import\\s+${quoted})\\b`),
+    ];
+    if (patterns.some((p) => p.test(source))) return true;
+  }
+  return false;
+}
+
+const words = (text: string): string[] => (text.toLowerCase().match(/[a-z][a-z0-9]{2,}/g) ?? []).filter((w) => !STOP.has(w));
+const STOP = new Set(['src', 'lib', 'app', 'test', 'tests', 'spec', 'index', 'main', 'the', 'and', 'for', 'com', 'org', 'utils', 'util', 'js', 'ts', 'py']);
+
+/**
+ * The tests that reach a set of changed files. Imports first; then, for changed files nothing
+ * imports, the tests whose words overlap - marked as a guess.
+ */
+export function coverageFor(root: string, changedAll: string[], tests = testFiles(root)): TestCoverage[] {
+  const changed = changedAll.filter(isCode);
+  const sources = new Map<string, string>();
+  const read = (file: string): string => {
+    if (!sources.has(file)) {
+      try {
+        sources.set(file, readFileSync(file, 'utf8'));
+      } catch {
+        sources.set(file, '');
+      }
+    }
+    return sources.get(file)!;
+  };
+
+  const byTest = new Map<string, TestCoverage>();
+  const coveredByImport = new Set<string>();
+  const add = (test: string, file: string, how: TestCoverage['how']) => {
+    const rel = relative(root, test).split(sep).join('/');
+    const found = byTest.get(rel) ?? { testFile: rel, covers: [], how };
+    // A test that imports the file itself is never downgraded to the weaker kinds of knowing.
+    if (RANK[how] < RANK[found.how]) found.how = how;
+    if (!found.covers.includes(file)) found.covers.push(file);
+    byTest.set(rel, found);
+  };
+
+  for (const file of changed) {
+    if (!existsSync(resolve(root, file))) continue;
+    const direct = importNames(root, file);
+    const viaPackage = packageNames(root, file);
+    for (const test of tests) {
+      const source = read(test);
+      if (importsIt(source, direct)) {
+        coveredByImport.add(file);
+        add(test, file, 'imports');
+      } else if (viaPackage.length > 0 && importsIt(source, viaPackage)) {
+        coveredByImport.add(file);
+        add(test, file, 'package');
+      }
+    }
+  }
+
+  // Only for the changed files nothing imports: the words, which is a weaker kind of knowing.
+  const orphans = changed.filter((f) => !coveredByImport.has(f));
+  for (const file of orphans) {
+    const wanted = new Set(words(file));
+    if (wanted.size === 0) continue;
+    for (const test of tests) {
+      const rel = relative(root, test).split(sep).join('/');
+      if (byTest.has(rel)) continue;
+      const shared = words(`${rel} ${read(test).slice(0, 4000)}`).filter((w) => wanted.has(w));
+      if (new Set(shared).size < 2) continue;
+      add(test, file, 'name');
+    }
+  }
+
+  // Direct imports first, then the package ones - and inside each group the test whose words match
+  // the change, because "every test in the library covers this" is true and useless.
+  const overlap = (test: TestCoverage) => {
+    const wanted = new Set(test.covers.flatMap((f) => words(f)));
+    return words(test.testFile).filter((w) => wanted.has(w)).length;
+  };
+  return [...byTest.values()].sort((a, b) => RANK[a.how] - RANK[b.how] || overlap(b) - overlap(a) || b.covers.length - a.covers.length);
+}
+
+const RANK: Record<TestCoverage['how'], number> = { imports: 0, package: 1, name: 2 };
+
+/** Changed files that no test reaches at all: the part of a change nobody will notice breaking. */
+export function uncovered(changed: string[], coverage: TestCoverage[]): string[] {
+  const reached = new Set(coverage.flatMap((c) => c.covers));
+  return changed.filter((f) => isCode(f) && !reached.has(f) && !TEST_FILE.test(f));
+}

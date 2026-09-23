@@ -79,6 +79,17 @@ Pull candidate elements from the DOM snapshot → rank by similarity → generat
 
 Phase metric: auto-fix success rate, plus false-positive rate (incorrect fixes must be near zero).
 
+> Direction changed 2026-09-23 at the owner's request: **Tewip may write application feature code**,
+> not only tests. The rule that replaces "never touches application code" is the one that made the
+> rest of Tewip trustworthy, applied to a harder job: **code is only kept when it is proved.** A
+> change to application code survives only if a test that failed now passes, every test that was
+> passing still passes, and the change is small and local - and where there is no such test yet,
+> Tewip writes the test first and proves that the test fails without the change. Nothing is
+> committed, nothing is merged, and a change that cannot be proved is offered as an explanation
+> instead. The old promise was "it cannot touch your code"; the new one is "it cannot change your
+> code without showing you it works", which is what the owner is buying and what keeps the agent
+> safe to install.
+
 > Direction changed 2026-09-19 at the owner's request: Tewip grows from failure triage into a full software-quality agent covering the whole testing and security lifecycle. It is built on top of general models instead of competing with general coding agents, and every output is verified. Application feature code stays with general coding agents, so Tewip keeps its promise never to edit application code.
 
 ### Phase 6: Test Plans (`tewip plan`) (BUILT — metric not yet measurable: no real PRs with later-found bugs yet)
@@ -197,6 +208,29 @@ Measured two ways:
 - One finding was softened by that real run: GitHub's analytics cookie `_octo` has no HttpOnly by
   design, and calling that "high" is how a security report gets ignored. A cookie is now weighed by
   whether its name says it carries a session.
+
+### The risk review (`tewip review`) (BUILT 2026-09-23 — coverage measured on 16 real commits)
+
+A coding agent can read a diff. What it cannot say is that the two tests covering your change have
+flaked eleven times this month, that this area has had three real bugs since August, and that
+nothing at all covers the file you edited. That comes from Tewip's own history, so it costs nothing
+and nothing else can produce it.
+
+`tewip review --diff main...HEAD` answers, before anyone reads the diff: which tests reach the
+change and **how** they reach it (they import the file, they import the package that exports it, or
+their words merely match - said plainly, because "6 tests cover this" is only useful if it is true);
+which of those tests have flaked before, so a red run is not blamed on the change; what has gone
+wrong in these areas before; what nothing tests at all; and the command that runs the telling tests
+first, ordered by which have caught a real bug here.
+
+Measured without anyone's opinion, on 16 real commits from two public projects where the developers
+changed source **and** the test that covers it: Tewip was given only the source files and asked
+which tests cover them, and the answer was checked against the test file those same developers
+touched. **16 of 16 named correctly, 12 of 16 ranked first.**
+
+That measurement found the bug that mattered: 8 of the 16 were missed at first because every test in
+a library imports `"../src"` and nothing imports `"../src/utils.ts"`. Following the package's front
+door fixed it, and is now a test of its own.
 
 ### Not only Jira: Rally and GitHub Issues (BUILT 2026-09-23)
 

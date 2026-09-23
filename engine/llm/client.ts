@@ -31,12 +31,35 @@ const CACHE_FILE = process.env.TEWIP_LLM_CACHE || join(DATA_DIR, 'llm-cache.json
 
 let envLoaded = false;
 
-/** Loads <project>/.env once. Variables already set in the environment win. */
+/**
+ * Loads a `.env` once, from the project being worked on.
+ *
+ * This used to read only Tewip's own folder, which is right when running from a checkout and wrong
+ * for everybody who installs it: their key sits in their project's .env, and Tewip silently found
+ * no model and answered with rules alone. The working directory is now looked at first, then its
+ * parent (a monorepo package), then Tewip's own folder for development.
+ *
+ * Variables already set in the environment always win: CI sets real secrets, a file must not
+ * quietly replace them.
+ */
 export function loadDotEnv(): void {
   if (envLoaded) return;
   envLoaded = true;
-  const file = join(PROJECT_ROOT, '.env');
-  if (existsSync(file)) process.loadEnvFile(file);
+  const places = [process.cwd(), join(process.cwd(), '..'), PROJECT_ROOT];
+  for (const dir of places) {
+    const file = join(dir, '.env');
+    if (!existsSync(file)) continue;
+    const before = new Set(Object.keys(process.env));
+    const kept: Record<string, string | undefined> = {};
+    for (const name of before) kept[name] = process.env[name];
+    try {
+      process.loadEnvFile(file);
+    } catch {
+      continue; // an unreadable or malformed file is not a reason to stop
+    }
+    for (const [name, value] of Object.entries(kept)) if (value !== undefined) process.env[name] = value;
+    return;
+  }
 }
 
 interface OpenAiOptions {

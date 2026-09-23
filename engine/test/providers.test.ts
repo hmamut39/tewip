@@ -2,7 +2,11 @@
 // own API, or a model running on the machine itself.
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { clientFor, modelChoiceFromEnv, noModelHelp, PROVIDERS } from '../llm/providers.ts';
+import { loadDotEnv } from '../llm/client.ts';
 
 const VARS = ['TEWIP_PROVIDER', 'TEWIP_API_KEY', 'TEWIP_MODEL', 'TEWIP_BASE_URL', 'TEWIP_WRITE_MODEL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'TRIAGE_LLM_MODEL'];
 const saved = Object.fromEntries(VARS.map((v) => [v, process.env[v]]));
@@ -60,5 +64,22 @@ describe('choosing a model provider', () => {
     const help = noModelHelp();
     for (const id of Object.keys(PROVIDERS)) assert.match(help, new RegExp(id));
     assert.match(help, /no account and no data leaving it/);
+  });
+});
+
+describe('finding the key where a person put it', () => {
+  it('reads the .env of the project being worked on, not of wherever Tewip is installed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-env-'));
+    writeFileSync(join(dir, '.env'), `TEWIP_TEST_ONLY_KEY=from-the-project${String.fromCharCode(10)}`, 'utf8');
+    const before = process.cwd();
+    delete process.env.TEWIP_TEST_ONLY_KEY;
+    try {
+      process.chdir(dir);
+      loadDotEnv();
+      assert.equal(process.env.TEWIP_TEST_ONLY_KEY, 'from-the-project');
+    } finally {
+      process.chdir(before);
+      delete process.env.TEWIP_TEST_ONLY_KEY;
+    }
   });
 });

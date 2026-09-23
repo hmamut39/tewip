@@ -165,7 +165,8 @@ async function main(): Promise<void> {
       if (exportAs && exportAs !== 'xray' && exportAs !== 'zephyr') throw new Error('--export takes xray or zephyr');
       await runJira({
         planFile,
-        projectKey: project,
+        // An export needs no project at all; filing into Jira has already been checked to have one.
+        projectKey: project ?? '',
         exportAs: exportAs as 'xray' | 'zephyr' | undefined,
         out: flag(args, 'out'),
         type: flag(args, 'type'),

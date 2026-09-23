@@ -185,6 +185,8 @@ defects were found before release - a Robot timestamp that is not a date, k6's n
 
 ```bash
 tewip build "naturalsize should take a sep argument that goes between the number and the unit"
+tewip build --issue PROJ-123    # build from the ticket's own description and acceptance criteria
+tewip build "..." --pr          # commit the proved work on its own branch, open a draft PR
 tewip build "..." --dry-run     # prove it, show the patch, leave nothing on disk
 ```
 
@@ -198,6 +200,12 @@ Tried on two real public projects: it added a trailing-slash rule to **unjs/ufo*
 TypeScript, $0.18) and a `sep` argument to **python-humanize** (2 lines, Python, $0.10), each with
 its own failing-then-passing test and the project's whole suite still green. Asked for something
 that already worked, it stopped after one model call and kept nothing.
+
+It also refuses a feature that does not belong here at all. Handed a real Apache ticket about a
+Flink HTTP sink, a URL library got an "HTTP sink" built into it - test passing, suite green, every
+proof rule held, because when Tewip writes *both* the test and the code it can always make a
+self-consistent pair pass. So before writing anything it now asks whether the words of the feature
+mean anything in this repository, and refuses for free when they do not.
 
 The old promise was *"it can't touch your code"*. The new one is *"it can't change your code without
 showing you it works"*.

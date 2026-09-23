@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { LlmClient } from '../llm/client.ts';
-import { runBuild } from '../build/build-command.ts';
+import { belongsHere, runBuild } from '../build/build-command.ts';
 import { applyEdits, Workspace } from '../build/apply.ts';
 
 const NL = String.fromCharCode(10);
@@ -135,6 +135,48 @@ describe('the test comes first', () => {
     assert.equal(result.status, 'built');
     assert.equal(readFileSync(source, 'utf8'), was);
     assert.match(result.diff, /totalWithTax/, 'the patch is still there to apply');
+  });
+});
+
+describe('whether the feature belongs here at all', () => {
+  // Found by trying it: a real Apache ticket about a Flink HTTP sink was handed to a URL library,
+  // and Tewip built an "HTTP sink" into it - its own test passing, the suite green, every proof
+  // rule held. When Tewip writes both the test and the code it can always make a self-consistent
+  // pair pass, so something has to ask whether the words mean anything in this repository.
+  it('refuses a feature whose words appear nowhere in the project', () => {
+    const { root } = project();
+    const verdict = belongsHere(root, 'add a Kubernetes operator that reconciles CustomResourceDefinitions and watches namespaces across the cluster', [], []);
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.why, /almost nothing in this project mentions what that describes/);
+    assert.match(verdict.why, /would prove nothing/);
+  });
+
+  it("allows a feature written in the project as it names things", () => {
+    const { root } = project();
+    assert.equal(belongsHere(root, 'total should include tax for every item in the cart', [], []).ok, true);
+  });
+
+  it('reads what is inside the files, not only their names', () => {
+    // "naturalsize" lives inside filesize.py, not in its name; judging by names alone refused a
+    // feature that really did belong.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-belongs-'));
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, 'src', 'filesize.ts'), 'export function naturalsize(bytes: number) { return bytes; }', 'utf8');
+    assert.equal(belongsHere(root, 'naturalsize should accept a separator argument between the number and the unit', [], []).ok, true);
+  });
+
+  it('says nothing about a feature described in two words, because there is nothing to judge', () => {
+    const { root } = project();
+    assert.equal(belongsHere(root, 'add tax', [], []).ok, true);
+  });
+
+  it('stops before writing anything, so a wrong repository costs nothing', async () => {
+    const { root } = project();
+    let called = false;
+    const model = { model: 'fake', complete: async () => { called = true; return '{}'; } };
+    const result = await runBuild({ feature: 'add a Kubernetes operator that reconciles CustomResourceDefinitions across namespaces', root, model, runCommand: () => ({ passed: false, output: '' }) });
+    assert.equal(result.status, 'not-this-project');
+    assert.equal(called, false, 'not one model call was spent');
   });
 });
 

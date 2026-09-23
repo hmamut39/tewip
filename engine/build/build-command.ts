@@ -34,7 +34,7 @@ export interface BuildCommand {
   model?: import('../llm/client.ts').LlmClient;
 }
 
-export type BuildStatus = 'built' | 'test-passes-already' | 'no-code' | 'still-failing' | 'broke-others' | 'no-framework' | 'refused';
+export type BuildStatus = 'built' | 'test-passes-already' | 'no-code' | 'still-failing' | 'broke-others' | 'no-framework' | 'refused' | 'not-this-project';
 
 export interface BuildResult {
   status: BuildStatus;
@@ -81,6 +81,50 @@ export function definingSources(root: string, feature: string, limit = 3): strin
   return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((s) => s.file);
 }
 
+/**
+ * Does this feature belong in this project at all?
+ *
+ * Found by trying it: a real Apache ticket about a Flink HTTP sink was handed to a URL library, and
+ * Tewip built an "HTTP sink" into it - 28 lines, its own test passing, the suite green. Every proof
+ * rule held, because when Tewip writes both the test and the code it can always make a
+ * self-consistent pair pass. Nothing else referenced the invented API, so nothing else could break.
+ *
+ * The missing check is the obvious one: the words of the feature have to mean something here. A
+ * project's own vocabulary is its file names and what it exports, and a feature that shares almost
+ * none of it is a feature for some other repository.
+ */
+export function belongsHere(root: string, feature: string, sources: Array<{ file: string; content: string }>, testNames: string[]): { ok: boolean; why: string } {
+  const stop = new Set(['should', 'when', 'with', 'that', 'this', 'from', 'into', 'have', 'been', 'will', 'must', 'also', 'able', 'given', 'then', 'there', 'their', 'which', 'while', 'where', 'after', 'before', 'value', 'values', 'return', 'returns', 'support', 'supports', 'accept', 'accepts', 'option', 'options', 'default', 'behaviour', 'behavior', 'feature', 'example', 'instead', 'without']);
+  const words = (text: string) => new Set((text.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? []).filter((w) => !stop.has(w)));
+  const asked = [...words(feature)];
+  if (asked.length < 3) return { ok: true, why: '' };
+
+  const vocabulary = new Set<string>();
+  for (const s of sources) for (const w of words(`${s.file} ${s.content.slice(0, 20_000)}`)) vocabulary.add(w);
+  for (const name of testNames) for (const w of words(name)) vocabulary.add(w);
+  // The names of a project's files are not its vocabulary: "naturalsize" lives inside filesize.py,
+  // not in its name, and judging by names alone refused a feature that really did belong here.
+  let read = 0;
+  for (const file of sourceFiles(root, 1200)) {
+    if (!CODE_FILE.test(file) || read >= 60) continue;
+    read++;
+    try {
+      for (const w of words(`${basename(file)} ${readFileSync(file, 'utf8').slice(0, 20_000)}`)) vocabulary.add(w);
+    } catch {
+      // unreadable here is simply one less file of vocabulary
+    }
+  }
+  if (vocabulary.size === 0) return { ok: true, why: '' };
+
+  const shared = asked.filter((w) => vocabulary.has(w));
+  const share = shared.length / asked.length;
+  if (share >= 0.2) return { ok: true, why: '' };
+  return {
+    ok: false,
+    why: `almost nothing in this project mentions what that describes (${shared.length} of ${asked.length} of its words appear here${shared.length ? `: ${shared.slice(0, 5).join(', ')}` : ''}). If this is the right repository, say the feature in its own words - the names of the functions and files it should change. Tewip can make a test of its own invention pass in any project, and that would prove nothing.`,
+  };
+}
+
 /** A test file name in the project's own shape, that does not collide with an existing one. */
 function testPathFor(framework: Framework, feature: string): string {
   const stem = feature.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').split('-').slice(0, 4).join('-') || 'feature';
@@ -119,6 +163,10 @@ export async function runBuild(cmd: BuildCommand): Promise<BuildResult> {
   };
 
   const log: string[] = [`framework: ${framework.label}`, `source files read: ${ctx.sources.map((s) => s.file).join(', ') || 'none found'}`];
+
+  // Before anything is written: is this even a feature for this repository?
+  const belongs = belongsHere(root, cmd.feature, ctx.sources, ctx.testNames);
+  if (!belongs.ok) return { status: 'not-this-project', why: belongs.why, files: [], diff: '', log: [...log, belongs.why] };
   const workspace = new Workspace(root);
   const maxLines = cmd.maxLines ?? 120;
   const stop = (status: BuildStatus, why: string): BuildResult => {

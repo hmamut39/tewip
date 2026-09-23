@@ -286,6 +286,36 @@ behaviour that makes this safe, and which also exposed the bug: the files handed
 from similarity alone, so `number.py` and `time.py` arrived instead of `filesize.py`. The file that
 **defines** what the feature names is now searched for and sent first.
 
+### Closing the loop: build from a ticket, and propose it as a pull request (BUILT 2026-09-23)
+
+`tewip build --issue PROJ-123` reads the ticket - description and acceptance criteria, from Jira
+Cloud, Server, or a public tracker with no account at all - and builds from that instead of from a
+sentence typed twice. `--pr` then commits the proved work on a branch of its own and opens a
+**draft** pull request describing exactly what was proved and what was not. It never commits to the
+branch a person is standing on, never sweeps up files that were not part of the proved work, and
+never merges.
+
+**The refusal this exercise bought is the important part.** Handing a real Apache ticket about a
+Flink HTTP sink to a URL library, Tewip built an "HTTP sink" into it: 28 lines, its own test
+passing, the whole suite green. Every proof rule held - because when Tewip writes **both** the test
+and the code, it can always make a self-consistent pair pass, and nothing else in the project
+references the invented API, so nothing else can break.
+
+So one more check runs before anything is written: **do the words of this feature mean anything in
+this repository?** A project's vocabulary is what is inside its files, not just their names. A
+feature that shares almost none of it is refused, for nothing - not one model call is spent:
+
+> almost nothing in this project mentions what that describes (5 of 65 of its words appear here:
+> http, error, some, prefer, path). If this is the right repository, say the feature in its own
+> words. Tewip can make a test of its own invention pass in any project, and that would prove
+> nothing.
+
+Checked both ways: the two features that really were built (a trailing-slash rule in unjs/ufo, a
+`sep` argument in python-humanize) and a third (`intcomma` with a custom separator) all pass the
+check, while the Flink ticket and a Kubernetes-operator request are both refused. An earlier version
+judged by file names alone and refused `naturalsize`, which lives *inside* filesize.py - that was a
+false refusal, and false refusals are worse than useless.
+
 ### The risk review (`tewip review`) (BUILT 2026-09-23 — coverage measured on 16 real commits)
 
 A coding agent can read a diff. What it cannot say is that the two tests covering your change have

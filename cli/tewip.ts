@@ -69,11 +69,14 @@ Usage:
                                     the GitLab merge request, tells Slack or Teams only when a
                                     failure needs a person, and with --gate fails the build only on
                                     those failures.
-  tewip build "<what it should do>" [--dry-run] [--repairs 2] [--out feature.patch]
+  tewip build "<what it should do>" | --issue PROJ-123 [--dry-run] [--pr] [--out feature.patch]
                                     Writes a feature, test first: the test must fail without the
                                     code and pass with it, and every test that was passing must
                                     still pass - otherwise everything goes back byte for byte.
-                                    Nothing is committed.
+      --issue PROJ-123              Build from the ticket itself: its description and acceptance
+                                    criteria. Works with a public tracker without an account.
+      --pr                          Commit the proved work on a branch of its own and open a draft
+                                    pull request. Never merges, never commits to your branch.
   tewip review [--diff main...HEAD] [--out review.md]
                                     Before anyone reads the diff: which tests cover this change,
                                     which of them have flaked before, what has gone wrong in these
@@ -257,8 +260,22 @@ async function main(): Promise<void> {
       return;
     }
     case 'build': {
-      const feature = args.filter((a, i) => !a.startsWith('--') && !['--repairs', '--out', '--max-lines'].includes(args[i - 1] ?? '')).join(' ').trim();
-      if (!feature) throw new Error('usage: tewip build "<what the feature should do>" [--dry-run] [--repairs 2] [--out feature.patch]');
+      const typed = args.filter((a, i) => !a.startsWith('--') && !['--repairs', '--out', '--max-lines', '--issue'].includes(args[i - 1] ?? '')).join(' ').trim();
+      const issueKey = flag(args, 'issue');
+      let feature = typed;
+      let issueTitle = '';
+      if (issueKey) {
+        // A ticket says what was asked for better than a sentence typed twice.
+        const { Jira, jiraFromEnv, jiraHelp } = await import('../engine/work/jira.ts');
+        const { featureFromIssue } = await import('../engine/work/jira-command.ts');
+        const config = jiraFromEnv();
+        if (!config) throw new Error(jiraHelp());
+        const issue = await new Jira(config).issue(issueKey);
+        console.error(`Read ${issue.key} (${issue.type}, ${issue.status})${issue.acceptanceCriteria ? ' with its acceptance criteria' : ''}.`);
+        issueTitle = `${issue.key}: ${issue.summary}`;
+        feature = [featureFromIssue(issue), typed].filter(Boolean).join('\n\n');
+      }
+      if (!feature) throw new Error('usage: tewip build "<what the feature should do>" | --issue PROJ-123 [--dry-run] [--pr] [--out feature.patch]');
       const { runBuild, renderBuild } = await import('../engine/build/build-command.ts');
       const dryRun = args.includes('--dry-run');
       const result = await runBuild({
@@ -270,8 +287,25 @@ async function main(): Promise<void> {
         out: flag(args, 'out'),
       });
       console.log(`
-${renderBuild(result, feature, dryRun)}`);
-      if (result.status !== 'built') process.exitCode = 1;
+${renderBuild(result, issueTitle || feature, dryRun)}`);
+      if (result.status !== 'built') {
+        process.exitCode = 1;
+        return;
+      }
+      if (args.includes('--pr')) {
+        if (dryRun) throw new Error('--pr and --dry-run ask for opposite things: one keeps the work, the other puts it back.');
+        const { proposePullRequest } = await import('../engine/build/propose-pr.ts');
+        const proposed = proposePullRequest({
+          root: process.cwd(),
+          files: result.files,
+          title: (issueTitle || feature.split('\n')[0]).slice(0, 72),
+          body: result.why,
+          issue: issueKey,
+        });
+        console.log(`
+${proposed.status === 'opened' ? 'Opened a draft pull request.' : proposed.status === 'committed' ? `Committed on ${proposed.branch}.` : 'No pull request was opened.'}`);
+        for (const line of proposed.next) console.log(`  ${line}`);
+      }
       return;
     }
     case 'review': {

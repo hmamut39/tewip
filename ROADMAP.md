@@ -85,9 +85,29 @@ that the run re-ran anything: a rerun element, or some test in the same report w
 failure recorded. pytest's flake is still read; piscina's green run now reads as
 "All 145 test(s) passed. Nothing to explain." Both shapes are tests now.
 
-This is the first defect found by pointing Tewip at a stranger's project rather than at data
-collected for it, and it is the kind only that can find: every report in the eval sets came from
-runners already known to work.
+A second stranger followed: humanize, a Python library, run here with pytest. Its first run failed
+to collect at all because a dependency was not installed, and Tewip answered **UNKNOWN six times**
+to the single commonest environment failure there is. Once the dependencies were installed, 729
+tests passed and 15 failed with "fixture 'benchmark' not found" - a plugin that was not there - and
+Tewip answered UNKNOWN fifteen more times. Asked with the model on, it called those 15 **identical**
+failures 13 ENV and 2 TEST_DATA: the same input getting different answers, which is worse than
+either answer on its own.
+
+Both are now a deterministic rule, `env-missing-dependency`, which reads "no module named" across
+Python, Node, Java, Ruby, Go, .NET and PHP, and treats a missing pytest fixture as a missing plugin
+**only when at least three tests in the run all want the same one** - a typo in a fixture name
+breaks the one test that made it, an uninstalled plugin breaks every test that asks. Both real
+reports now read as ENV at 0.85-0.92, deterministically and at no cost.
+
+Two things are deliberately left alone, because they are not the machine's fault: a module that
+belongs to the project itself (a rename that missed a caller is a real bug) and a file that will
+not parse. `ImportError: cannot import name 'x'` is left out for the same reason - it usually means
+the code asked for something that no longer exists.
+
+These are the first defects found by pointing Tewip at strangers' projects rather than at data
+collected for it, and they are the kind only that can find: every report in the eval sets came from
+runners already known to work. Accuracy on all six labelled sets is unchanged: 96.4%, 86.1%, 93.4%,
+97.9%, 89.0%, 99.7%.
 
 ### Phase 3: LLM Diagnosis Layer (BUILT — held-out real accuracy 83.2%, see caveats in eval/README.md)
 > Held-out set: 155 real WordPress Gutenberg CI failures (Sep 4–7 2026), labelled by Claude from CI evidence, never used for tuning. 83.2% overall; but on the cases whose labels do not share a signal with the rules, accuracy is 10/36 (recurring cross-branch flakes 0/22, PR-caused REAL_BUG 10/14). TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.

@@ -6,6 +6,7 @@ import { deviceEnvSignal } from './device-errors.ts';
 import { INFRA_MEANING, infraSignal } from './infra-errors.ts';
 import { isElementNotFound, networkSignal, valueMismatch } from './error-parse.ts';
 import { locatorDrift, locatorDriftStrict } from './drift-rules.ts';
+import { envMissingDependency } from './missing-dependency.ts';
 import { timingFlaky, timingIntercepted, timingIntermittent, timingKnownFlaky, timingRetryPass, timingStaleElement } from './timing-rules.ts';
 import type { RunContext, TestHistory } from './history.ts';
 import { errorScenarioOf } from './llm/context.ts';
@@ -224,4 +225,4 @@ const realBugAssertion: Rule = {
  * Priority order: the first matching rule decides. Signals from outside the test (ENV)
  * come first, so a 5xx that also fails an assertion is ENV, not REAL_BUG.
  */
-export const RULES: readonly Rule[] = [envMassFailure, envNetwork, envInfra, envDevice, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];
+export const RULES: readonly Rule[] = [envMissingDependency, envMassFailure, envNetwork, envInfra, envDevice, testDataCollision, envServerError, locatorDriftStrict, timingIntercepted, timingStaleElement, timingRetryPass, locatorDrift, timingFlaky, timingIntermittent, timingKnownFlaky, realBugAssertion];

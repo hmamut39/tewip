@@ -32,6 +32,8 @@ export interface DepFinding {
   direct: boolean;
 }
 
+const NEWLINE = String.fromCharCode(10);
+
 const run = (command: string, cwd: string, timeoutMs = 5 * 60_000) => {
   const r = spawnSync(command, { cwd, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 40 * 1024 * 1024 });
   return { code: r.status ?? 1, out: `${r.stdout ?? ''}`, err: `${r.stderr ?? ''}` };
@@ -44,14 +46,26 @@ export const bySeverity = (a: DepFinding, b: DepFinding): number =>
   SEVERITY_ORDER.indexOf(a.severity.toLowerCase()) - SEVERITY_ORDER.indexOf(b.severity.toLowerCase());
 
 /** `npm audit --json`, which needs no install and no account: every Node project already has it. */
-export function npmAudit(root: string): DepFinding[] {
-  if (!existsSync(join(root, 'package.json'))) return [];
-  const { out } = run('npm audit --json', root);
+export function npmAudit(root: string): ScanOutcome {
+  if (!existsSync(join(root, 'package.json'))) return { findings: [], problem: null };
+  const { out, err } = run('npm audit --json', root);
   let report: any;
   try {
     report = JSON.parse(out);
   } catch {
-    return [];
+    return { findings: [], problem: `npm audit did not return a report${err.trim() ? `: ${err.trim().split(NEWLINE)[0].slice(0, 120)}` : ''}` };
+  }
+  // npm reports a refusal inside the JSON and still exits 0: no lockfile, a registry that will not
+  // answer, a private registry needing credentials. None of those is "nothing found".
+  // Two shapes, both exiting 0. A refusal names itself - {"error":{"code":"ENOLOCK","summary":...}}
+  // - while a registry that cannot be reached leaves those fields empty and puts the reason in
+  // `message`. Reading summary with ?? kept the empty string, so an unreachable registry passed for
+  // a clean audit on a project with three known advisories.
+  const failure = report.error || (report.message && !report.vulnerabilities);
+  if (failure) {
+    const reason = [report.error?.summary, report.error?.code, report.message, 'npm audit could not run'].find((x: unknown) => typeof x === 'string' && x.trim());
+    const hint = report.error?.code === 'ENOLOCK' ? ' (run `npm i --package-lock-only` first)' : '';
+    return { findings: [], problem: `${String(reason).slice(0, 160)}${hint}` };
   }
   const findings: DepFinding[] = [];
   for (const [name, entry] of Object.entries<any>(report.vulnerabilities ?? {})) {
@@ -69,7 +83,7 @@ export function npmAudit(root: string): DepFinding[] {
       dev: Boolean(entry.isDirect === false ? false : entry.dev ?? false) || Boolean(entry.effects?.length === 0 && entry.dev),
     });
   }
-  return findings;
+  return { findings, problem: null };
 }
 
 /** `pip-audit`, when the project is Python and the tool is installed. */
@@ -137,14 +151,30 @@ export interface AuditResult {
   missing: string[];
 }
 
+/**
+ * What one scanner produced, and why it produced nothing when it produced nothing.
+ *
+ * A scanner that could not run is not a scanner that found nothing, and the difference is the whole
+ * value of this report. On a project with no lockfile, `npm audit` answers
+ * `{"error":{"code":"ENOLOCK"}}` and exits 0; Tewip read that as an empty result and told the reader
+ * "Checked: npm audit. 0 need someone now" about a project declaring a vulnerable package. A clean
+ * bill of health that was never earned is worse than no report at all.
+ */
+export interface ScanOutcome {
+  findings: DepFinding[];
+  problem: string | null;
+}
+
 export function auditDependencies(root: string): AuditResult {
   const ran: string[] = [];
   const missing: string[] = [];
   const findings: DepFinding[] = [];
 
   if (existsSync(join(root, 'package.json'))) {
-    ran.push('npm audit');
-    findings.push(...npmAudit(root));
+    const npm = npmAudit(root);
+    if (npm.problem) missing.push(`npm audit could not run: ${npm.problem}`);
+    else ran.push('npm audit');
+    findings.push(...npm.findings);
   }
   const python = ['requirements.txt', 'pyproject.toml', 'setup.py'].some((f) => existsSync(join(root, f)));
   if (python) {

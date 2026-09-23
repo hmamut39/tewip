@@ -503,6 +503,22 @@ exactly that, with "remove it if nothing uses it any more" instead of an unhelpf
 tool whose whole promise is evidence a person can check, wrong evidence is worse than no evidence,
 which is why these count as defects rather than wording.
 
+**A scanner that could not run is not a scanner that found nothing** (2026-09-23). This command's
+stated promise is that it always says what was *not* checked, because "no real risk found" is a
+statement about the checks that ran and nothing else. It was breaking that promise in two ways,
+both found by running it on real projects:
+
+- **No lockfile.** `npm audit` answers `{"error":{"code":"ENOLOCK"}}` and exits 0. Tewip read an
+  empty result and printed "Checked: npm audit. 0 need someone now" about a project that declared a
+  vulnerable package.
+- **A registry that will not answer.** A different shape: the error fields come back empty and the
+  reason sits in `message`. Reading the summary with `??` kept the empty string, so an unreachable
+  registry also passed for a clean audit - on the project with three published advisories.
+
+Both now appear under **Not checked**, with npm's own words and, for the lockfile case, the command
+that fixes it. A clean bill of health that was never earned is worse than no report at all, and all
+three states - ran clean, could not run, found something - are tests now.
+
 **The baseline web check** (`tewip secure --url http://localhost:3000`) was added the same day. It
 asks for the page the way a browser does and reports what the response verifiably shows: missing
 Content-Security-Policy, X-Content-Type-Options or Referrer-Policy, a page that can be framed, a

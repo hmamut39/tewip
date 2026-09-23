@@ -75,10 +75,12 @@ function sharedWords(errors: string[], min = 0.6): string[] {
  * which is the least useful thing this report could say.
  */
 function ruleOf(record: TriageRecord | undefined): string {
-  const diagnosis = record?.diagnosis as { ruleId?: string; evidence?: Array<{ source?: string }> } | undefined;
-  if (diagnosis?.ruleId) return diagnosis.ruleId;
-  for (const e of diagnosis?.evidence ?? []) if (e.source && e.source !== 'engine' && e.source !== 'llm') return e.source;
-  return '';
+  const diagnosis = record?.diagnosis as { source?: string; ruleId?: string } | undefined;
+  // Only a diagnosis a rule actually decided has a rule to blame. Reading a name out of the
+  // evidence instead was wrong twice over: a rule that *declined* still leaves evidence under its
+  // own name, so failures the model answered were being blamed on a rule that had explicitly said
+  // "not mine". A report that misnames the rule sends someone to read the wrong code.
+  return diagnosis?.source === 'rules' ? (diagnosis.ruleId ?? '') : '';
 }
 
 const layerOf = (record: TriageRecord | undefined): string => String((record?.diagnosis as { source?: string } | undefined)?.source ?? 'unknown');
@@ -211,11 +213,12 @@ export function renderLearning(learned: Learning): string {
     for (const example of mistake.examples) lines.push(`  - **${example.testId}** — ${example.error}${example.why ? ` (you said: ${example.why})` : ''}`);
     lines.push('');
     const topRule = mistake.rules[0];
+    const ruleDecided = mistake.rules.reduce((sum, r) => sum + r.count, 0);
     lines.push(
       mistake.rule
         ? `What to do: read \`${mistake.rule}\` against those failures - it decided ${topRule.count} of ${mistake.count}. If it is matching something it should not, narrow it; if a rule for ${mistake.corrected} should have matched first, order that one first.`
         : topRule
-          ? `What to do: no single rule is behind these - ${mistake.rules.length} different ones are, the commonest being \`${topRule.rule}\` (${topRule.count} of ${mistake.count}). That points at a missing rule for ${mistake.corrected} rather than a wrong one: the words above are what it would match on.`
+          ? `What to do: no rule is behind most of these. ${mistake.rules.length === 1 ? `\`${topRule.rule}\` decided ${topRule.count} of ${mistake.count}` : `${mistake.rules.length} different rules decided ${ruleDecided} of ${mistake.count}, the commonest being \`${topRule.rule}\``}; the model was left to answer the other ${mistake.count - ruleDecided}. That points at a missing rule for ${mistake.corrected} rather than a wrong one - one that settles these before the model is asked: the words above are what it would match on.`
           : `What to do: no rule decided these, so the model was left to answer them. A rule for ${mistake.corrected} matching the words above would settle them without asking it.`,
     );
     lines.push('');

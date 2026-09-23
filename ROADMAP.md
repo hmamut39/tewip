@@ -468,6 +468,46 @@ rather than the `ruleId` the diagnosis already carries, so every group came back
 different layers", naming no rule - the least useful thing the report could say. It also printed
 the same failure three times when one test had been corrected repeatedly. Both are now tests.
 
+### Acting on what `learn` found, and not shipping it (2026-09-23)
+
+The report's largest finding was tested the same day, and the honest outcome is that **nothing
+shipped**. It is written down because a negative result that cost two full measurement sweeps is
+worth more than repeating it later.
+
+First, the report itself was wrong about *who* to blame. It read the rule name out of a diagnosis's
+evidence, and a rule that **declines** still leaves evidence under its own name - so failures the
+model had answered were being blamed on `locator-drift`, a rule that had explicitly said "not
+mine". Fixed to use the `ruleId` a rule-decided diagnosis already carries, and tested. With that
+corrected, the real finding changed: the largest systematic error is not a wrong rule but a
+**missing** one. Of 52 failures called REAL_BUG that people labelled TIMING, 32 were answered by
+the model because no rule would take them.
+
+Two fixes were then built and measured, and both were rejected by the data:
+
+1. **A rule reading cross-commit evidence.** `timing-intermittent` counts how often a test flips
+   between passing and failing *on its own branch*; on CI where every pull request is its own
+   commit, that is always zero, so it never fires. A new rule used "the test also failed on other
+   people's commits" instead. In isolation the signal looked decisive: it separated 33 of 52 wrong
+   calls from 27 real bugs with no overlap. In the real pipeline it fired 12 times in 2,181
+   labelled failures and was **wrong 11 of those**, every one a real bug. The reason is that the
+   earlier rules already take the cases this signal explains; what reaches a rule this late is the
+   hard remainder. Narrowing it to "failed the same way elsewhere" did not help: the split was by
+   dataset, not by threshold - perfect on the two weeks it was tuned on (4/4 and 20/20), harmful on
+   the two it was not (11 environment failures broken on one, 8 on the other). That is what
+   held-out sets are for.
+2. **Telling the model what the facts mean.** The root cause of (1) is that failing the same way
+   across unrelated commits is equally the signature of a flaky test *and* of a broken environment,
+   so a rule that overrules can only trade timing mistakes for environment ones. The model can
+   read the error and tell those apart, so the history summary it already receives was changed to
+   add the interpretation rather than a verdict. Re-measured on all six real sets: dev -1 case,
+   held-out -2, fresh -2, August 0, August-2 +2, Supabase 0. Every delta is inside the +-1-per-150
+   sampling noise the evaluator itself reports. No measured gain, so it was reverted rather than
+   kept as "probably better".
+
+Accuracy on the six real sets is therefore unchanged, and deliberately so: 96.4%, 86.1%, 93.4%,
+97.9%, 89.0%, 99.7%. What was kept is the attribution fix in `tewip learn`, which changes what the
+report tells a person to go and read.
+
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 

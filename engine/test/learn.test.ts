@@ -66,7 +66,25 @@ describe('what the corrections add up to', () => {
     const [mistake] = learned.mistakes;
     assert.equal(mistake.rule, '', 'four rules once each is not one rule to blame');
     assert.equal(mistake.rules.length, 4);
-    assert.match(renderLearning(learned), /no single rule is behind these/);
+    assert.match(renderLearning(learned), /no rule is behind most of these/);
+    assert.match(renderLearning(learned), /4 different rules decided 4 of 4/);
+  });
+
+  it('does not blame a rule that declined the failure the model then answered', () => {
+    // A rule that declines still leaves evidence under its own name. Reading the name from there
+    // blamed `locator-drift` for failures it had explicitly refused to decide.
+    const error = (n: string) => `expect(locator).toBeVisible() failed for ${n}`;
+    const tests = ['a', 'b', 'c'];
+    const answered = tests.map((t) => {
+      const r = record(t, error(t), 'REAL_BUG', undefined, 'llm') as unknown as { diagnosis: { evidence: unknown[] } };
+      r.diagnosis.evidence = [{ source: 'locator-drift', message: 'declined: no page snapshot' }];
+      return r as unknown as TriageRecord;
+    });
+    const learned = whatWeLearned(tests.map((t) => correction(t, error(t), 'REAL_BUG', 'TIMING')), [], answered);
+    const [mistake] = learned.mistakes;
+    assert.deepEqual(mistake.rules, [], 'the model answered these; no rule is to blame');
+    assert.equal(mistake.from, 'llm 3');
+    assert.match(renderLearning(learned), /no rule decided these, so the model was left to answer them/);
   });
 
   it('says when every correction is the same test, so it does not read as many', () => {

@@ -42,6 +42,36 @@ describe('JUnit import', () => {
     assert.equal(summary.status, 'failed');
   });
 
+  it('never turns a repeated test name into a failure when nothing in the run failed', () => {
+    // node:test's JUnit reporter writes a name twice, for a subtest and for its parent. Running
+    // piscina's own suite - 152 real tests, all green - Tewip announced two failing tests and
+    // diagnosed them as flaky, because an adjacent duplicate name was taken as a re-run whose
+    // error the runner had left out.
+    const xml = `<testsuites><testsuite name="pool" tests="2" failures="0">
+      <testcase name="isWorkerThread has the correct value" classname="test" file="test/pool.test.ts" time="0.1"/>
+      <testcase name="isWorkerThread has the correct value" classname="test" file="test/pool.test.ts" time="0.2"/>
+    </testsuite></testsuites>`;
+    const { records, summary } = importJunit(report(xml), META);
+    assert.deepEqual(records, [], 'a test that passed is never reported as having failed');
+    assert.equal(summary.status, 'passed');
+  });
+
+  it('still reads a re-run whose error the plugin left out, when the run shows re-runs', () => {
+    // pytest-rerunfailures writes the same error-less entry twice for a test that failed and then
+    // passed. That is indistinguishable from the case above on its own, so the evidence has to come
+    // from the report: somewhere in it, a test is written twice with a failure recorded.
+    const xml = `<testsuites><testsuite name="pytest" tests="4" failures="1">
+      <testcase classname="test_shop" name="test_total" time="0.01"/>
+      <testcase classname="test_shop" name="test_total" time="0.01"><failure message="AssertionError: 3 != 4">boom</failure></testcase>
+      <testcase classname="test_shop" name="test_flaky_once" time="0.001"/>
+      <testcase classname="test_shop" name="test_flaky_once" time="0.000"/>
+    </testsuite></testsuites>`;
+    const { records } = importJunit(report(xml), META);
+    const flaky = records.find((r) => r.testId.includes('test_flaky_once'));
+    assert.ok(flaky, 'the re-run is still seen');
+    assert.equal(flaky.retry, 0, 'reported as the failed attempt it was');
+  });
+
   it('reads a Jest report, where the failure text has no message attribute', () => {
     const xml = `<testsuites name="jest tests"><testsuite name="Checkout" file="src/checkout.test.ts">
       <testcase classname="Checkout pays with card" name="Checkout pays with card" time="0.2"><failure><![CDATA[Error: expect(received).toBe(expected)

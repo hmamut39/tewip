@@ -67,7 +67,35 @@ function relativeFile(file: string, workspace: string | undefined): string {
   return f;
 }
 
+/**
+ * Does this report come from a run that re-ran tests? Either the runner said so with a rerun
+ * element, or some test in it is written twice with a failure recorded - both of which pytest's
+ * rerun plugin does and an ordinary passing run never does.
+ */
+function looksLikeReruns(root: XmlElement): boolean {
+  let rerunElements = false;
+  let failureSeen = false;
+  const names = new Set<string>();
+  let duplicateWithFailure = false;
+  const walk = (node: XmlElement): void => {
+    for (const child of node.children) {
+      if (child.name === 'testcase') {
+        const key = `${child.attrs.classname ?? ''}::${child.attrs.name ?? ''}`;
+        const failed = child.children.some((c) => FAILURE.has(c.name));
+        if (child.children.some((c) => RETRY_FAILURE.has(c.name))) rerunElements = true;
+        if (failed) failureSeen = true;
+        if (names.has(key) && failureSeen) duplicateWithFailure = true;
+        names.add(key);
+      }
+      walk(child);
+    }
+  };
+  walk(root);
+  return rerunElements || duplicateWithFailure;
+}
+
 function junitCases(root: XmlElement, workspace: string | undefined): Case[] {
+  const rerunning = looksLikeReruns(root);
   const out: Case[] = [];
   const walk = (e: XmlElement, suite: XmlElement | undefined) => {
     for (const c of e.children) {
@@ -86,10 +114,16 @@ function junitCases(root: XmlElement, workspace: string | undefined): Case[] {
     const previous = out.at(-1);
     if (previous?.testId === testId) {
       // Rerun plugins (pytest-rerunfailures and others) write every attempt as its own entry and
-      // only re-run after a failure, so an earlier entry of the same test is a failed attempt even
-      // when the plugin left its error out. Only adjacent entries are merged.
+      // only re-run after a failure, so an earlier entry of the same test can be a failed attempt
+      // whose error the plugin left out. Only adjacent entries are merged.
+      //
+      // The inference is only safe where the report shows this runner re-runs tests at all. Without
+      // that condition two adjacent entries of the same name were enough to invent a failure, and
+      // real suites produce those innocently: node:test repeats a name for a subtest and its
+      // parent, so piscina's own 152 passing tests came back as two failing ones, diagnosed as
+      // flaky. A test that passed must never be reported as having failed.
       const earlier = previous.attempts.at(-1)!;
-      if (!earlier.failed) previous.attempts[previous.attempts.length - 1] = { failed: true, message: '', stack: '' };
+      if (!earlier.failed && rerunning) previous.attempts[previous.attempts.length - 1] = { failed: true, message: '', stack: '' };
       previous.attempts.push(...attempts);
       return;
     }

@@ -66,6 +66,29 @@ $1.12**, and a real week costs less because repeated failures are answered from 
 estimate of $0.89 was made by counting characters; the real calls showed it was low, chiefly
 because reasoning tokens are billed as output. The measured number is the one kept.)
 
+### Reading a real project Tewip had never seen (2026-09-23)
+
+The reader had only ever been checked against reports collected for this project. So piscina, a
+public Node worker-pool library, was cloned, built and run here: 152 real tests, five green runs,
+and two more at four times the concurrency to try to provoke a flake. It never flaked, which is a
+compliment to piscina and left nothing to diagnose - but reading its output found a fault worth
+more than a diagnosis would have been.
+
+**Tewip announced two failing tests in a run where nothing failed, and called them flaky.** The
+cause was an inference meant for re-run plugins: pytest-rerunfailures writes a test that failed and
+then passed as two entries with no error recorded in either, so an adjacent duplicate name was
+taken as a hidden failed attempt. node:test's JUnit reporter also writes a name twice - once for a
+subtest, once for its parent - and those tests had simply passed.
+
+A test that passed must never be reported as having failed, so the inference now needs evidence
+that the run re-ran anything: a rerun element, or some test in the same report written twice with a
+failure recorded. pytest's flake is still read; piscina's green run now reads as
+"All 145 test(s) passed. Nothing to explain." Both shapes are tests now.
+
+This is the first defect found by pointing Tewip at a stranger's project rather than at data
+collected for it, and it is the kind only that can find: every report in the eval sets came from
+runners already known to work.
+
 ### Phase 3: LLM Diagnosis Layer (BUILT — held-out real accuracy 83.2%, see caveats in eval/README.md)
 > Held-out set: 155 real WordPress Gutenberg CI failures (Sep 4–7 2026), labelled by Claude from CI evidence, never used for tuning. 83.2% overall; but on the cases whose labels do not share a signal with the rules, accuracy is 10/36 (recurring cross-branch flakes 0/22, PR-caused REAL_BUG 10/14). TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.
 Handles only the cases Phase 2 marked UNKNOWN.

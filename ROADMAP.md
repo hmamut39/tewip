@@ -198,6 +198,39 @@ Measured two ways:
   design, and calling that "high" is how a security report gets ignored. A cookie is now weighed by
   whether its name says it carries a session.
 
+### The flake dossier (`tewip flaky`) (BUILT 2026-09-23 — measured on three real projects)
+
+A flaky-test product counts retries. Tewip already decided, failure by failure, whether each one was
+the test being unreliable, the environment being broken or the application being wrong - so it can
+answer the question a team actually has on Monday: which tests are wasting our time, how much, and
+is it safe to quarantine one. Read from history it already kept, so it costs nothing and runs no
+tests.
+
+Three rules, all refusals:
+
+- a test that *mostly* fails is broken, not flaky - hiding it would hide what it is telling you;
+- a test whose failures Tewip read as the application being wrong is **never** quarantined;
+- quarantine needs several runs, and failures that are mostly the test being unreliable.
+
+`--apply` writes the quarantine line into the test file in the project's own framework
+(`test.fixme`, `test.skip`, `@pytest.mark.skip`, `@Disabled`, `[Fact(Skip=...)]`, `t.Skip`), with
+the evidence in a comment above it, touching nothing else - and remembers which tests it did, so it
+can tell the team when one has stopped failing and should come back. Nobody ever takes a test out of
+quarantine; this is the half that does.
+
+Measured on real harvested CI history, with each failure's cause taken from the labelled ground
+truth rather than from Tewip's own diagnosis:
+
+| Project | Runs | Tests that failed | Quarantine | Fix, do not hide | CI time that quarantine gives back |
+|---|---|---|---|---|---|
+| Gutenberg (dev window, ~4 days) | 826 | 316 | 21 | 19 | ~34 min/week |
+| Gutenberg (August, ~5 days) | 650 | 157 | 19 | 4 | ~148 min/week |
+| Supabase (~7 days) | 623 | 65 | 36 | 3 | ~1,178 min/week |
+
+**In all three, zero quarantine suggestions contained a single real-bug failure.** The clearest
+case: one Gutenberg test failed in 161 of 647 runs across 109 different branches - which is the
+evidence that it is the test and not anyone's change.
+
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)
 

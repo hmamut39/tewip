@@ -127,6 +127,7 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip spec "<feature>"` | An epic, its user stories and acceptance criteria, grounded in your code; files them in Jira with `--project PROJ --create` | Before the work is broken down |
 | `tewip report report.xml --gate` | The CI command for GitLab, Jenkins, CircleCI, Azure, Bitbucket and the rest: diagnoses the run, comments on the GitLab merge request, and fails the build only on failures that need a person | Your CI is not GitHub Actions |
 | `tewip watch --cmd "npm test"` | Runs your tests when you save a file and explains each failure straight away | While you are writing code |
+| `tewip flaky --days 30` | Which tests to quarantine, which to fix, what they cost in CI minutes - and when a quarantined one can come back | Monday morning |
 | `tewip note --days 7` | The weekly quality note for a lead, from runs already diagnosed (no model calls, free) | Monday morning |
 | `tewip fix --code report.xml` | Opt-in: proposes the smallest change to application code for a real bug, and keeps it only if the failing test passes and the whole suite still passes | "It is a real bug and I want a starting patch" |
 | `tewip design <figma link> --url <page>` | Compares a Figma frame against the running page: the words the design specifies and the controls its layer names imply | "Did we build what was designed?" |

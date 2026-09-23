@@ -166,6 +166,24 @@ that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra s
 implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
 own metric is still open.
 
+## Which flaky tests to quarantine, and what they cost (new)
+
+```bash
+tewip flaky --days 30        # the dossier: quarantine, fix, or watch - with the evidence
+tewip flaky --apply          # writes the quarantine line into the test file
+```
+
+Other tools count retries. Tewip already decided *why* each failure happened, so it can say: this
+test failed in 161 of 647 runs **across 109 different branches** - that is the test, not your
+change - and quarantining it gives the team back 148 CI minutes a week. It refuses to hide a test
+that mostly fails (that one is broken, not flaky) and **never** quarantines a test whose failures
+looked like a real bug.
+
+Measured on three real projects' CI history (Gutenberg twice, Supabase): 76 tests proposed for
+quarantine, **zero of them containing a single real-bug failure**, giving back roughly 34, 148 and
+1,178 CI minutes a week. It also tells you when a quarantined test has stopped failing and should
+come back - the half nobody ever does.
+
 ## Bugs filed back, and test cases where your team keeps them (Phase 10, completed)
 
 ```bash

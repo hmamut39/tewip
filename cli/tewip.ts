@@ -73,6 +73,11 @@ Usage:
                                     Beside your editor: runs your tests when a file changes (or
                                     watches for new reports) and explains each failure as it
                                     happens, without CI.
+  tewip flaky [--days 30] [--apply] [--name <project>] [--out flaky.md]
+                                    Which tests are wasting the team's time, how much CI time they
+                                    cost, and what to do with each: quarantine, fix, or watch. Read
+                                    from runs already diagnosed, so it costs nothing. --apply puts
+                                    the quarantine line in the test file with the evidence above it.
   tewip note [--days 7] [--name <project>] [--out note.md] [--post]
                                     The weekly quality note for a lead, written from the runs Tewip
                                     already diagnosed. No model calls, so it costs nothing.
@@ -246,6 +251,17 @@ async function main(): Promise<void> {
         report: flag(args, 'report'),
         paths: (flag(args, 'paths') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
         once: args.includes('--once'),
+      });
+      return;
+    }
+    case 'flaky': {
+      const { runFlaky } = await import('../engine/flaky/flaky-command.ts');
+      await runFlaky({
+        root: process.cwd(),
+        name: flag(args, 'name'),
+        days: Math.max(1, Number(flag(args, 'days')) || 30),
+        apply: args.includes('--apply'),
+        out: flag(args, 'out'),
       });
       return;
     }

@@ -140,6 +140,8 @@ Notes that save you time:
 - `write` never touches your application code. It only adds new test files, and you review and
   commit them yourself.
 - Everything it writes locally goes to the `.tewip` folder in your project.
+- Work items go to **Jira, Rally or GitHub Issues** - set `TEWIP_TRACKER`, or just the credentials
+  of the one you use. GitHub Issues uses your existing `gh` login, so it needs no new secret.
 - Jira works with **Cloud, Server and Data Center**. To read tickets from a tracker anyone can read
   (many open-source ones), `TEWIP_JIRA_URL` alone is enough - no account. Writing needs a token.
 - `tewip jira` shows what it *would* file and creates nothing until you add `--create`. It never

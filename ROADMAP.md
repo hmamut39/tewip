@@ -198,6 +198,28 @@ Measured two ways:
   design, and calling that "high" is how a security report gets ignored. A cookie is now weighed by
   whether its name says it carries a session.
 
+### Not only Jira: Rally and GitHub Issues (BUILT 2026-09-23)
+
+Teams do not all live in Jira, so the promises had to stop living in the Jira client. Everything in
+Tewip now talks to one small `Tracker` interface - create an item, comment on an item it created,
+find what it filed before - and three trackers implement it: **Jira** (Cloud, Server and Data
+Center), **Rally** (Broadcom, formerly CA Agile Central, through its Web Services API v2.0) and
+**GitHub Issues**, for the many teams whose backlog is simply their repository.
+
+The restraint is enforced above all three, and tested as such: no tracker is ever asked to move an
+item through a workflow, assign anyone or close anything, and a test that proves it inspects every
+request the three of them make.
+
+Each tracker speaks its own language: Rally files a HierarchicalRequirement where Jira files a
+Story, GitHub puts the kind in a label, and a P0 arrives as "Highest" in Jira, "Resolve Immediately"
+in Rally and "priority:p0" in GitHub. Tewip picks the tracker from the settings
+(`TEWIP_TRACKER=jira|rally|github`, or whichever credentials exist), and GitHub Issues uses the
+`gh` CLI login a developer already has, so it needs no new secret.
+
+Verified: the GitHub Issues reader against a live public repository (50 issues found by label).
+Rally is written to its published API and unit-tested against recorded shapes, **not yet run against
+a live Rally instance** - nobody here has one.
+
 ### The flake dossier (`tewip flaky`) (BUILT 2026-09-23 — measured on three real projects)
 
 A flaky-test product counts retries. Tewip already decided, failure by failure, whether each one was

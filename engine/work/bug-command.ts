@@ -15,8 +15,8 @@ import { importBlobReportDir } from '../import/blob.ts';
 import { llmFromEnv } from '../llm/client.ts';
 import { buildItems, type TriageItem } from '../../outlets/items.ts';
 import { ciFacts } from '../ci/platform.ts';
-import { Jira, jiraFromEnv, jiraHelp } from './jira.ts';
 import { TEWIP_LABEL } from './jira-command.ts';
+import { trackerFromEnv, trackerHelp } from './trackers.ts';
 
 /** Bugs Tewip filed carry this as well, so a second run finds them and does not file again. */
 export const BUG_LABEL = 'tewip-bug';
@@ -76,10 +76,10 @@ export function bugSummary(item: TriageItem): string {
 }
 
 export async function runBugs(cmd: BugCommand): Promise<TriageItem[]> {
-  const config = jiraFromEnv();
-  // A dry run answers the question people ask first - "what would it file?" - and needs no account
-  // at all. Only --create talks to Jira.
-  if (cmd.create && !config?.token) throw new Error(`filing a bug needs a token: showing what would be filed does not.\n${jiraHelp()}`);
+  // Jira, Rally or GitHub Issues - whichever this team uses. A dry run answers the question people
+  // ask first ("what would it file?") and needs no account at all; only --create writes.
+  const chosen = trackerFromEnv(cmd.projectKey);
+  if (cmd.create && !chosen?.tracker.canWrite()) throw new Error(`filing a bug needs a tracker that can be written to; showing what would be filed does not.\n${trackerHelp()}`);
   const path = resolve(cmd.report);
   if (!existsSync(path)) throw new Error(`no such report: ${cmd.report}`);
 
@@ -105,40 +105,36 @@ export async function runBugs(cmd: BugCommand): Promise<TriageItem[]> {
     return [];
   }
 
-  const jira = config?.token ? new Jira(config) : null;
-  let type = 'Bug';
-  let existing: Array<{ key: string; summary: string }> = [];
-  if (jira) {
-    const types = await jira.issueTypes(cmd.projectKey);
-    type = ['Bug', 'Defect', 'Task'].find((t) => types.includes(t)) ?? types[0];
-    if (!type) throw new Error(`no issue type available in ${cmd.projectKey}`);
-    existing = await jira.findByLabel(cmd.projectKey, BUG_LABEL);
+  const tracker = chosen?.tracker.canWrite() ? chosen.tracker : null;
+  let existing: Array<{ key: string; title: string }> = [];
+  if (tracker && chosen) {
+    lines.push(`Tracker: ${tracker.name}`, '');
+    existing = await tracker.mine(chosen.project, BUG_LABEL);
   } else {
-    lines.push('Jira was not contacted: this is what would be filed. Set TEWIP_JIRA_URL, TEWIP_JIRA_EMAIL and TEWIP_JIRA_TOKEN, then add --create.', '');
+    lines.push('No tracker was contacted: this is what would be filed. Set one up (see `tewip bugs` without --create for the settings), then add --create.', '');
   }
 
   let filed = 0;
   for (const item of bugs.slice(0, cmd.max)) {
     const summary = bugSummary(item);
-    const already = existing.find((i) => i.summary === summary);
+    const already = existing.find((i) => i.title === summary);
     if (already) {
       lines.push(`  ${item.title}  already filed as ${already.key}`);
-      if (cmd.create && jira) {
-        await jira.comment(already.key, seenAgain(item, facts.runUrl)).catch(() => lines.push(`    (could not add the note to ${already.key})`));
+      if (cmd.create && tracker) {
+        await tracker.comment(already.key, seenAgain(item, facts.runUrl)).catch(() => lines.push(`    (could not add the note to ${already.key})`));
         lines.push(`    added a note that it happened again`);
       }
       continue;
     }
-    if (!cmd.create || !jira) {
+    if (!cmd.create || !tracker || !chosen) {
       lines.push(`  would file: ${summary}`);
       lines.push(`      because: ${item.diagnosis.category} at ${item.diagnosis.confidence.toFixed(2)} - ${item.errorHead.replace(/\s+/g, ' ').slice(0, 100)}`);
       continue;
     }
-    const key = await jira.createIssue({
-      projectKey: cmd.projectKey,
-      type,
-      summary,
-      description: bugBody(item, facts.runUrl),
+    const key = await tracker.create(chosen.project, {
+      kind: 'bug',
+      title: summary,
+      body: bugBody(item, facts.runUrl),
       labels: [TEWIP_LABEL, BUG_LABEL, `tewip-${item.component.replace(/[^\w-]+/g, '-')}`.slice(0, 40)],
     });
     lines.push(`  filed ${key}: ${summary}`);
@@ -147,7 +143,7 @@ export async function runBugs(cmd: BugCommand): Promise<TriageItem[]> {
 
   const left = items.length - bugs.length;
   lines.push('', `${bugs.length} of ${items.length} failure(s) look like real bugs; ${left} were flaky tests, environment or test data and were deliberately not filed.`);
-  lines.push(cmd.create ? `${filed} ticket(s) created. Tewip never moves, assigns or closes one.` : 'Nothing was created. Add --create to file them.');
+  lines.push(cmd.create ? `${filed} ticket(s) created in ${tracker?.name}. Tewip never moves, assigns or closes one.` : 'Nothing was created. Add --create to file them.');
   console.log(lines.join('\n'));
   return bugs;
 }

@@ -164,6 +164,23 @@ from them): 38 checks, **0 differences reported on pages that match their design
 injected drifts caught** - a renamed button, a dropped sentence, a region that stopped being marked
 up. No designer has judged the output yet, so the roadmap's own metric is still open.
 
+## Epics, stories and acceptance criteria (Phase 14, new)
+
+```bash
+tewip spec "Readers can search the library and open a result"
+tewip spec "..." --project PROJ            # shows what it would file in Jira
+tewip spec "..." --project PROJ --create   # files the epic and its stories
+```
+
+An epic, user stories and Given / When / Then acceptance criteria, written from your code, your
+tests and your failure history. Anything it says the system **already** does carries a quote from a
+file it read, and Tewip checks that quote word by word; what it cannot quote becomes an open
+question instead of a confident sentence. It writes no estimates, dates or business cases, because
+it cannot check them.
+
+Measured on three real projects: 15 stories, 49 acceptance criteria, and of 46 claims about existing
+behaviour, **22 were kept with a checkable quote and 24 were turned into open questions**.
+
 ## Any CI, your chat, and your own machine (Phase 13, new)
 
 ```bash

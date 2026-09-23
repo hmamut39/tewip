@@ -40,6 +40,12 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+  tewip spec "<feature>" [--diff main...HEAD] [--url <page> ...] [--project PROJ] [--create]
+                                    An epic, its user stories and their acceptance criteria, from
+                                    this project's code, tests and failure history. Anything it
+                                    says the system already does is quoted from a file it read;
+                                    what it cannot quote becomes an open question. With --project it
+                                    shows what it would file in Jira; --create files it.
   tewip report <report> [--gate] [--out report.md] [--name <project>] [--no-post]
                                     The CI command for any platform: GitLab CI, Jenkins, CircleCI,
                                     Azure, Bitbucket, Travis, Drone. Diagnoses the run, comments on
@@ -142,6 +148,21 @@ async function main(): Promise<void> {
         issueKey: flag(args, 'issue'),
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      return;
+    }
+    case 'spec': {
+      const feature = args.filter((a, i) => !a.startsWith('--') && !['--diff', '--url', '--out', '--project'].includes(args[i - 1] ?? '')).join(' ').trim();
+      if (!feature) throw new Error('usage: tewip spec "<what the feature should do>" [--diff main...HEAD] [--url http://localhost:3000/page] [--project PROJ] [--create]');
+      const { runSpec } = await import('../engine/spec/spec-command.ts');
+      await runSpec({
+        feature,
+        root: process.cwd(),
+        diffRange: flag(args, 'diff'),
+        urls: args.flatMap((a, i) => (args[i - 1] === '--url' ? [a] : [])),
+        out: flag(args, 'out'),
+        projectKey: flag(args, 'project'),
+        create: args.includes('--create'),
       });
       return;
     }

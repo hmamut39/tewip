@@ -321,7 +321,7 @@ Status (2026-09-23). All four are built.
 Not measured: the phase metric itself. "Still using it after four weeks" needs a real team and four
 weeks, and no team has installed it yet. What is shown here is that each outlet works.
 
-### Phase 14: Writing for People, Not Only Machines (`tewip spec`)
+### Phase 14: Writing for People, Not Only Machines (`tewip spec`) (BUILT — half the metric measured, see status)
 
 Epics, stories and acceptance criteria from a feature description, grounded the way the test plan
 already is: in the code that exists, the tests that exist, and the failures this project has had.
@@ -333,6 +333,29 @@ share of "the system already does X" claims that are true.
 
 Refused on purpose: business plans, market analysis and anything Tewip cannot check. A confident
 document nobody can verify is the opposite of what this project is for.
+
+Status (2026-09-23). `tewip spec "<feature>"` writes an epic, its user stories and their acceptance
+criteria (Given / When / Then), grounded in the same facts the test plan uses: the code, the tests,
+the running pages, the change, and this project's failure history. With `--project PROJ` it shows
+what it would file in Jira and files it only with `--create`, under the same restraint as the test
+cases: never twice, never moved, never assigned, never closed. It is told in its own prompt to write
+no estimates, dates, budgets or business cases, because it cannot check them.
+
+The check that matters is enforced in code, not asked of the model: **every claim that the system
+already does something must carry a quote from a file Tewip read**, and every distinctive word of
+that quote must really be in that file. A claim that fails becomes an open question, so a reader is
+asked rather than misled.
+
+Measured on three real projects (unjs/ufo, python-humanize, and Tewip itself), writing model gpt-5.5:
+
+- 15 stories and 49 acceptance criteria.
+- 46 claims about what the system already does: **22 kept with a quote a reader can check, 24
+  demoted to open questions**. Reading the kept ones against the cited files, each one holds.
+- The check is deliberately strict, and several demoted claims were probably true but quoted
+  loosely. Asking is the cheaper mistake.
+
+Not measured: the other half of the metric - the share of acceptance criteria that survive review
+unchanged - which needs real reviewers on a real backlog.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

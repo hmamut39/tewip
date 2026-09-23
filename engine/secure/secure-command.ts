@@ -9,6 +9,7 @@ import { auditDependencies } from './deps.ts';
 import { scanSecrets, sourceFiles } from './secrets.ts';
 import { readAccepted, triageDependency, triageSecret, triageWeb, worstFirst, type SecurityItem } from './triage.ts';
 import { isLocal, scanWeb } from './web.ts';
+import { reconcile } from './reconcile.ts';
 import { loadVerdicts, saidByAPerson, verdictFor } from '../learn/verdicts.ts';
 import { readZapReport, zapAvailable, zapInstructions } from './zap.ts';
 
@@ -115,6 +116,12 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
   } else if (cmd.url) {
     notChecked.push(`a full web scan. Tewip's own check is passive; for the deep one: ${zapInstructions(cmd.url, zapAvailable(root))}`);
   }
+
+  // One check can change what another means: a secret in a file the application serves is not
+  // "never left the machine", whatever git says about it.
+  const joined = reconcile(items);
+  items.length = 0;
+  items.push(...joined);
 
   // A person's decision about a finding wins over Tewip's, and says whose it was.
   const corrections = loadVerdicts(root);

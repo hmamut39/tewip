@@ -519,6 +519,23 @@ Both now appear under **Not checked**, with npm's own words and, for the lockfil
 that fixes it. A clean bill of health that was never earned is worse than no report at all, and all
 three states - ran clean, could not run, found something - are tests now.
 
+**The web check against a real running application** (2026-09-23). A real Express server was run
+here twice: once serving its own directory the way a static file server does, once configured as
+its documentation says, with helmet and a public folder. Misconfigured, Tewip found four things and
+every one was true - the served `.env` (critical, and confirmed by reading the file's real contents
+rather than a 200 alone), no Content-Security-Policy, no `X-Content-Type-Options`, and a page that
+can be framed. Hardened, the same check found **nothing**. HSTS was correctly not mentioned at all,
+because the server was http. This is the first outside input that behaved correctly on first
+contact.
+
+It did, however, say two contradictory things in one report. The web check: the served `.env` makes
+its keys public, critical. The secret scan, about a credential *inside that same file*: "git does
+not track .env, so this never left the machine", low. Each is right from where it stands, and
+together they are misleading. A secret in a file the application serves has left the machine by the
+most direct route there is, so the two checks are now reconciled: that credential is reported as
+critical, "the running application serves /.env to anyone who asks", with "rotate it now" instead of
+"keep it in .gitignore". A finding a person has already accepted is never overruled this way.
+
 **The baseline web check** (`tewip secure --url http://localhost:3000`) was added the same day. It
 asks for the page the way a browser does and reports what the response verifiably shows: missing
 Content-Security-Policy, X-Content-Type-Options or Referrer-Policy, a page that can be framed, a

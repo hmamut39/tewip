@@ -8,6 +8,7 @@ import { componentOf } from '../../outlets/items.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import type { TestCoverage } from './coverage.ts';
 import { renderExpectations, type ExpectationChange } from './expectations.ts';
+import { renderAgreements, type Agreement } from './agreements.ts';
 
 export interface TestRisk {
   testFile: string;
@@ -41,6 +42,8 @@ export interface Review {
   notes: string[];
   /** Checks that were already agreed and this change edits, withdraws or renames. */
   expectations: ExpectationChange[];
+  /** Decisions outside the tests that this change alters. */
+  agreements: Agreement[];
 }
 
 const fileOf = (record: TriageRecord): string => record.file ?? '';
@@ -51,7 +54,7 @@ const countBy = <T>(xs: T[], key: (x: T) => string): Map<string, number> => {
 };
 
 /** The review, assembled from the change, what covers it, and what has gone wrong here before. */
-export function reviewChange(range: string, changed: string[], coverage: TestCoverage[], history: TriageRecord[], notCovered: string[], expectations: ExpectationChange[] = []): Review {
+export function reviewChange(range: string, changed: string[], coverage: TestCoverage[], history: TriageRecord[], notCovered: string[], expectations: ExpectationChange[] = [], agreements: Agreement[] = []): Review {
   const byFile = new Map<string, TriageRecord[]>();
   for (const record of history) {
     const file = fileOf(record).split('\\').join('/');
@@ -126,7 +129,11 @@ export function reviewChange(range: string, changed: string[], coverage: TestCov
     );
   }
 
-  return { range, files: changed, tests, uncovered: notCovered, expectations, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
+  if (agreements.length > 0) {
+    notes.unshift(`This change alters ${agreements.length} thing(s) the project had already decided outside its tests (${[...new Set(agreements.map((a) => a.kind))].join(', ')}). They are listed below with what they were.`);
+  }
+
+  return { range, files: changed, tests, uncovered: notCovered, expectations, agreements, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
 }
 
 const when = (at: string): string => {
@@ -148,6 +155,8 @@ export function renderReview(review: Review, runCommand?: (files: string[]) => s
 
   const renegotiated = renderExpectations(review.expectations);
   if (renegotiated.length > 0) lines.push(...renegotiated, '');
+  const altered = renderAgreements(review.agreements);
+  if (altered.length > 0) lines.push(...altered, '');
 
   lines.push('## Tests that cover this change', '');
   if (review.tests.length === 0) lines.push('None found.', '');

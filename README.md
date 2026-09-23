@@ -288,11 +288,21 @@ someone agreed on, and this is the one thing in a review that the change's own d
 account for: everything else reads the change's account of itself. It never passes judgement — tests
 change for good reasons — it asks which of them the author intended.
 
-This came out of a measurement rather than an idea. Of 18 real pull requests later found to have
+Alongside it, **the decisions a change alters outside its tests**: a guard that refused something,
+a value other code falls back on, a limit that decides behaviour under load, a version or runner
+pinned on purpose. Same rule - only things that already existed, never additions - and the same
+question rather than a verdict.
+
+Both came out of a measurement rather than an idea. Of 18 real pull requests later found to have
 broken something, the one Tewip's test plan missed was one whose *intention* was wrong: it changed
-a freshness rule, changed the tests to match, and was reverted the next day. Run over those same 18
-pull requests, this check fires on 2 — **and both were reverted**, including the one the plan
-missed. No model is called, so it costs nothing.
+a freshness rule, changed the tests to match, and was reverted the next day.
+
+**What these checks are not is a predictor**, and the measurement says so plainly. On 14 pull
+requests known to have caused a regression they speak up on 4; on 30 ordinary merged pull requests
+from the same repositories, on 9 - 29% against 30%. A change that alters an agreement is not more
+likely to be broken. What they do is put those alterations in front of a person: on the ordinary
+set they surfaced 23 of them, among which a `raise SystemExit` guard that was deleted, a semaphore
+dropped from 4 to 1, and a CI runner image moved. No model is called, so this costs nothing.
 
 ## Which flaky tests to quarantine, and what they cost (new)
 

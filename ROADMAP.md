@@ -153,13 +153,35 @@ intended and would have passed. When a pull request's *intention* is wrong, a pl
 intention validates it rather than questioning it. Nothing in the current design would catch that.
 
 **What the miss led to (built the same day).** The blind spot is not specific to plans: every layer
-of Tewip reads the change's own description as the specification. The one place that assumption can
-be checked is a test that already existed, so `tewip review` now reports **the checks a change
-renegotiates** - each assertion the diff rewrites, withdraws or renames, with the old text beside
-the new one, and a question rather than a verdict. Run over the same 18 pull requests it fires on 2,
-and both of those were later reverted, including `budget-mvp#16` itself, where it shows five
-rewritten expectations and a crypto-window test renamed into something unrelated. It reads the diff
-only: no model, no network, nothing to configure.
+of Tewip reads the change's own description as the specification. The things that assumption can be
+checked against are the decisions the project already made, so `tewip review` now reports two kinds.
+**The checks a change renegotiates**: each assertion the diff rewrites, withdraws or renames, with
+the old text beside the new one - on `budget-mvp#16` it shows five rewritten freshness expectations
+and a crypto-window test renamed into something unrelated. And **the decisions it alters outside the
+tests**: a guard that refused something, a value other code falls back on, a limit, a version or
+runner pinned on purpose. Both read the diff only - no model, no network - and both ask rather than
+judge.
+
+**Neither is a predictor of regressions, and the first version of this entry implied otherwise.**
+"It fired, and that pull request was reverted" is worthless on a corpus where every pull request was
+reverted by construction. So a control set was harvested: 30 ordinary merged pull requests from the
+same repositories, excluding any that a later commit blames for a regression.
+
+| | 14 pull requests that caused a regression | 30 ordinary merged pull requests |
+| --- | --- | --- |
+| checks renegotiated | 2 (14%) | 3 (10%) |
+| decisions altered | 3 (21%) | 7 (23%) |
+| either spoke up | 4 (29%) | 9 (30%) |
+
+The rates are the same, so a change that alters an agreement is **not** more likely to be broken.
+What the checks do is put the alterations in front of a person: across the ordinary set they
+surfaced 23, including a deleted `raise SystemExit` guard, a semaphore dropped from 4 to 1, and a CI
+runner image moved. That is worth a line in a review; a claim to predict bugs would not have been.
+
+Measuring the control set paid for itself twice over. It showed `className="min-w-0"` becoming
+`min-w-[9rem]` being reported as a limit, so markup is now excluded, and that `MAX_RETRIES` matched
+no limit word at all, because an underscore is a word character - identifiers are now split before
+matching.
 
 **Caveats, all of them.** 9 of the 18 pairs could not be judged: 4 repositories were too large to
 fetch here (vscode at 1.5 GB, dolphin at 560 MB, and two others), and in 5 the later commit was a

@@ -100,7 +100,9 @@ Usage:
   tewip --version                   Print the version.
 
 Reports it reads: Playwright, pytest/unittest, Jest, Vitest, Mocha, node:test, JUnit/TestNG
-(Maven, Gradle), Go (gotestsum), .NET (TRX or JUnit), RSpec, PHPUnit, Rust (nextest).
+(Maven, Gradle), Go (gotestsum), .NET (TRX or JUnit), NUnit 3, RSpec, PHPUnit, Rust (nextest),
+Robot Framework (output.xml), JMeter (.jtl) and k6 (--summary-export). Appium, Selenium and
+WebdriverIO suites report through one of the above, and their own error messages are understood.
 Set OPENAI_API_KEY to let the AI layer decide what the rules leave open.`;
 
 const flag = (args: string[], name: string) => {

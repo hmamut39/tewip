@@ -209,6 +209,29 @@ Measured two ways:
   design, and calling that "high" is how a security report gets ignored. A cookie is now weighed by
   whether its name says it carries a session.
 
+### More runners: Robot Framework, JMeter, k6 (BUILT 2026-09-23)
+
+Robot Framework writes output.xml by default, JMeter writes .jtl, and k6 writes a JSON summary -
+none of them JUnit. All three are read now, and each was checked against real reports published in
+public repositories rather than against examples written here. That found three defects before
+release: Robot's timestamp (`20180303 09:46:00.211`) is not a date and threw when handed to one;
+k6 keeps its numbers under `values` in every recent version; and a JMeter sample that returns 200
+but fails an assertion was being reported as "mostly 200", which reads as nonsense.
+
+A performance run does not fail test by test, so the shape is different on purpose: a JMeter report
+becomes one record per request label ("4 of 5 requests failed, an assertion failed (4 times,
+response 200): The operation lasted too long"), and a k6 run becomes one record per crossed
+threshold, carrying the measurement that crossed it.
+
+Appium and Selenium were asked for and deliberately need no importer: those suites report through
+Mocha, pytest or JUnit, which Tewip already reads, and their own error messages are already
+understood by the device and driver readers. An "Appium importer" would be a label on something
+that already works.
+
+A test now also guards the repository against stray control characters in source, after a shell
+heredoc turned an escape into a real backspace three times in one day - each time silently stopping
+a regular expression from matching, and each time found only by measuring against real data.
+
 ### The risk review (`tewip review`) (BUILT 2026-09-23 — coverage measured on 16 real commits)
 
 A coding agent can read a diff. What it cannot say is that the two tests covering your change have

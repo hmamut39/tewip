@@ -1,6 +1,8 @@
 // Imports test reports from any language or framework into the agent's records: JUnit XML, which
 // pytest, Jest, Vitest, Mocha, node:test, Maven Surefire, Gradle, gotestsum, PHPUnit, RSpec,
-// cargo-nextest and Cypress write, and .NET's own TRX. Playwright keeps its own importer
+// cargo-nextest and Cypress write; .NET's own TRX; NUnit 3's result file; Robot Framework's
+// output.xml; JMeter's .jtl; and a k6 summary, where a run fails by crossing a threshold rather
+// than test by test. Playwright keeps its own importer
 // (blob.ts), which also reads traces.
 //
 // What these reports can and cannot say: each test's name, outcome, failure message and stack,
@@ -12,6 +14,7 @@ import { join } from 'node:path';
 import { SCHEMA_VERSION, type RunSummary, type TriageRecord } from '../../reporters/types.ts';
 import type { ImportMeta, ImportResult } from './blob.ts';
 import { descendants, parseXml, type XmlElement } from './xml.ts';
+import { jmeterCases, k6Cases, looksLikeK6, robotCases, robotTime } from './other-formats.ts';
 
 interface Attempt {
   failed: boolean;
@@ -156,7 +159,8 @@ function nunitCases(root: XmlElement): Case[] {
     });
 }
 
-const REPORT_FILE = /\.(xml|trx)$/i;
+// .jtl is JMeter's, and a k6 summary is JSON; both are read below.
+const REPORT_FILE = /\.(xml|trx|jtl|json)$/i;
 
 /** Report files under `path` (a file, or a directory searched recursively). */
 export function junitFiles(path: string): string[] {
@@ -182,7 +186,25 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
   let parsedFiles = 0;
 
   for (const file of junitFiles(path)) {
-    const root = parseXml(readFileSync(file, 'utf8'));
+    const raw = readFileSync(file, 'utf8');
+    // k6 writes JSON, not XML: a performance run fails by crossing a threshold, not test by test.
+    if (/\.json$/i.test(file)) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        unread.push(`${file} (not JSON)`);
+        continue;
+      }
+      if (!looksLikeK6(parsed)) {
+        unread.push(`${file} (JSON, but not a k6 summary)`);
+        continue;
+      }
+      parsedFiles++;
+      addCases(k6Cases(parsed));
+      continue;
+    }
+    const root = parseXml(raw);
     let cases: Case[];
     if (root.name === 'TestRun') {
       cases = trxCases(root);
@@ -196,6 +218,12 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
       cases = nunitCases(root);
       const start = root.attrs['start-time'];
       if (start && (!startedAt || start < startedAt)) startedAt = start;
+    } else if (root.name === 'robot') {
+      cases = robotCases(root);
+      const start = robotTime(root.attrs.generated ?? '');
+      if (start && !startedAt) startedAt = start;
+    } else if (root.name === 'testResults') {
+      cases = jmeterCases(root);
     } else {
       // Not a report Tewip knows. Staying silent here would report a failing run as clean, so the
       // file is remembered and, if nothing at all could be read, the caller is told.
@@ -204,6 +232,10 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     }
 
     parsedFiles++;
+    addCases(cases);
+  }
+
+  function addCases(cases: Case[]): void {
     for (const c of cases) {
       attempts[c.testId] = (attempts[c.testId] ?? 0) + c.attempts.length;
       c.attempts.forEach((attempt, retry) => {
@@ -242,7 +274,8 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     const list = unread.slice(0, 5).join(', ');
     if (parsedFiles === 0) {
       throw new Error(
-        `no test report Tewip can read in ${path}: ${list}. It reads JUnit XML (<testsuites>/<testsuite>), NUnit 3 (<test-run>) and .NET TRX (<TestRun>). ` +
+        `no test report Tewip can read in ${path}: ${list}. It reads JUnit XML (<testsuites>/<testsuite>), NUnit 3 (<test-run>), .NET TRX (<TestRun>), ` +
+          'Robot Framework output.xml (<robot>), JMeter .jtl (<testResults>) and a k6 summary (--summary-export). ' +
           'Most runners can write JUnit XML; for TestNG use the Surefire report, and for NUnit use --result=x.xml.',
       );
     }

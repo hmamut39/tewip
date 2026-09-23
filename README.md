@@ -166,6 +166,21 @@ that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra s
 implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
 own metric is still open.
 
+## More runners: Robot Framework, JMeter, k6 (new)
+
+Tewip now reads **Robot Framework's output.xml**, **JMeter's .jtl** and a **k6 summary** as well as
+JUnit XML, TRX, NUnit and Playwright's own reports. A load test does not fail test by test, so a
+JMeter report becomes one line per request ("4 of 5 requests failed, an assertion failed") and a k6
+run becomes one record per crossed threshold, with the number that crossed it.
+
+Appium and Selenium need no importer: those suites report through Mocha, pytest or JUnit, which
+Tewip already reads, and their own error messages ("Could not find a connected device", "stale
+element reference") are already understood.
+
+Each reader was checked against real reports published in public repositories, which is how three
+defects were found before release - a Robot timestamp that is not a date, k6's numbers living under
+`values`, and a JMeter line that read "mostly 200" when an assertion had failed.
+
 ## Before anyone reads the diff (new)
 
 ```bash

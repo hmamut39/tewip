@@ -121,6 +121,8 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
 | `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
 | `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
+| `tewip bugs report.xml --project PROJ` | Files a bug for each failure that really is a bug, with its evidence; files nothing for flaky tests or environment problems | After a CI run with real failures |
+| `tewip jira plan.json --export xray` | Writes the test cases as a CSV for Xray or Zephyr Scale | Your team keeps cases in a test-management tool |
 | `tewip secure [--url http://localhost:3000]` | Runs your dependency and secret scanners, checks the running app's headers, cookies and exposed files, then says which findings need someone now and which are noise or unreachable | Before a release, or in CI |
 | `tewip spec "<feature>"` | An epic, its user stories and acceptance criteria, grounded in your code; files them in Jira with `--project PROJ --create` | Before the work is broken down |
 | `tewip report report.xml --gate` | The CI command for GitLab, Jenkins, CircleCI, Azure, Bitbucket and the rest: diagnoses the run, comments on the GitLab merge request, and fails the build only on failures that need a person | Your CI is not GitHub Actions |

@@ -209,7 +209,7 @@ in, the designs they build from, the code they fix, and the places they already 
 them keeps the rule that makes Tewip worth trusting - **it says only what it can show** - and each
 names what it deliberately will not do, because a tool that will not lie to you is the product.
 
-### Phase 10: The Work Item Loop (`tewip jira`) (BUILT — reading measured on 150 real tickets; bugs-back and Xray/Zephyr not yet)
+### Phase 10: The Work Item Loop (`tewip jira`) (BUILT — all four directions; reading measured on 150 real tickets)
 
 Tewip already writes plans and verified tests. What stops a team using it daily is that its output
 lives in a folder while their work lives in Jira. This closes that loop in both directions:
@@ -245,6 +245,19 @@ readable by anyone.
   went from **11 of 61 to 61 of 61**, with one false positive among the 89 tickets that had none.
   The heading styles came from the corpus, not from guessing: `h2. Acceptance Criteria`,
   `h1. +*Acceptance criteria*+`, `h3. Suggested acceptance criteria`, `Definition of Done`.
+
+The other two directions were built on 2026-09-23:
+
+- **Bugs back.** `tewip bugs <report> --project PROJ` files a bug for each failure Tewip diagnosed
+  as a real bug at 0.80 or above, with the error, the evidence, the run link and the test that
+  caught it - and deliberately files nothing for a flaky test, an environment problem or test data.
+  The same failure is never filed twice: a second sighting is a short note on the ticket Tewip
+  itself opened, found by its own label. Nothing is created without `--create`, and **a dry run
+  needs no account at all**, because "what would it file?" is the question people ask first.
+- **Test management.** `tewip jira <plan.json> --export xray|zephyr` writes the plan's scenarios as
+  the CSV Xray or Zephyr Scale imports, one row per step, with priority in the importer's own words
+  and the "already covered by" evidence in the description. No account, no network: importing stays
+  a person's step, and both tools let them map the columns.
 
 Still not measured: the phase metric itself - the share of created work items a person keeps without
 editing - which needs a real backlog and a real person.

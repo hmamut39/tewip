@@ -6,7 +6,10 @@
 // what is already there rather than making duplicates.
 import { readFileSync } from 'node:fs';
 import type { Plan } from '../quality/plan.ts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { Jira, jiraFromEnv, jiraHelp, type JiraIssue } from './jira.ts';
+import { exportTestCases, importHint, type ExportFormat } from './testcase-export.ts';
 
 export const TEWIP_LABEL = 'tewip';
 
@@ -22,6 +25,9 @@ export interface JiraCommand {
   create: boolean;
   /** Only these scenario ids. */
   only: string[];
+  /** Write the cases as a file for a test-management tool instead of filing them in Jira. */
+  exportAs?: ExportFormat;
+  out?: string;
 }
 
 interface SavedPlan {
@@ -62,8 +68,22 @@ function chosen(plan: Plan, only: string[]): Scenario[] {
 }
 
 export async function runJira(cmd: JiraCommand): Promise<void> {
+  const saved0 = JSON.parse(readFileSync(cmd.planFile, 'utf8')) as SavedPlan;
+  if (cmd.exportAs) {
+    // A file for Xray or Zephyr: no account, no network, and importing stays the person's step.
+    const chosenCases = chosen(saved0.plan, cmd.only);
+    if (chosenCases.length === 0) throw new Error('every scenario in the plan is already covered by a test');
+    const csv = exportTestCases({ ...saved0.plan, scenarios: chosenCases }, saved0.feature, cmd.exportAs);
+    const file = resolve(cmd.out ?? `tewip-${cmd.exportAs}.csv`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${csv}\n`, 'utf8');
+    console.log(`${chosenCases.length} test case(s) for ${cmd.exportAs === 'xray' ? 'Xray' : 'Zephyr Scale'}.`);
+    console.log(importHint(cmd.exportAs, file));
+    return;
+  }
   const config = jiraFromEnv();
   if (!config) throw new Error(jiraHelp());
+  if (!config.token) throw new Error(`filing test cases needs a token: reading a public tracker is free, writing to one is not.\n${jiraHelp()}`);
   const jira = new Jira(config);
   const saved = JSON.parse(readFileSync(cmd.planFile, 'utf8')) as SavedPlan;
   const scenarios = chosen(saved.plan, cmd.only);

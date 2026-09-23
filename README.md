@@ -166,6 +166,22 @@ that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra s
 implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
 own metric is still open.
 
+## Bugs filed back, and test cases where your team keeps them (Phase 10, completed)
+
+```bash
+tewip bugs report.xml --project SHOP             # shows what it would file; nothing is created
+tewip bugs report.xml --project SHOP --create    # files them
+tewip jira plan.json --export xray --out cases.csv    # or --export zephyr
+```
+
+`tewip bugs` files a ticket only for failures **it** diagnosed as a real bug, with the error, the
+evidence and the run link. A flaky test or a broken environment is deliberately not filed - that is
+the point of diagnosing first. The same failure is never filed twice: the second sighting is a short
+note on the ticket Tewip itself opened. A dry run needs no Jira account at all.
+
+`--export xray|zephyr` writes the plan's scenarios as the CSV those tools import, one row per step.
+No account, no network; importing stays your step.
+
 ## Security: which findings actually matter (Phase 9, new)
 
 ```bash

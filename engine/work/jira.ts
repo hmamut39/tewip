@@ -137,6 +137,10 @@ export class Jira {
 
   /** A description is a document tree on Cloud and a string of wiki markup everywhere else. */
   private bodyFor(version: 2 | 3, body: unknown): unknown {
+    const asComment = body as { body?: unknown };
+    if (typeof asComment.body === 'string') {
+      return version === 2 ? body : { body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: asComment.body.slice(0, 30_000) }] }] } };
+    }
     const fields = (body as { fields?: { description?: unknown } }).fields;
     if (!fields || typeof fields.description !== 'string') return body;
     if (version === 2) return body;
@@ -168,6 +172,14 @@ export class Jira {
       },
     });
     return created.key;
+  }
+
+  /**
+   * A note on a ticket Tewip itself opened - never on anyone else's. The caller finds the ticket by
+   * Tewip's own label, which is the only way it recognises its own work.
+   */
+  async comment(key: string, text: string): Promise<void> {
+    await this.request('POST', `/issue/${encodeURIComponent(key)}/comment`, { body: text });
   }
 
   /** Links a created issue to the ticket it came from, the only relationship Tewip makes. */

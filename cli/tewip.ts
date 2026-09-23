@@ -40,6 +40,13 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+      --export xray|zephyr          Write the cases as a CSV for Xray or Zephyr Scale instead.
+                                    No account needed; importing stays your step.
+  tewip bugs <report> --project PROJ [--create] [--max 5]
+                                    File a bug ticket for each failure Tewip diagnosed as a real
+                                    bug, with its evidence and run link. A flaky test or a broken
+                                    environment is deliberately not filed, and the same failure is
+                                    never filed twice.
   tewip secure [--url http://localhost:3000] [--secrets-only] [--gate] [--out security.md]
                                     Runs the scanners this project already has (npm audit,
                                     pip-audit, osv-scanner) plus Tewip's own secret scan, then says
@@ -149,15 +156,37 @@ async function main(): Promise<void> {
     case 'jira': {
       const planFile = args.find((a) => a.endsWith('.json'));
       const project = flag(args, 'project');
-      if (!planFile || !project) throw new Error('usage: tewip jira <plan.json> --project PROJ [--issue PROJ-123] [--type "Test"] [--only QS-001,QS-002] [--create]');
+      // Writing a file for a test-management tool needs no project at all.
+      if (!planFile || (!project && !flag(args, 'export'))) {
+        throw new Error(['usage: tewip jira <plan.json> --project PROJ [--issue PROJ-123] [--only QS-001,QS-002] [--create]', '   or: tewip jira <plan.json> --export xray|zephyr [--out cases.csv]'].join('\n'));
+      }
       const { runJira } = await import('../engine/work/jira-command.ts');
+      const exportAs = flag(args, 'export');
+      if (exportAs && exportAs !== 'xray' && exportAs !== 'zephyr') throw new Error('--export takes xray or zephyr');
       await runJira({
         planFile,
         projectKey: project,
+        exportAs: exportAs as 'xray' | 'zephyr' | undefined,
+        out: flag(args, 'out'),
         type: flag(args, 'type'),
         issueKey: flag(args, 'issue'),
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      return;
+    }
+    case 'bugs': {
+      const report = args.find((a, i) => !a.startsWith('--') && !['--project', '--max'].includes(args[i - 1] ?? ''));
+      const project = flag(args, 'project');
+      if (!report || !project) throw new Error('usage: tewip bugs <report.xml | reports-dir | blob-report-dir> --project PROJ [--create] [--max 5]');
+      process.env.TEWIP_LLM_CACHE ??= join(process.cwd(), '.tewip', 'llm-cache.jsonl');
+      const { runBugs } = await import('../engine/work/bug-command.ts');
+      await runBugs({
+        root: process.cwd(),
+        report,
+        projectKey: project,
+        create: args.includes('--create'),
+        max: Math.max(1, Number(flag(args, 'max')) || 5),
       });
       return;
     }

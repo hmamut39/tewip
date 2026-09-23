@@ -144,6 +144,49 @@ message from Supabase CI in the labelled data) and never prints the value; chang
 a guess could quietly change what the test checks. It also refuses when the value comes from a
 fixture or a factory rather than the test file.
 
+Status (2026-09-23): **the race fix is measured on real failures for the first time.** The note
+above said this needed "a project that uses fixed waits". It did not: 60 real commits were
+harvested from 47 public repositories in which a developer removed exactly one fixed wait from a
+test. Each is a labelled example - the file before the commit is the input, and what the developer
+wrote instead is the answer.
+
+| | before | after |
+| --- | --- | --- |
+| Proposals that contain the developer's own change | 16 of 43 (37%) | **19 of 25 (76%)** |
+| Proposals with a fallback if the first is not proved | 0 of 43 | 9 of 25 |
+| Refused | 30 of 60 | 35 of 60 |
+
+It now proposes less and is right far more often. Four defects were found, each invisible to a
+synthetic test and each now covered by one:
+
+- **A wait with a trailing comment was not seen as a wait.** `cy.wait(500); // eslint-disable-line`
+  is written precisely *because* the line is a fixed wait. This alone refused 15 of the 60.
+- **`waitForTimeout(3_000)` was not seen either**, because numeric separators are ordinary
+  JavaScript that the pattern did not allow, nor was the hand-rolled
+  `await new Promise(resolve => setTimeout(resolve, 500))`.
+- **Cypress assertions did not count as checking anything.** The rule that a fix is refused unless
+  something is asserted after it looked only for `expect(`; Cypress asserts with
+  `cy.get(...).should(...)`, so six real Cypress fixes were refused with the wrong reason.
+- **The fallback never fired.** Tewip offered a second option in 0 of 43 proposals, so in practice
+  it could only ever say "delete the wait", and disagreed with the developer 27 times.
+
+The last one uncovered a safety hole, which is the real result here: deleting a fixed wait is only
+safe when the **next** step waits by itself. `await expect(locator).toBeVisible()` retries until it
+passes, so the wait in front of it is pure delay - but `const url = page.url()`, `.count()` and
+`if (await x.isEnabled())` read a value once and never retry, and those were common in the real
+commits. Deleting the wait there removes the only thing making the read reliable, and because a race
+passes by luck, even three passing runs would not reliably catch it. Tewip now offers deletion only
+in front of a step that retries, and otherwise must name something to wait for or refuse.
+
+The refusals were read one by one, and they are the right answer rather than a shrug: where Tewip
+refuses, the developer typically waited for something Tewip cannot invent - one replaced the wait
+with `await page.waitForURL(/\/(auth|sign)/)`, another with a wait for the text `Mode: Command`.
+
+Honest limits: this measures the **proposal**, not the proof. Running 47 unrelated projects'
+end-to-end suites is out of reach here, so the three-passes-in-a-row gate was stubbed, and a
+proposal counted as agreeing when it contains the change the developer made. The test-data half of
+this phase is still unmeasured on real failures.
+
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 
 ### Phase 9: Security Testing (`tewip secure`) (BUILT — secrets, dependencies and a baseline web check, each measured)

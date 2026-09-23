@@ -73,8 +73,16 @@ export function hasAssertionAfter(source: string, line: number): boolean {
   const lines = source.split('\n');
   for (let i = line - 1; i < lines.length; i++) {
     if (i > line - 1 && /^\s*test(\.\w+)?\(/.test(lines[i])) return false;
-    if (/\bexpect\s*\(/.test(lines[i])) return true;
+    if (ASSERTION.test(lines[i])) return true;
     if (/^\}\);?\s*$/.test(lines[i])) return false;
   }
   return false;
 }
+
+/**
+ * What counts as checking something. `expect(` alone missed a whole framework: Cypress asserts with
+ * `cy.get(...).should('be.visible')` and writes `expect(` only inside `.then()`. Six real Cypress
+ * fixed-wait removals were refused as "nothing is asserted after the wait" when the very next line
+ * was an assertion, which is how this was found. Python's bare `assert` counts for the same reason.
+ */
+const ASSERTION = /\bexpect\s*\(|\.should\s*\(|\bassert\s+|\bassertThat\s*\(/;

@@ -6,17 +6,32 @@
 // time, so one passing run proves the fix. A race passes by luck, so one passing run proves nothing.
 // A wait fix is therefore only accepted after several passes in a row, and the whole change is
 // deleting or replacing a line whose only job was to wait.
+// What may follow the wait on its own line and still leave it a pure wait: a semicolon, and a
+// comment. Real code nearly always carries one - `cy.wait(500); // eslint-disable-line` is written
+// precisely *because* the line is a fixed wait, and `waitForTimeout(300); // allow debounce` says
+// what the guess was for. Requiring the line to end after the call made Tewip refuse 15 of 60 real
+// fixed-wait removals harvested from public repositories, which is how this was found.
+const TRAILING = String.raw`\s*;?\s*(?://.*)?$`;
+const TRAILING_PY = String.raw`\s*(?:#.*)?$`;
+/** Digits, allowing JavaScript's numeric separators: `3_000` is as common as `3000`. */
+const MS = String.raw`[\d_]+`;
+
+import { nextStepRetries, thingToWaitFor } from './wait-candidates.ts';
+
 const FIXED_WAIT = [
   // Playwright and Puppeteer
-  /^(?<indent>\s*)(?:await\s+)?[\w.]*page\.waitForTimeout\(\s*(?<ms>\d+)\s*\)\s*;?\s*$/,
+  new RegExp(String.raw`^(?<indent>\s*)(?:await\s+)?[\w.]*page\.waitForTimeout\(\s*(?<ms>${MS})\s*\)${TRAILING}`),
   // Cypress
-  /^(?<indent>\s*)cy\.wait\(\s*(?<ms>\d+)\s*\)\s*;?\s*$/,
+  new RegExp(String.raw`^(?<indent>\s*)cy\.wait\(\s*(?<ms>${MS})\s*\)${TRAILING}`),
   // WebdriverIO and anything with a sleep helper
-  /^(?<indent>\s*)(?:await\s+)?(?:browser\.pause|sleep|delay)\(\s*(?<ms>\d+)\s*\)\s*;?\s*$/,
+  new RegExp(String.raw`^(?<indent>\s*)(?:await\s+)?(?:browser\.pause|sleep|delay)\(\s*(?<ms>${MS})\s*\)${TRAILING}`),
+  // The hand-rolled sleep, which is what people write when no helper exists:
+  // `await new Promise(resolve => setTimeout(resolve, 500))`.
+  new RegExp(String.raw`^(?<indent>\s*)(?:await\s+)?new\s+Promise\(\s*\(?\s*(?<arg>\w+)\s*\)?\s*=>\s*setTimeout\(\s*\k<arg>\s*,\s*(?<ms>${MS})\s*\)\s*\)${TRAILING}`),
   // Java and Kotlin
-  /^(?<indent>\s*)Thread\.sleep\(\s*(?<ms>\d+)\s*\)\s*;?\s*$/,
+  new RegExp(String.raw`^(?<indent>\s*)Thread\.sleep\(\s*(?<ms>${MS})\s*\)${TRAILING}`),
   // Python
-  /^(?<indent>\s*)time\.sleep\(\s*(?<seconds>[\d.]+)\s*\)\s*$/,
+  new RegExp(String.raw`^(?<indent>\s*)time\.sleep\(\s*(?<seconds>[\d._]+)\s*\)${TRAILING_PY}`),
 ] as const;
 
 export interface WaitSite {
@@ -36,7 +51,8 @@ export function findFixedWaits(source: string): WaitSite[] {
     for (const pattern of FIXED_WAIT) {
       const m = line.match(pattern);
       if (!m?.groups) continue;
-      const ms = m.groups.seconds ? Math.round(Number(m.groups.seconds) * 1000) : Number(m.groups.ms);
+      const digits = (text: string) => Number(text.replace(/_/g, ''));
+      const ms = m.groups.seconds ? Math.round(digits(m.groups.seconds) * 1000) : digits(m.groups.ms);
       out.push({ line: i + 1, text: line.trim(), ms, indent: m.groups.indent ?? '' });
       break;
     }
@@ -50,12 +66,6 @@ export function waitNearest(sites: WaitSite[], failing: number | null): WaitSite
   return [...sites].sort((a, b) => Math.abs(a.line - failing) - Math.abs(b.line - failing))[0];
 }
 
-/** The Playwright locator a line acts on, when it has one: the thing worth waiting for instead. */
-function locatorIn(line: string): string | null {
-  const m = line.match(/((?:page|frame|component)?\.?(?:getBy\w+\([^;]*?\)|locator\([^;]*?\))(?:\.\w+\([^;]*?\))*?)\.(?:click|fill|press|check|selectOption|hover|type|textContent|innerText|isVisible)\(/);
-  return m ? m[1].replace(/^\./, 'page.') : null;
-}
-
 export interface WaitFixCandidate {
   /** The replacement for the whole line; an empty string removes it. */
   replacement: string;
@@ -64,30 +74,35 @@ export interface WaitFixCandidate {
 }
 
 /**
- * What to put in place of the fixed wait, best first.
+ * What to put in place of the fixed wait, best first - and nothing at all when nothing is safe.
  *
- * Removing it is first on purpose: Playwright and Cypress already wait for an element to be
- * actionable before clicking or asserting, so a fixed wait in front of such a step adds nothing but
- * time, and deleting it is the smallest possible change. Where the next line does act on an element,
- * waiting for that element is offered too, for suites whose style is an explicit wait.
+ * Deleting it comes first only where the next step waits by itself: Playwright and Cypress wait for
+ * an element before acting on it, and a web-first assertion retries until it passes, so a fixed wait
+ * in front of one of those is pure delay. In front of a step that reads a value once -
+ * `page.url()`, `.count()`, `if (await x.isEnabled())` - the fixed wait may be the only thing making
+ * the read reliable, so deletion is not offered there at all and Tewip must name something to wait
+ * for or refuse. Measured against 60 real fixed-wait removals in 47 public repositories.
  */
 export function waitFixCandidates(source: string, site: WaitSite, framework: 'playwright' | 'cypress' | 'other'): WaitFixCandidate[] {
   const lines = source.split('\n');
   const next = lines.slice(site.line, site.line + 3).find((l) => l.trim() && !l.trim().startsWith('//'));
-  const autoWaits = framework === 'playwright' || framework === 'cypress';
+  if (!next) return [];
   const candidates: WaitFixCandidate[] = [];
-  if (autoWaits && next) {
+
+  if (nextStepRetries(next, framework)) {
     candidates.push({
       replacement: '',
-      why: `${framework === 'playwright' ? 'Playwright' : 'Cypress'} already waits for the element in the next step to be ready, so the fixed ${site.ms} ms wait only added time.`,
+      why: `${framework === 'cypress' ? 'Cypress' : 'Playwright'} already waits for the next step to be ready, so the fixed ${site.ms} ms wait only added time.`,
     });
   }
-  const locator = next ? locatorIn(next) : null;
-  if (locator) {
-    candidates.push({
-      replacement: `${site.indent}await expect(${locator}).toBeVisible();`,
-      why: `Waits for ${locator} to be there instead of guessing ${site.ms} ms.`,
-    });
+
+  const thing = thingToWaitFor(next, framework);
+  if (thing) {
+    candidates.push(
+      framework === 'cypress'
+        ? { replacement: `${site.indent}${thing}.should('be.visible');`, why: `Waits for ${thing} to be there instead of guessing ${site.ms} ms.` }
+        : { replacement: `${site.indent}await expect(${thing}).toBeVisible();`, why: `Waits for ${thing} to be there instead of guessing ${site.ms} ms.` },
+    );
   }
   return candidates;
 }

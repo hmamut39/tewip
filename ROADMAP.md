@@ -232,6 +232,29 @@ A test now also guards the repository against stray control characters in source
 heredoc turned an escape into a real backspace three times in one day - each time silently stopping
 a regular expression from matching, and each time found only by measuring against real data.
 
+### Selector fixes for Cypress, Selenium and WebdriverIO (BUILT 2026-09-23, at the owner's request)
+
+Playwright's traces tell Tewip what was on the page, which is how a drifted locator is matched
+against real elements. Cypress and Selenium give it none of that - a JUnit report carries only
+"Expected to find element: '#submit-btn', but never found it". Inventing a replacement from that
+is exactly the guess this project exists not to make, which is why the roadmap called this a
+separate, deliberate decision.
+
+The answer is that the repository knows. If a test looks for `#submit-btn` and the application now
+renders `id="submit-button"`, then **the commit that renamed it says so**, and if the commit cannot
+be found, the current source can still show that the old name is gone and a very similar one is
+there. Both are evidence a reviewer can check, in a way a page snapshot never was - and the fix is
+still only kept when the test passes afterwards and the file is otherwise untouched.
+
+Three refusals, each a test: a positional selector (`div > span:nth-child(2)`) is **not
+identifiable**, because there is nothing in the source to compare it against and a person should
+look at the page; when nothing in the history or the source resembles the old name, Tewip says so
+rather than inventing a selector; and a selector that lives in a page object rather than in the test
+is named, not edited blindly.
+
+Selenium's own way of printing a selector (`css selector=#submit-btn`, `id=submit-btn`) is read, and
+the replacement is written back in the form the test actually uses.
+
 ### The risk review (`tewip review`) (BUILT 2026-09-23 — coverage measured on 16 real commits)
 
 A coding agent can read a diff. What it cannot say is that the two tests covering your change have

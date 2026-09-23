@@ -316,7 +316,28 @@ touches a value that names an element (`getByRole('button', { name: 'Submit' })`
 a pattern but is a locator), and refuses where several places create with the same value, because
 making one unique would break the link between them.
 
-Honest limits: this measures the **proposal**, not the proof. Running 47 unrelated projects'
+**The gates themselves are now proved by running tests, not by reading proposals** (2026-09-23).
+Everything above compares what Tewip *suggests* with what a developer did, which leaves the claim
+that matters untested: a fix is kept only when re-running the test proves it, and otherwise the file
+goes back exactly as it was. `engine/test/fix-gate.integration.test.ts` exercises that end to end
+with real files and a real `node --test` per attempt, so it runs in CI from now on:
+
+- a redundant fixed wait is removed **only after three real runs pass**, and the assertion the test
+  exists for is still there afterwards;
+- a wait that is load-bearing is **not** removed - the test fails, and the file on disk is
+  byte-for-byte what it was;
+- a genuine collision (a record keyed by a literal, so the second run hits the first run's leftover)
+  is fixed and then **passes twice in a row**, which is the property two passes exist to prove; the
+  test can then be run again and again.
+
+Running them found two faults that reading proposals never would. `assert.equal(...)` did not count
+as checking anything - the rule looked for `expect(`, `.should(` and a bare `assert ` - so Tewip
+would have refused to fix the commonest shape of JavaScript unit test with the wrong reason. And a
+next step that is itself a wait (`await waitFor(() => ready)`) was only recognised inside Playwright
+and Cypress, though it makes a fixed sleep redundant in any stack. Both are fixed, and the wait
+fix's agreement with real developers rose from 19 of 25 proposals to 19 of 26.
+
+Honest limits: the numbers above measure the **proposal**, not the proof. Running 47 unrelated projects'
 end-to-end suites is out of reach here, so the three-passes-in-a-row gate was stubbed, and a
 proposal counted as agreeing when it contains the change the developer made. For the test-data
 half, the failure message was reconstructed in Postgres's own wording around the literal the

@@ -20,6 +20,9 @@
 
 /** A step that waits by itself, so a fixed wait in front of it only adds time. */
 export function nextStepRetries(line: string, framework: 'playwright' | 'cypress' | 'other'): boolean {
+  // A step that is itself a wait needs no framework behind it: `await waitFor(() => ready)` blocks
+  // until the condition holds, so a fixed sleep in front of it is pure delay whatever the stack.
+  if (SELF_WAITING.test(line)) return true;
   if (framework === 'cypress') {
     // Every cy.* query retries until it resolves, except cy.wait itself.
     return /\bcy\.(?!wait\b)\w+\s*\(/.test(line);
@@ -37,7 +40,8 @@ export function nextStepRetries(line: string, framework: 'playwright' | 'cypress
   return ACTION_ON_LOCATOR.test(line);
 }
 
-const SELF_WAITING = /\.\s*waitFor(?:Selector|URL|LoadState|Function|Event|Response|Request|Navigation)?\s*\(|\.\s*goto\s*\(/;
+const SELF_WAITING =
+  /\.\s*waitFor(?:Selector|URL|LoadState|Function|Event|Response|Request|Navigation)?\s*\(|\.\s*goto\s*\(|\b(?:waitFor|waitUntil|wait_for|waitForCondition|until)\w*\s*\(/;
 const LOCATOR_EXPRESSION = /(?:page|frame|component|[\w$]+)\s*\.\s*(?:getBy\w+|locator|frameLocator)\s*\(|^\s*[\w$]+\s*$/;
 const ACTION_ON_LOCATOR =
   /(?:getBy\w+\([^;]*?\)|locator\([^;]*?\))(?:\s*\.\s*\w+\([^;]*?\))*?\s*\.\s*(?:click|fill|press|check|uncheck|selectOption|hover|type|tap|dragTo|setInputFiles|focus)\s*\(/;

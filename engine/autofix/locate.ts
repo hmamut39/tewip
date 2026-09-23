@@ -85,4 +85,4 @@ export function hasAssertionAfter(source: string, line: number): boolean {
  * fixed-wait removals were refused as "nothing is asserted after the wait" when the very next line
  * was an assertion, which is how this was found. Python's bare `assert` counts for the same reason.
  */
-const ASSERTION = /\bexpect\s*\(|\.should\s*\(|\bassert\s+|\bassertThat\s*\(/;
+const ASSERTION = /\bexpect\s*\(|\.should\s*\(|\bassert\s*[.(]|\bassert\s+|\bassertThat\s*\(/;

@@ -117,10 +117,57 @@ Phase metric: auto-fix success rate, plus false-positive rate (incorrect fixes m
 
 > Direction changed 2026-09-19 at the owner's request: Tewip grows from failure triage into a full software-quality agent covering the whole testing and security lifecycle. It is built on top of general models instead of competing with general coding agents, and every output is verified. Application feature code stays with general coding agents, so Tewip keeps its promise never to edit application code.
 
-### Phase 6: Test Plans (`tewip plan`) (BUILT — metric not yet measurable: no real PRs with later-found bugs yet)
+### Phase 6: Test Plans (`tewip plan`) (BUILT — measured: 8 of 9 judgeable bugs had a scenario naming them, see the caveats)
 From a feature description, a pull request's diff, and the running app's pages, write a test plan: scope, risks, scenarios with priorities, which test types apply (functional, accessibility, security, performance) and which to automate. Grounded in facts Tewip reads, never invented: the changed files, the tests that already exist, the pages as they are.
 
 Phase metric: on real pull requests with later-found bugs, the share of those bugs whose scenario the plan named before the bug was found. Until that data exists, plans are shown as drafts.
+
+Status (2026-09-23): **the data does exist in public, and this is now measured.** A pull request
+with a later-found bug is a merged pull request plus a later commit saying it fixes a regression
+that one introduced. 18 such pairs were harvested from 18 repositories. For each, the repository
+was fetched at the pull request's own head and a plan written from `base...head` - exactly what a
+reviewer saw, with no knowledge of the bug, which came later.
+
+**8 of the 9 pairs that could be judged had a scenario naming the bug (88.9%).**
+
+| Repository | The bug found later | The scenario that named it |
+| --- | --- | --- |
+| matrix-org/complement#872 | a timestamp guard was missing on one side of `timeBeforeEventA` | JTDE-001, and the JTDE-003 soak fails on the merged code |
+| Try/OpenGothic#980 | the cursor stopped being restored to an arrow in windowed mode | CURSOR-002, CURSOR-004 |
+| NLnetLabs/domain#719 | query-slot allocation reused slots before the cursor | NW-008, NW-011 |
+| jrpie/launcher#331 | theme changes no longer applied without restarting the app | TP-013 |
+| Huber-group-EMBL/rhdf5#242 | the `NA_character_` deprecation warning stopped firing | S4 |
+| simonellefsen/budbringer#13 | roads sank too far into the planet surface | S3, S13 |
+| Manojalam/Manojalam#71 | petal geometry broke at three slots | RF-001, RF-002 |
+| qte77/gha-runner-gui-kit#4 | an accidental `macos-26` runner bump | MACOS-WF-001, MACOS-WF-002 |
+
+Two of those are worth singling out. `domain#719` was titled "Resolve nightly warnings", and the
+plan still noticed a behaviour change hidden inside the cleanup. `gha-runner-gui-kit#4` was about
+Xvfb on Linux, and the plan wrote a scenario for the macOS runner label that had been changed in
+the same pull request - which is the change that was later reverted.
+
+**The miss** was `budget-mvp#16`, and it is the more interesting result. That pull request made an
+indicator's freshness depend on a reference date; it was reverted because a frozen interest rate
+keeps an old reference date while the briefing is still fresh. The plan tested the change as
+intended and would have passed. When a pull request's *intention* is wrong, a plan grounded in that
+intention validates it rather than questioning it. Nothing in the current design would catch that.
+
+**Caveats, all of them.** 9 of the 18 pairs could not be judged: 4 repositories were too large to
+fetch here (vscode at 1.5 GB, dolphin at 560 MB, and two others), and in 5 the later commit was a
+revert that never said what broke - judging those would have been guessing, and guessing would have
+flattered the plan. Nine judged pairs is a small sample. The judging was done by Claude, not by the
+projects' own engineers, against criteria written down before any result was read: a hit needs a
+scenario that would fail when run against the merged pull request, a risk or an open question alone
+is not enough. "Would fail" is a reading of the scenario against the fix, not an executed test run,
+though for complement#872 it was checked line by line against the fix's own diff. The corpus skews
+small: 5 of the 8 hits are established projects (complement, OpenGothic, domain, launcher, rhdf5),
+the rest are small ones.
+
+Two faults in the harness were found and fixed before any number was taken. The first extractor
+read the pull request number out of "Merge pull request #56 from ...", which is the *revert's* own
+number, so ten pairs pointed at the wrong pull request. And the first diff was the merge commit
+against its parent, which for a squashed merge is only a version bump - the plan said so itself
+("the diff only changes DESCRIPTION from 2.57.12 to 2.57.13"), which is how it was caught.
 
 ### Phase 7: Test Writing (`tewip write`) (BUILT — measured on three real projects, see status)
 Write automated tests for a scenario (Playwright first, then pytest and Jest), using locators read from the real page. Run each one; keep it only if it passes against the working app. Repair a failing draft a bounded number of times from the actual error, then give up and say so.

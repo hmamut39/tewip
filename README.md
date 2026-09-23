@@ -159,6 +159,15 @@ tewip write --only CO-002,CO-004 --framework pytest
 ```
 
 - **`tewip plan`** reads what is really there: the tests you already have (in any language), the change (`--diff main...HEAD`), the live pages (what a user sees on each page, via Playwright), and the failures Tewip has diagnosed in this project before. The plan lists risks and scenarios by priority. A claim that a scenario is "already covered" is checked against your real test names, and dropped if no such test exists. Saved to `.tewip/plans/` as Markdown to review and JSON for `write`.
+- **Does a plan catch real bugs?** Measured on 18 real pull requests that were later found to have
+  broken something: the repository is fetched at the pull request's own head, the plan written from
+  the diff a reviewer saw, and nothing about the bug is known to it. **In 8 of the 9 pairs that
+  could be judged, a scenario named the bug** - in `matrix-org/complement`, `NLnetLabs/domain`,
+  `Bioconductor/rhdf5`, `Try/OpenGothic` and others. One pull request was titled "Resolve nightly
+  warnings" and the plan still found the behaviour change hidden inside it. The caveats are real
+  and written out in [ROADMAP.md](ROADMAP.md): nine judged pairs is a small sample, Claude did the
+  judging rather than each project's engineers, and the one miss is the interesting case - when a
+  pull request's *intention* is wrong, a plan grounded in that intention agrees with it.
 - **`tewip write`** writes each scenario as a test in **your** framework and style: Playwright, Cypress, WebdriverIO, Angular, Jest, Vitest, pytest (with Selenium or Playwright), JUnit on Maven or Gradle (Selenium, Spring Boot), .NET or Go. It copies the style of an existing test and uses only elements seen on the real page. Front-end apps get component tests the way their own tests are written: React, Vue or Svelte with Testing Library under Jest or Vitest, and Angular through `ng test` (Karma and Jasmine, or Vitest). A project with both e2e and unit tests gets browser tests when the plan read pages, and unit or component tests when it did not. Then it runs the test. A draft is **kept only if** it passes every run (3 by default) **and** fails once its main check is broken on purpose, because a test that cannot fail is worse than no test. A failing draft is repaired from the real error, twice at most. If the test looks right and the app does something else, Tewip reports a **possible bug** instead of weakening the test until it passes. Kept tests are new files beside yours, for you to review and commit; nothing is committed, and no application code is touched.
 
 ## Check the page against the design (Phase 11, new)

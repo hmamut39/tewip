@@ -140,7 +140,15 @@ export function triageDependency(finding: DepFinding, root: string, sources: str
     where,
     source: finding.source,
   };
-  const upgrade = finding.fixedIn ? `upgrade ${finding.package} to ${finding.fixedIn}` : `no fixed version is published yet: watch ${finding.id || 'the advisory'} and consider replacing the package`;
+  // npm answers `fixAvailable: true` when `npm audit fix` can resolve something without naming a
+  // version. Reading only the version form made Tewip say "no fixed version is published yet,
+  // consider replacing the package" about three packages npm could have fixed in one command -
+  // found by running this against real advisories for lodash, minimist and marked.
+  const upgrade = finding.fixedIn
+    ? `upgrade ${finding.package} to ${finding.fixedIn}`
+    : finding.fixExists
+      ? `a fix is available: run \`npm audit fix\` (the scanner did not name a version)`
+      : `no fixed version is published yet: watch ${finding.id || 'the advisory'} and consider replacing the package`;
   if (accepted.has(`dependency ${finding.package}`) || accepted.has(`dependency ${where}`)) {
     return { ...base, verdict: 'accepted', why: 'a person marked this one accepted in .tewip/security-accepted.txt', next: 'nothing: it was reviewed' };
   }
@@ -158,8 +166,12 @@ export function triageDependency(finding: DepFinding, root: string, sources: str
       ...base,
       verdict: 'not-reachable',
       severity: base.severity === 'critical' ? 'medium' : 'low',
-      why: `nothing in this project imports ${finding.package}: it is pulled in by another package, so the vulnerable code may never run here`,
-      next: `${upgrade}, or check which dependency requires it (npm why ${finding.package}) before spending time on it`,
+      why: finding.direct
+        ? `this project declares ${finding.package} but no file imports it, so the vulnerable code may never run here`
+        : `nothing in this project imports ${finding.package}: it is pulled in by another package, so the vulnerable code may never run here`,
+      next: finding.direct
+        ? `${upgrade}, or remove ${finding.package} from the project if nothing uses it any more`
+        : `${upgrade}, or check which dependency requires it (npm why ${finding.package}) before spending time on it`,
     };
   }
   return { ...base, verdict: 'real-risk', why: `this project imports ${finding.package} directly, and the advisory applies to the installed version`, next: upgrade };

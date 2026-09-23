@@ -21,6 +21,15 @@ export interface DepFinding {
   source: string;
   /** True when the ecosystem says this is a development dependency. */
   dev: boolean;
+  /**
+   * The scanner knows of a fix, but not which version: `npm audit` answers `fixAvailable: true`
+   * when `npm audit fix` can resolve it without naming a version. Reading only the object form made
+   * Tewip tell a team "no fixed version is published yet, consider replacing the package" about
+   * three packages npm could have fixed in one command.
+   */
+  fixExists: boolean;
+  /** True when the project declares this package itself, rather than inheriting it. */
+  direct: boolean;
 }
 
 const run = (command: string, cwd: string, timeoutMs = 5 * 60_000) => {
@@ -54,6 +63,8 @@ export function npmAudit(root: string): DepFinding[] {
       id: String(via?.url?.split('/').pop() ?? via?.source ?? ''),
       title: String(via?.title ?? `${name} has a known vulnerability`),
       fixedIn: entry.fixAvailable && typeof entry.fixAvailable === 'object' ? String(entry.fixAvailable.version ?? '') : '',
+      fixExists: entry.fixAvailable === true || (entry.fixAvailable && typeof entry.fixAvailable === 'object'),
+      direct: entry.isDirect === true,
       source: 'npm audit',
       dev: Boolean(entry.isDirect === false ? false : entry.dev ?? false) || Boolean(entry.effects?.length === 0 && entry.dev),
     });
@@ -103,6 +114,10 @@ export function osvScan(root: string): DepFinding[] {
             id: String(v.id ?? ''),
             title: String(v.summary ?? '').slice(0, 200),
             fixedIn: '',
+            // osv-scanner's output says neither which version fixes it nor whether the project
+            // declares the package, so neither is claimed.
+            fixExists: false,
+            direct: false,
             source: 'osv-scanner',
             dev: false,
           });

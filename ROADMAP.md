@@ -484,6 +484,25 @@ reachable here*, at medium severity, with "check whether this was ever a working
 was, rotate it". Amazon's own `AKIAIOSFODNN7EXAMPLE` in the same file stays noise, because the value
 says so itself. The five real repositories still report nothing.
 
+**The dependency half, against real advisories** (2026-09-23). The audit triage had only met
+scanner output written for this project's own tests. Run on a real Node project carrying three
+packages with real published advisories - lodash imported in code, minimist declared but unused,
+marked a development dependency - the verdicts were right and **the evidence behind two of them was
+false**:
+
+- Tewip said "no fixed version is published yet: watch the advisory and consider replacing the
+  package" about all three. `npm audit` had answered `fixAvailable: true` for every one of them:
+  a single `npm audit fix` resolves all three. Tewip only read the form of that field that names a
+  version, and treated the plain `true` as "no fix".
+- It said "nothing in this project imports minimist: it is pulled in by another package" about a
+  package the project **declares itself**. npm reports `isDirect` and Tewip ignored it.
+
+Both are now read from the scanner's own answer: a fix it knows of without a version becomes
+"a fix is available: run `npm audit fix`", and a declared-but-unimported package is described as
+exactly that, with "remove it if nothing uses it any more" instead of an unhelpful `npm why`. For a
+tool whose whole promise is evidence a person can check, wrong evidence is worse than no evidence,
+which is why these count as defects rather than wording.
+
 **The baseline web check** (`tewip secure --url http://localhost:3000`) was added the same day. It
 asks for the page the way a browser does and reports what the response verifiably shows: missing
 Content-Security-Policy, X-Content-Type-Options or Referrer-Policy, a page that can be framed, a

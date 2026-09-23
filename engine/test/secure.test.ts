@@ -103,7 +103,7 @@ describe('deciding what matters', () => {
   });
 
   const vuln = (over: Partial<DepFinding> = {}): DepFinding =>
-    ({ package: 'left-pad', version: '1.0.0', severity: 'high', id: 'GHSA-xxxx', title: 'left-pad is vulnerable', fixedIn: '1.3.0', source: 'npm audit', dev: false, ...over });
+    ({ package: 'left-pad', version: '1.0.0', severity: 'high', id: 'GHSA-xxxx', title: 'left-pad is vulnerable', fixedIn: '1.3.0', fixExists: true, direct: true, source: 'npm audit', dev: false, ...over });
 
   it('separates a dependency this project really uses from one it merely has', () => {
     const root = project({ 'src/app.ts': "import pad from 'left-pad';" });
@@ -111,9 +111,27 @@ describe('deciding what matters', () => {
     assert.equal(used.verdict, 'real-risk');
     assert.match(used.next, /upgrade left-pad to 1\.3\.0/);
 
-    const unused = triageDependency(vuln({ package: 'lodash' }), root, [join(root, 'src/app.ts')], accepted);
-    assert.equal(unused.verdict, 'not-reachable');
-    assert.match(unused.why, /nothing in this project imports lodash/);
+    // npm says whether the project declares a package itself. Saying "it is pulled in by another
+    // package" about a direct dependency is simply false, and it was said about three real ones.
+    const declared = triageDependency(vuln({ package: 'lodash', direct: true }), root, [join(root, 'src/app.ts')], accepted);
+    assert.equal(declared.verdict, 'not-reachable');
+    assert.match(declared.why, /declares lodash but no file imports it/);
+
+    const inherited = triageDependency(vuln({ package: 'lodash', direct: false }), root, [join(root, 'src/app.ts')], accepted);
+    assert.equal(inherited.verdict, 'not-reachable');
+    assert.match(inherited.why, /pulled in by another package/);
+  });
+
+  it('tells a team a fix exists when the scanner knows of one without naming a version', () => {
+    // `npm audit` answers fixAvailable: true when `npm audit fix` can resolve it. Reading only the
+    // version form made Tewip say "no fixed version is published yet, consider replacing the
+    // package" about lodash, minimist and marked - all three fixable in one command.
+    const root = project({ 'src/app.ts': "import pad from 'left-pad';" });
+    const known = triageDependency(vuln({ fixedIn: '', fixExists: true }), root, [join(root, 'src/app.ts')], accepted);
+    assert.match(known.next, /a fix is available: run `npm audit fix`/);
+
+    const none = triageDependency(vuln({ fixedIn: '', fixExists: false }), root, [join(root, 'src/app.ts')], accepted);
+    assert.match(none.next, /no fixed version is published yet/);
   });
 
   it('does not let a development dependency block a release', () => {

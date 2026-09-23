@@ -40,6 +40,19 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+  tewip report <report> [--gate] [--out report.md] [--name <project>] [--no-post]
+                                    The CI command for any platform: GitLab CI, Jenkins, CircleCI,
+                                    Azure, Bitbucket, Travis, Drone. Diagnoses the run, comments on
+                                    the GitLab merge request, tells Slack or Teams only when a
+                                    failure needs a person, and with --gate fails the build only on
+                                    those failures.
+  tewip watch [--cmd "npm test"] [--report <path>] [--paths src,tests]
+                                    Beside your editor: runs your tests when a file changes (or
+                                    watches for new reports) and explains each failure as it
+                                    happens, without CI.
+  tewip note [--days 7] [--name <project>] [--out note.md] [--post]
+                                    The weekly quality note for a lead, written from the runs Tewip
+                                    already diagnosed. No model calls, so it costs nothing.
   tewip fix --code <report> [--only "<test title>"] [--max 3] [--apply] [--suite "<command>"]
                                     Opt-in: for failures diagnosed as a real bug, propose the
                                     smallest change to application code, and keep it only if the
@@ -129,6 +142,45 @@ async function main(): Promise<void> {
         issueKey: flag(args, 'issue'),
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      return;
+    }
+    case 'report': {
+      const report = args.find((a, i) => !a.startsWith('--') && !['--out', '--name'].includes(args[i - 1] ?? ''));
+      if (!report) throw new Error('usage: tewip report <report.xml | reports-dir | blob-report-dir> [--gate] [--out report.md] [--name project] [--no-post]');
+      process.env.TEWIP_LLM_CACHE ??= join(process.cwd(), '.tewip', 'llm-cache.jsonl');
+      const { runReport } = await import('../engine/ci/report-command.ts');
+      const result = await runReport({
+        root: process.cwd(),
+        report,
+        name: flag(args, 'name'),
+        out: flag(args, 'out'),
+        gate: args.includes('--gate'),
+        post: !args.includes('--no-post'),
+      });
+      // The gate fails the build only for failures that are not known flaky or environment noise.
+      if (args.includes('--gate') && result.blocking > 0) process.exitCode = 1;
+      return;
+    }
+    case 'watch': {
+      const { runWatch } = await import('../engine/watch/watch-command.ts');
+      await runWatch({
+        root: process.cwd(),
+        cmd: flag(args, 'cmd'),
+        report: flag(args, 'report'),
+        paths: (flag(args, 'paths') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+        once: args.includes('--once'),
+      });
+      return;
+    }
+    case 'note': {
+      const { runNote } = await import('../engine/notify/note-command.ts');
+      await runNote({
+        root: process.cwd(),
+        name: flag(args, 'name'),
+        days: Math.max(1, Number(flag(args, 'days')) || 7),
+        out: flag(args, 'out'),
+        post: args.includes('--post'),
       });
       return;
     }

@@ -121,6 +121,9 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
 | `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
 | `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
+| `tewip report report.xml --gate` | The CI command for GitLab, Jenkins, CircleCI, Azure, Bitbucket and the rest: diagnoses the run, comments on the GitLab merge request, and fails the build only on failures that need a person | Your CI is not GitHub Actions |
+| `tewip watch --cmd "npm test"` | Runs your tests when you save a file and explains each failure straight away | While you are writing code |
+| `tewip note --days 7` | The weekly quality note for a lead, from runs already diagnosed (no model calls, free) | Monday morning |
 | `tewip fix --code report.xml` | Opt-in: proposes the smallest change to application code for a real bug, and keeps it only if the failing test passes and the whole suite still passes | "It is a real bug and I want a starting patch" |
 | `tewip design <figma link> --url <page>` | Compares a Figma frame against the running page: the words the design specifies and the controls its layer names imply | "Did we build what was designed?" |
 | `tewip mcp` | Serves all of the above to your editor's AI assistant | Set up once |
@@ -134,6 +137,8 @@ Notes that save you time:
 - Everything it writes locally goes to the `.tewip` folder in your project.
 - `tewip jira` shows what it *would* file and creates nothing until you add `--create`. It never
   files the same scenario twice, and never moves, assigns or closes a ticket.
+- `tewip report` posts to Slack or Teams only when a failure needs a person (`TEWIP_SLACK_WEBHOOK`,
+  `TEWIP_TEAMS_WEBHOOK`). A run of known flaky tests pings nobody, on purpose.
 - `tewip design` needs a Figma read token (`TEWIP_FIGMA_TOKEN`), or a frame saved as JSON if you
   would rather not create one. It compares words, controls and page regions - never pixels, colours
   or spacing, because a design tool and a browser do not measure those the same way.

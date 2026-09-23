@@ -164,6 +164,21 @@ from them): 38 checks, **0 differences reported on pages that match their design
 injected drifts caught** - a renamed button, a dropped sentence, a region that stopped being marked
 up. No designer has judged the output yet, so the roadmap's own metric is still open.
 
+## Any CI, your chat, and your own machine (Phase 13, new)
+
+```bash
+tewip report report.xml --gate      # GitLab CI, Jenkins, CircleCI, Azure, Bitbucket, Travis, Drone
+tewip watch --cmd "npm test"        # beside your editor: explains each failure as it happens
+tewip note --days 7                 # the weekly quality note for a lead - free, no model calls
+```
+
+`tewip report` reads which CI it is in from that platform's own variables, prints the triage board,
+writes it to a file, appends it to the job summary, and with `--gate` fails the build **only** on
+failures that are not known flaky or environment noise. On GitLab it posts the diagnosis as one
+merge-request note and edits that same note next run instead of piling up. With
+`TEWIP_SLACK_WEBHOOK` or `TEWIP_TEAMS_WEBHOOK` it tells the team's chat - and says nothing at all
+when no failure needs a person, so nobody mutes it.
+
 ## Fix the code, but only when the tests prove it (Phase 12, new, opt-in)
 
 ```bash

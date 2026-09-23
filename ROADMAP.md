@@ -266,7 +266,7 @@ Not yet measured: the share a reviewer merges unchanged, which needs real review
 outside JavaScript/TypeScript. The loop itself is language-agnostic - it reads Python, Java, Go,
 Ruby, PHP and .NET stacks - but only JS/TS has been replayed.
 
-### Phase 13: Where Teams Already Are (daily use)
+### Phase 13: Where Teams Already Are (daily use) (BUILT — four outlets; the phase metric needs a real team and four weeks)
 
 Being useful daily is a distribution problem, not a capability one:
 
@@ -279,6 +279,30 @@ Being useful daily is a distribution problem, not a capability one:
 
 Phase metric: a team that installed it is still using it four weeks later. Nothing else measures
 "daily".
+
+Status (2026-09-23). All four are built.
+
+- **Any CI, not only GitHub Actions.** `tewip report <report>` reads the facts out of whichever CI
+  is running - GitLab CI, Jenkins, CircleCI, Azure Pipelines, Bitbucket, Travis, Drone, or nothing -
+  from each platform's own documented variables. It prints the board, writes it to a file, appends
+  it to the job summary where the platform has one, and with `--gate` fails the build only on
+  failures that are not known flaky or environment noise. Tried end to end as GitLab CI (merge
+  request 7) and as Jenkins on the same report: the gate exits 1 with a real bug present and 0
+  without.
+- **GitLab merge requests.** `engine/ci/gitlab.ts` posts one note and edits that same note on later
+  runs, so a long review is not buried under robot comments. It refuses `CI_JOB_TOKEN`, which cannot
+  post notes, and asks for a project access token instead. It never approves, merges or resolves.
+- **Slack and Teams.** One short message: how many failures, what kinds, and the ones that need a
+  person. **It stays silent when nothing needs anyone**, because a tool that posts every green run
+  is muted within a week and then useless on the day it matters.
+- **`tewip watch`.** Beside your editor: runs your tests when a file changes (`--cmd "npm test"`) or
+  watches for new reports, and explains each failure the moment it happens. It finds a report
+  whatever the runner called it, by reading the first bytes, and does not mistake pom.xml for one.
+- **`tewip note`.** The weekly quality note for a lead, written only from runs Tewip already
+  diagnosed: no new model calls, so it is free and cannot re-judge old failures with today's rules.
+
+Not measured: the phase metric itself. "Still using it after four weeks" needs a real team and four
+weeks, and no team has installed it yet. What is shown here is that each outlet works.
 
 ### Phase 14: Writing for People, Not Only Machines (`tewip spec`)
 

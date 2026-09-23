@@ -1,8 +1,10 @@
 // Tewip for VS Code and the editors built on it (Cursor, Windsurf, VSCodium).
 // - Registers Tewip as an MCP server, so the editor's AI assistant can ask it "why did CI fail on
 //   my PR?" with nothing to configure.
-// - Adds two commands: explain a test report on disk, and show the latest CI report for the
-//   current branch. Both run the same `tewip` command line people use in a terminal.
+// - Adds commands for the things a person wants without leaving the editor: explain a report, the
+//   latest CI for this branch, the risk review of the current change, the flaky-test dossier, the
+//   security check, and what the team's corrections add up to. Every one runs the same `tewip`
+//   command line people use in a terminal, in the open folder, and shows its Markdown.
 const vscode = require('vscode');
 const { exec, execFile } = require('node:child_process');
 
@@ -59,6 +61,38 @@ async function show(markdown) {
   await vscode.commands.executeCommand('markdown.showPreviewToSide');
 }
 
+/**
+ * Runs a verb in the open folder and shows what it prints. Everything except `explain` works on
+ * the project as a whole, so they all share this: no arguments to collect, one progress message,
+ * and the same advice when Tewip is not installed.
+ */
+function projectCommand({ verb, args = [], busy, needs }) {
+  return async () => {
+    const cwd = workspaceDir();
+    if (!cwd) {
+      vscode.window.showWarningMessage('Tewip: open the project folder first - this reads the project you are working in.');
+      return;
+    }
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: busy }, async () => {
+      try {
+        await show(await runTewip([verb, ...args], cwd));
+      } catch (error) {
+        vscode.window.showErrorMessage(`Tewip: ${error.message}.${needs ? ` ${needs}` : ' Is it installed? `npm i -g tewip-ai`, or see the "tewip.path" setting.'}`);
+      }
+    });
+  };
+}
+
+const reviewChange = projectCommand({
+  verb: 'review',
+  args: ['--diff', 'main...HEAD'],
+  busy: 'Tewip is reading what this change touches…',
+  needs: 'It reads a git checkout with a `main` branch to compare against.',
+});
+const flakyDossier = projectCommand({ verb: 'flaky', args: ['--days', '30'], busy: 'Tewip is weighing the flaky tests…' });
+const securityCheck = projectCommand({ verb: 'secure', busy: 'Tewip is checking secrets and dependencies…' });
+const whatWeLearned = projectCommand({ verb: 'learn', busy: 'Tewip is reading your corrections…' });
+
 async function explainReport() {
   const picked = await vscode.window.showOpenDialog({
     title: 'Tewip: pick a test report (JUnit XML, .trx) or a report folder',
@@ -111,6 +145,10 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('tewip.explainReport', explainReport),
     vscode.commands.registerCommand('tewip.ciReport', ciReport),
+    vscode.commands.registerCommand('tewip.review', reviewChange),
+    vscode.commands.registerCommand('tewip.flaky', flakyDossier),
+    vscode.commands.registerCommand('tewip.secure', securityCheck),
+    vscode.commands.registerCommand('tewip.learn', whatWeLearned),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

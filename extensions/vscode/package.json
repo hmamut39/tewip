@@ -1,8 +1,8 @@
 {
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
-  "description": "Finds why each failing test failed (real bug, flaky, environment, test data or changed selector) for any stack, and connects Tewip to your editor's AI assistant.",
-  "version": "0.4.0",
+  "description": "Finds why each failing test failed - real bug, flaky, environment, test data or changed selector - for any stack. Reviews the risk of your change, weighs flaky tests, checks secrets and dependencies, and connects Tewip to your editor AI assistant.",
+  "version": "0.5.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -44,12 +44,32 @@
     "commands": [
       {
         "command": "tewip.explainReport",
-        "title": "Explain a test report\u2026",
+        "title": "Explain a test report…",
         "category": "Tewip"
       },
       {
         "command": "tewip.ciReport",
         "title": "Why did CI fail on this branch?",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.review",
+        "title": "Risk review of this change",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.flaky",
+        "title": "Which flaky tests to quarantine",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.secure",
+        "title": "Check secrets and dependencies",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.learn",
+        "title": "What our corrections add up to",
         "category": "Tewip"
       }
     ],
@@ -59,7 +79,7 @@
         "tewip.path": {
           "type": "string",
           "default": "tewip",
-          "markdownDescription": "How to run Tewip: `tewip` when it is installed from its release file (`npm install -g tewip-<version>.tgz`), or the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
+          "markdownDescription": "How to run Tewip: leave it as `tewip` when it is installed with `npm install -g tewip-ai`, or give the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
         }
       }
     }

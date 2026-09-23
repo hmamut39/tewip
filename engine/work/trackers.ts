@@ -6,6 +6,7 @@
 import { Jira, jiraFromEnv } from './jira.ts';
 import { Rally, rallyFromEnv } from './rally.ts';
 import { GitHubIssues, githubIssuesFromEnv } from './github-issues.ts';
+import { AzureBoards, azureFromEnv, Linear, linearFromEnv } from './azure-linear.ts';
 import { priorityWord, trackerHelp, trackerNameFromEnv, type ExistingWorkItem, type NewWorkItem, type Tracker } from './tracker.ts';
 
 /** Jira, wearing the same interface as the rest. */
@@ -63,8 +64,8 @@ export interface ChosenTracker {
   tracker: Tracker;
   /** The project, board or repository items go into. */
   project: string;
-  /** Which of the three it is, for priority words and messages. */
-  id: 'jira' | 'rally' | 'github';
+  /** Which one it is, for priority words and messages. */
+  id: 'jira' | 'rally' | 'github' | 'azure' | 'linear';
 }
 
 /**
@@ -80,6 +81,14 @@ export function trackerFromEnv(projectKey = '', env: NodeJS.ProcessEnv = process
   if (id === 'github') {
     const config = githubIssuesFromEnv(env);
     return config ? { tracker: new GitHubIssues(config), project: projectKey || config.repo, id } : null;
+  }
+  if (id === 'azure') {
+    const config = azureFromEnv(env);
+    return config ? { tracker: new AzureBoards(config), project: projectKey || config.project, id } : null;
+  }
+  if (id === 'linear') {
+    const config = linearFromEnv(env);
+    return config ? { tracker: new Linear(config), project: projectKey || config.team, id } : null;
   }
   const config = jiraFromEnv();
   return config ? { tracker: new JiraTracker(new Jira(config), Boolean(config.token)), project: projectKey, id } : null;

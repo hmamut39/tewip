@@ -7,6 +7,7 @@ import { Rally, rallyFromEnv } from '../work/rally.ts';
 import { GitHubIssues, githubIssuesFromEnv } from '../work/github-issues.ts';
 import { priorityWord, trackerHelp, trackerNameFromEnv } from '../work/tracker.ts';
 import { trackerFromEnv } from '../work/trackers.ts';
+import { AzureBoards, Linear, azureFromEnv, linearFromEnv } from '../work/azure-linear.ts';
 
 interface Call {
   method: string;
@@ -43,6 +44,8 @@ describe('choosing the tracker a team uses', () => {
     assert.equal(trackerNameFromEnv({ TEWIP_GITHUB_REPO: 'team/app' } as NodeJS.ProcessEnv), 'github');
     assert.equal(trackerNameFromEnv({ TEWIP_JIRA_URL: 'https://x.atlassian.net' } as NodeJS.ProcessEnv), 'jira');
     assert.equal(trackerNameFromEnv({} as NodeJS.ProcessEnv), 'jira');
+    assert.equal(trackerNameFromEnv({ TEWIP_LINEAR_KEY: 'lin_api_x' } as NodeJS.ProcessEnv), 'linear');
+    assert.equal(trackerNameFromEnv({ TEWIP_AZURE_ORG: 'acme', TEWIP_AZURE_PROJECT: 'shop' } as NodeJS.ProcessEnv), 'azure');
     assert.equal(trackerNameFromEnv({ TEWIP_TRACKER: 'github', TEWIP_RALLY_KEY: '_abc' } as NodeJS.ProcessEnv), 'github', 'a named tracker wins');
   });
 
@@ -145,6 +148,80 @@ describe('GitHub Issues', () => {
   });
 });
 
+describe('Azure Boards', () => {
+  const config = { org: 'acme', project: 'shop', token: 'pat' };
+
+  it('creates a work item the way Azure wants it: a list of patch operations', async () => {
+    const http = record(() => ({ id: 412 }));
+    try {
+      const key = await new AzureBoards(config).create('shop', { kind: 'bug', title: 'checkout charges twice', body: 'line one', labels: ['tewip'] });
+      assert.equal(key, '412');
+      const [call] = http.calls;
+      assert.match(call.url, /dev\.azure\.com\/acme\/shop\/_apis\/wit\/workitems\/\$Bug/);
+      assert.deepEqual(call.body[0], { op: 'add', path: '/fields/System.Title', value: 'checkout charges twice' });
+      assert.ok(call.body.some((op: any) => op.path === '/fields/System.Tags' && op.value === 'tewip'));
+    } finally {
+      http.restore();
+    }
+  });
+
+  it('finds what it filed before by querying its tag', async () => {
+    const http = record((url) => (url.includes('wiql') ? { workItems: [{ id: 7 }] } : { value: [{ id: 7, fields: { 'System.Title': 'checkout charges twice' } }] }));
+    try {
+      const mine = await new AzureBoards(config).mine('shop', 'tewip-bug');
+      assert.deepEqual(mine, [{ key: '7', title: 'checkout charges twice' }]);
+      assert.match(http.calls[0].body.query, /System\.Tags\] CONTAINS 'tewip-bug'/);
+    } finally {
+      http.restore();
+    }
+  });
+
+  it('needs a token before it will write', () => {
+    assert.equal(new AzureBoards({ ...config, token: '' }).canWrite(), false);
+    assert.equal(azureFromEnv({ TEWIP_AZURE_ORG: 'acme' } as NodeJS.ProcessEnv), null, 'a project is required too');
+  });
+});
+
+describe('Linear', () => {
+  const config = { apiKey: 'lin_api_x', team: 'ENG' };
+
+  it('looks the team up by its key, then creates the issue', async () => {
+    const http = record((_url, _method) => ({ data: { teams: { nodes: [{ id: 'team-1', key: 'ENG' }] }, issueCreate: { issue: { identifier: 'ENG-42' } } } }));
+    try {
+      const key = await new Linear(config).create('ENG', { kind: 'bug', title: 'checkout charges twice', body: 'evidence' });
+      assert.equal(key, 'ENG-42');
+      assert.equal(http.calls.length, 2, 'one lookup, one creation');
+      assert.match(http.calls[1].body.query, /issueCreate/);
+      assert.equal(http.calls[1].body.variables.input.teamId, 'team-1');
+    } finally {
+      http.restore();
+    }
+  });
+
+  it('says which teams exist when the key is wrong, instead of failing blankly', async () => {
+    const http = record(() => ({ data: { teams: { nodes: [{ id: 't', key: 'OPS' }] } } }));
+    try {
+      await assert.rejects(() => new Linear({ apiKey: 'k', team: 'ENG' }).create('ENG', { kind: 'bug', title: 'x', body: 'y' }), /no team with the key "ENG".*OPS/s);
+    } finally {
+      http.restore();
+    }
+  });
+
+  it('reads the errors Linear returns inside a 200 answer', async () => {
+    const http = record(() => ({ errors: [{ message: 'Authentication required' }] }));
+    try {
+      await assert.rejects(() => new Linear(config).mine('ENG', 'tewip'), /Authentication required/);
+    } finally {
+      http.restore();
+    }
+  });
+
+  it('needs a team before it will write', () => {
+    assert.equal(new Linear({ apiKey: 'k', team: '' }).canWrite(), false);
+    assert.equal(linearFromEnv({} as NodeJS.ProcessEnv), null);
+  });
+});
+
 describe('what no tracker may do', () => {
   it('never asks any of them to move, assign or close anything', async () => {
     const http = record((url) => (url.includes('issues?') ? [] : { CreateResult: { Object: { FormattedID: 'X1' }, Errors: [] }, QueryResult: { Results: [], Errors: [] }, number: 1 }));
@@ -157,6 +234,9 @@ describe('what no tracker may do', () => {
       await gh.create('team/app', { kind: 'bug', title: 'a', body: 'b' });
       await gh.comment('#1', 'seen again');
       await gh.mine('team/app', 'tewip');
+      const azure = new AzureBoards({ org: 'acme', project: 'shop', token: 't' });
+      await azure.create('shop', { kind: 'bug', title: 'a', body: 'b' });
+      await azure.comment('7', 'seen again');
 
       const forbidden = http.calls.filter((c) => /transitions|assignee|\/state|close/i.test(c.url) || c.method === 'PUT' || c.method === 'PATCH' || c.method === 'DELETE');
       assert.deepEqual(forbidden, [], 'the board belongs to the team, whichever board it is');

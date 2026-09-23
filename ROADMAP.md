@@ -255,7 +255,7 @@ That measurement found the bug that mattered: 8 of the 16 were missed at first b
 a library imports `"../src"` and nothing imports `"../src/utils.ts"`. Following the package's front
 door fixed it, and is now a test of its own.
 
-### Not only Jira: Rally and GitHub Issues (BUILT 2026-09-23)
+### Not only Jira: Rally, GitHub Issues, Azure Boards and Linear (BUILT 2026-09-23)
 
 Teams do not all live in Jira, so the promises had to stop living in the Jira client. Everything in
 Tewip now talks to one small `Tracker` interface - create an item, comment on an item it created,
@@ -273,9 +273,16 @@ in Rally and "priority:p0" in GitHub. Tewip picks the tracker from the settings
 (`TEWIP_TRACKER=jira|rally|github`, or whichever credentials exist), and GitHub Issues uses the
 `gh` CLI login a developer already has, so it needs no new secret.
 
+**Azure DevOps Boards** and **Linear** followed the same day and cost one file each, which was the
+point of the interface: Azure wants a work item built from a list of patch operations and finds its
+own by a WIQL query on tags; Linear speaks GraphQL, needs its team looked up by key first, and
+answers 200 with errors inside the body. Both are wired into the same choice of tracker
+(`TEWIP_TRACKER=jira|rally|github|azure|linear`, or simply whichever credentials exist).
+
 Verified: the GitHub Issues reader against a live public repository (50 issues found by label).
-Rally is written to its published API and unit-tested against recorded shapes, **not yet run against
-a live Rally instance** - nobody here has one.
+Rally, Azure Boards and Linear are written to their published APIs and unit-tested against recorded
+shapes, **not yet run against a live instance of any of them** - nobody here has one. Said plainly
+rather than implied.
 
 ### The flake dossier (`tewip flaky`) (BUILT 2026-09-23 — measured on three real projects)
 

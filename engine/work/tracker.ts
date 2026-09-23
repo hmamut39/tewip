@@ -48,6 +48,8 @@ export const PRIORITY_WORDS: Record<string, Record<string, string>> = {
   jira: { P0: 'Highest', P1: 'High', P2: 'Medium' },
   rally: { P0: 'Resolve Immediately', P1: 'High Attention', P2: 'Normal' },
   github: { P0: 'priority:high', P1: 'priority:medium', P2: 'priority:low' },
+  azure: { P0: '1', P1: '2', P2: '3' },
+  linear: { P0: 'Urgent', P1: 'High', P2: 'Medium' },
 };
 
 export function priorityWord(tracker: string, priority: string): string {
@@ -55,10 +57,14 @@ export function priorityWord(tracker: string, priority: string): string {
 }
 
 /** Which tracker the settings point at. Jira stays the default, because most teams are there. */
-export function trackerNameFromEnv(env: NodeJS.ProcessEnv = process.env): 'jira' | 'rally' | 'github' {
+export type TrackerId = 'jira' | 'rally' | 'github' | 'azure' | 'linear';
+
+export function trackerNameFromEnv(env: NodeJS.ProcessEnv = process.env): TrackerId {
   const named = (env.TEWIP_TRACKER ?? '').trim().toLowerCase();
-  if (named === 'rally' || named === 'github' || named === 'jira') return named;
+  if (['jira', 'rally', 'github', 'azure', 'linear'].includes(named)) return named as TrackerId;
   if (env.TEWIP_RALLY_KEY) return 'rally';
+  if (env.TEWIP_LINEAR_KEY) return 'linear';
+  if (env.TEWIP_AZURE_ORG && env.TEWIP_AZURE_PROJECT) return 'azure';
   if (env.TEWIP_GITHUB_REPO && !env.TEWIP_JIRA_URL) return 'github';
   return 'jira';
 }
@@ -76,6 +82,12 @@ export function trackerHelp(): string {
     '  GitHub Issues',
     '    TEWIP_GITHUB_REPO=owner/name   TEWIP_GITHUB_TOKEN=ghp_...  (or be logged in with the gh CLI)',
     '',
-    'Set TEWIP_TRACKER=jira|rally|github when more than one is configured.',
+    '  Azure DevOps Boards',
+    '    TEWIP_AZURE_ORG=your-org   TEWIP_AZURE_PROJECT=your-project   TEWIP_AZURE_TOKEN=...',
+    '',
+    '  Linear',
+    '    TEWIP_LINEAR_KEY=lin_api_...   TEWIP_LINEAR_TEAM=ENG',
+    '',
+    'Set TEWIP_TRACKER=jira|rally|github|azure|linear when more than one is configured.',
   ].join('\n');
 }

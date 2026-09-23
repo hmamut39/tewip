@@ -210,6 +210,25 @@ export function junitFiles(path: string): string[] {
  * Playwright; every test, passing or failing, is counted in the run summary so its history
  * shows the passes too.
  */
+/**
+ * A runner's own timestamp, when it is one a machine can read.
+ *
+ * Maven Surefire writes `timestamp="2025-03-05T11:53:11 IST"` - a timezone abbreviation with no
+ * offset, which is not a date any parser accepts. `new Date(...).toISOString()` then threw, and
+ * Tewip died on one of the most widely used test runners there is. This was found by reading real
+ * Surefire reports from public repositories; every fixture collected for this project had a clean
+ * timestamp. A report Tewip cannot date is still a report worth reading, so an unreadable one falls
+ * back to the time of import rather than stopping everything.
+ */
+function readTimestamp(raw: string): string | null {
+  if (!raw) return null;
+  const asIs = new Date(raw);
+  if (!Number.isNaN(asIs.getTime())) return asIs.toISOString();
+  // Drop a trailing zone abbreviation (IST, CEST, PDT...) and read the rest as local time.
+  const withoutZone = new Date(raw.replace(/\s+[A-Z]{2,5}$/, ''));
+  return Number.isNaN(withoutZone.getTime()) ? null : withoutZone.toISOString();
+}
+
 export function importJunit(path: string, meta: ImportMeta): ImportResult {
   const records: TriageRecord[] = [];
   const attempts: Record<string, number> = {};
@@ -298,7 +317,7 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     runId: meta.runId,
     gitSha: meta.gitSha,
     ...(meta.branch ? { branch: meta.branch } : {}),
-    startedAt: startedAt ? new Date(startedAt).toISOString() : now,
+    startedAt: readTimestamp(startedAt) ?? now,
     finishedAt: now,
     status: anyFailed ? 'failed' : 'passed',
     attempts,

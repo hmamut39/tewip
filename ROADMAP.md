@@ -109,6 +109,36 @@ collected for it, and they are the kind only that can find: every report in the 
 runners already known to work. Accuracy on all six labelled sets is unchanged: 96.4%, 86.1%, 93.4%,
 97.9%, 89.0%, 99.7%.
 
+### Reading other people's reports, in languages this machine cannot run (2026-09-23)
+
+Go, Rust, Java, .NET, Ruby and PHP are not installed here, and installing six toolchains to test a
+**reader** would be the wrong way round: a report is the whole input a reader takes, and public
+repositories are full of reports that real CI really produced. Ten were fetched, from ten
+repositories, across five runners: Maven Surefire, Gradle, gotestsum, cargo-nextest and NUnit.
+
+**One crashed Tewip outright.** Maven Surefire writes `timestamp="2026-01-30T14:41:12 IST"` - a
+timezone abbreviation with no offset, which no parser accepts - and `new Date(...).toISOString()`
+threw, so importing a Surefire report stopped the tool dead. Every Surefire fixture collected for
+this project happened to carry a clean timestamp, so nothing here could have found it. A report
+Tewip cannot date is still worth reading, so an unreadable timestamp now falls back to the time of
+import. It is a test.
+
+With that fixed, **all ten read exactly as the report itself declares**, each checked against the
+report's own totals:
+
+| Runner | What was checked |
+| --- | --- |
+| Maven Surefire | `failures="2" tests="2"` → 2 read; and a 4-case report with 1 failure → 1 |
+| Gradle | two green reports → nothing reported |
+| gotestsum | two 25-case green reports → nothing reported |
+| cargo-nextest | 3 tests with retries → 6 attempts, which is what a flake needs to be visible |
+| NUnit | `failed="11"` of 24 → 11 read |
+
+Two of those looked like disagreements at first and were the checking script's fault, not Tewip's,
+which is worth recording: NUnit does not use `<failure>` elements at all but `result="Failed"` on
+the test-case, and a runner that retries records several attempts of one test, which Tewip keeps
+separately on purpose.
+
 ### Phase 3: LLM Diagnosis Layer (BUILT — held-out real accuracy 83.2%, see caveats in eval/README.md)
 > Held-out set: 155 real WordPress Gutenberg CI failures (Sep 4–7 2026), labelled by Claude from CI evidence, never used for tuning. 83.2% overall; but on the cases whose labels do not share a signal with the rules, accuracy is 10/36 (recurring cross-branch flakes 0/22, PR-caused REAL_BUG 10/14). TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.
 Handles only the cases Phase 2 marked UNKNOWN.

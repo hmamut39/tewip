@@ -42,6 +42,21 @@ describe('JUnit import', () => {
     assert.equal(summary.status, 'failed');
   });
 
+  it('reads a Surefire report whose timestamp names a timezone instead of an offset', () => {
+    // Maven Surefire writes timestamp="2026-01-30T14:41:12 IST". No parser accepts that, and
+    // `new Date(...).toISOString()` threw, so Tewip died on one of the most widely used runners
+    // there is. Found by reading real Surefire reports from public repositories; every fixture
+    // collected for this project happened to have a clean timestamp.
+    const xml = `<testsuite name="Test" tests="2" failures="1" timestamp="2026-01-30T14:41:12 IST">
+      <testcase classname="ShopTest" name="passes" time="0.4"/>
+      <testcase classname="ShopTest" name="computesTheTotal" time="1.2"><failure message="expected:&lt;4&gt; but was:&lt;3&gt;">at ShopTest.java:19</failure></testcase>
+    </testsuite>`;
+    const { records, summary } = importJunit(report(xml), META);
+    assert.equal(records.length, 1, 'the failure is read, not lost to a crash');
+    assert.match(records[0].errorMessage, /expected:<4> but was:<3>/);
+    assert.ok(!Number.isNaN(Date.parse(summary.startedAt)), 'and the run still has a usable time');
+  });
+
   it('never turns a repeated test name into a failure when nothing in the run failed', () => {
     // node:test's JUnit reporter writes a name twice, for a subtest and for its parent. Running
     // piscina's own suite - 152 real tests, all green - Tewip announced two failing tests and

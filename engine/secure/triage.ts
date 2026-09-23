@@ -17,11 +17,12 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { DepFinding } from './deps.ts';
 import type { SecretFinding } from './secrets.ts';
+import type { WebFinding } from './web.ts';
 
 export type Verdict = 'real-risk' | 'not-reachable' | 'noise' | 'accepted';
 
 export interface SecurityItem {
-  kind: 'secret' | 'dependency';
+  kind: 'secret' | 'dependency' | 'web';
   verdict: Verdict;
   /** One line: what it is and where. */
   title: string;
@@ -150,6 +151,27 @@ export function triageDependency(finding: DepFinding, root: string, sources: str
     };
   }
   return { ...base, verdict: 'real-risk', why: `this project imports ${finding.package} directly, and the advisory applies to the installed version`, next: upgrade };
+}
+
+/**
+ * A finding about a running page. There is no "not reachable" here: the check was made against the
+ * running system, so what it saw is what a visitor sees. A person can still accept one, and a page
+ * that is only ever served inside a network is judged by severity, not by pretending it is safe.
+ */
+export function triageWeb(finding: WebFinding, accepted: Set<string>): SecurityItem {
+  const where = `${finding.url} (${finding.kind})`;
+  const base = { kind: 'web' as const, title: finding.what, severity: finding.severity, where, source: finding.kind.startsWith('zap-') ? 'OWASP ZAP' : 'tewip baseline web check' };
+  if (accepted.has(`web ${finding.url} ${finding.kind}`) || accepted.has(`web ${finding.kind}`)) {
+    return { ...base, verdict: 'accepted', why: 'a person marked this one accepted in .tewip/security-accepted.txt', next: 'nothing: it was reviewed' };
+  }
+  // Everything here was observed in a real response, so it is real; only how much it matters varies.
+  const verdict: Verdict = finding.severity === 'low' ? 'not-reachable' : 'real-risk';
+  return {
+    ...base,
+    verdict,
+    why: verdict === 'real-risk' ? finding.evidence : `${finding.evidence} - worth fixing, but on its own it is not a way in`,
+    next: finding.next,
+  };
 }
 
 const ORDER: Record<Verdict, number> = { 'real-risk': 0, 'not-reachable': 1, noise: 2, accepted: 3 };

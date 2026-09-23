@@ -121,7 +121,7 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
 | `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
 | `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
-| `tewip secure` | Runs your dependency and secret scanners, then says which findings need someone now and which are noise or unreachable | Before a release, or in CI |
+| `tewip secure [--url http://localhost:3000]` | Runs your dependency and secret scanners, checks the running app's headers, cookies and exposed files, then says which findings need someone now and which are noise or unreachable | Before a release, or in CI |
 | `tewip spec "<feature>"` | An epic, its user stories and acceptance criteria, grounded in your code; files them in Jira with `--project PROJ --create` | Before the work is broken down |
 | `tewip report report.xml --gate` | The CI command for GitLab, Jenkins, CircleCI, Azure, Bitbucket and the rest: diagnoses the run, comments on the GitLab merge request, and fails the build only on failures that need a person | Your CI is not GitHub Actions |
 | `tewip watch --cmd "npm test"` | Runs your tests when you save a file and explains each failure straight away | While you are writing code |

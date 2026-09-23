@@ -169,9 +169,10 @@ own metric is still open.
 ## Security: which findings actually matter (Phase 9, new)
 
 ```bash
-tewip secure                 # secrets + npm audit / pip-audit / osv-scanner, triaged
-tewip secure --secrets-only  # a fast check before you commit
-tewip secure --gate          # fails a build only on what needs a person now
+tewip secure                              # secrets + npm audit / pip-audit / osv-scanner, triaged
+tewip secure --url http://localhost:3000  # also check the running app
+tewip secure --zap-report zap.json        # and triage an OWASP ZAP baseline report
+tewip secure --gate                       # fails a build only on what needs a person now
 ```
 
 Scanners are good at finding things and bad at saying which of them matter. Tewip runs the ones your
@@ -181,8 +182,16 @@ from a README), or **accepted** (a person already judged it, in a file only peop
 verdict carries the evidence. No model is called, so it costs nothing, and **a credential is
 located, never printed**.
 
+With `--url` it also checks the running app the way a browser would: security headers, cookie
+flags, and the files that must never be served (.env, .git). No payloads, no fuzzing, no login
+bypass - and **an address that is not your machine is refused** unless you say `--i-am-authorised`.
+For the deep scan it prints the OWASP ZAP command and triages ZAP's report rather than pretending
+to be a scanner.
+
 Measured on the gitleaks project's own labelled samples, for the credential kinds Tewip covers:
-**50 of 54 real credentials found**. Four defects that corpus exposed are fixed; the four still
+**50 of 54 real credentials found**. The web check found **8 of 8 planted weaknesses** in two local
+apps and reported **nothing** about the carefully served one; on four real public homepages its
+report matched the headers those sites actually send, every time. Four defects that corpus exposed are fixed; the four still
 missed are things that are not credentials (an unsigned token, a Stripe *test* key). It never claims
 a project is secure - it prints what it checked and what it did not.
 

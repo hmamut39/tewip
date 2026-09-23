@@ -135,7 +135,7 @@ fixture or a factory rather than the test file.
 
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 
-### Phase 9: Security Testing (`tewip secure`) (BUILT — measured on a labelled public corpus; no web scan yet)
+### Phase 9: Security Testing (`tewip secure`) (BUILT — secrets, dependencies and a baseline web check, each measured)
 Run established scanners (dependency audit, secret scanning, a baseline web scan) and apply Tewip's triage to their findings: real risk, false positive, or accepted, with evidence and a next step, and the same learning from corrections.
 
 Phase metric: precision of "real risk" on labelled findings; noise removed without hiding real issues.
@@ -173,8 +173,30 @@ Go code and rule identifiers that sit in the same files.
   are not credentials, a truncated PyPI prefix is not a sample, and a Stripe **test** key is not a
   risk.
 
-Not built: a baseline web scan of a running application, which the command names in its own output
-as not checked.
+**The baseline web check** (`tewip secure --url http://localhost:3000`) was added the same day. It
+asks for the page the way a browser does and reports what the response verifiably shows: missing
+Content-Security-Policy, X-Content-Type-Options or Referrer-Policy, a page that can be framed, a
+version-announcing Server header, cookies without HttpOnly/Secure/SameSite, and the handful of files
+that must never be served (.env, .git/config, AWS credentials) - and those only when the answer
+really contains the file, not merely a 200.
+
+What it deliberately does not do: no injection payloads, no fuzzing, no brute force, no attempt to
+get past a login. For the deep scan, teams already have OWASP ZAP, so Tewip prints the exact ZAP
+command and triages ZAP's own report (`--zap-report zap.json`) instead of pretending to be it.
+**An address that is not this machine is refused** unless the person says `--i-am-authorised`:
+scanning a system you do not run is not Tewip's decision to make.
+
+Measured two ways:
+
+- On two local applications, one served the way a rushed project serves things and one served
+  carefully: **8 of 8 planted weaknesses found in 5 requests, and nothing at all reported about the
+  careful one**. That is a controlled application, not a product metric - it measures the checks.
+- On four real public homepages, one ordinary GET each, headers only, no path probing: what Tewip
+  reported matched the headers those sites really send, every time. MDN, which sets all five, got
+  nothing reported; python.org and nodejs.org got exactly the headers they are missing.
+- One finding was softened by that real run: GitHub's analytics cookie `_octo` has no HttpOnly by
+  design, and calling that "high" is how a security report gets ignored. A cookie is now weighed by
+  whether its name says it carries a session.
 
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)

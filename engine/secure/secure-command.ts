@@ -7,7 +7,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { auditDependencies } from './deps.ts';
 import { scanSecrets, sourceFiles } from './secrets.ts';
-import { readAccepted, triageDependency, triageSecret, worstFirst, type SecurityItem } from './triage.ts';
+import { readAccepted, triageDependency, triageSecret, triageWeb, worstFirst, type SecurityItem } from './triage.ts';
+import { isLocal, scanWeb } from './web.ts';
+import { readZapReport, zapAvailable, zapInstructions } from './zap.ts';
 
 export interface SecureCommand {
   root: string;
@@ -16,6 +18,12 @@ export interface SecureCommand {
   secretsOnly?: boolean;
   /** Exit non-zero when something is a real risk, for a CI gate. */
   gate?: boolean;
+  /** A running page to check: headers, cookies, and files that must not be served. */
+  url?: string;
+  /** Say yes to checking an address that is not this machine's. */
+  authorised?: boolean;
+  /** A report from an OWASP ZAP baseline scan, whose findings are triaged like the rest. */
+  zapReport?: string;
 }
 
 const CODE = /\.(?:[cm]?[jt]sx?|py|rb|go|java|kt|cs|php|rs|vue|svelte)$/;
@@ -78,8 +86,34 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
   } else {
     notChecked.push('dependencies (--secrets-only was asked for)');
   }
-  // A web scan is a different kind of check and needs a running app; it is not pretended here.
-  notChecked.push('a running application (no web scan is part of this command yet)');
+  if (cmd.url) {
+    // Checking someone else's site is their decision, not Tewip's. A local address is the person's
+    // own machine; anything else has to be said out loud.
+    if (!isLocal(cmd.url) && !cmd.authorised) {
+      throw new Error(
+        [
+          `${cmd.url} is not this machine. Tewip only checks a running site when you say you are allowed to:`,
+          `  tewip secure --url ${cmd.url} --i-am-authorised`,
+          'It sends ordinary requests - no payloads, no fuzzing, no attempt to get past a login - but',
+          'scanning a system you do not run is not Tewip\'s decision to make.',
+        ].join('\n'),
+      );
+    }
+    const scan = await scanWeb(cmd.url);
+    checked.push(`${cmd.url} (${scan.requests} request(s): headers, cookies, files that must not be served)`);
+    if (scan.note) notChecked.push(scan.note);
+    for (const finding of scan.findings) items.push(triageWeb(finding, accepted));
+  } else {
+    notChecked.push('a running application (pass --url http://localhost:3000 to check one)');
+  }
+
+  if (cmd.zapReport) {
+    const fromZap = readZapReport(resolve(cmd.zapReport));
+    checked.push(`an OWASP ZAP report (${fromZap.length} finding(s))`);
+    for (const finding of fromZap) items.push(triageWeb(finding, accepted));
+  } else if (cmd.url) {
+    notChecked.push(`a full web scan. Tewip's own check is passive; for the deep one: ${zapInstructions(cmd.url, zapAvailable(root))}`);
+  }
 
   items.sort(worstFirst);
   const report = renderSecurity(items, checked, notChecked, root);

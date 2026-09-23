@@ -166,6 +166,26 @@ that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra s
 implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
 own metric is still open.
 
+## Security: which findings actually matter (Phase 9, new)
+
+```bash
+tewip secure                 # secrets + npm audit / pip-audit / osv-scanner, triaged
+tewip secure --secrets-only  # a fast check before you commit
+tewip secure --gate          # fails a build only on what needs a person now
+```
+
+Scanners are good at finding things and bad at saying which of them matter. Tewip runs the ones your
+project already has and sorts every finding into **act on this now**, **real but not reachable**
+(a dev dependency, a package nothing imports, a file git does not track), **noise** (a placeholder
+from a README), or **accepted** (a person already judged it, in a file only people write). Each
+verdict carries the evidence. No model is called, so it costs nothing, and **a credential is
+located, never printed**.
+
+Measured on the gitleaks project's own labelled samples, for the credential kinds Tewip covers:
+**50 of 54 real credentials found**. Four defects that corpus exposed are fixed; the four still
+missed are things that are not credentials (an unsigned token, a Stripe *test* key). It never claims
+a project is secure - it prints what it checked and what it did not.
+
 ## Epics, stories and acceptance criteria (Phase 14, new)
 
 ```bash

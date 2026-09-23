@@ -1,0 +1,165 @@
+// Phase 9: secrets left in a repository. This is the one security check Tewip does itself, because
+// it needs no tool installed and no network: a credential either matches a shape its issuer
+// publishes, or it does not.
+//
+// Two rules keep it honest. A finding must quote where it is, never what it is: the value is
+// redacted everywhere, including in the report and in anything posted to CI. And a shape alone is
+// not a risk - "AKIAIOSFODNN7EXAMPLE" is in Amazon's own documentation - so a match that looks like
+// a placeholder, or that has too little randomness to be a real key, is reported as noise rather
+// than as a leak.
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+
+export interface SecretFinding {
+  /** e.g. 'aws-access-key-id'. */
+  kind: string;
+  /** What it is, for a person: "an AWS access key id". */
+  what: string;
+  file: string;
+  line: number;
+  /** The line with the value blanked out. Tewip never prints a credential. */
+  evidence: string;
+  /** How much randomness the value has: a real key has a lot, a placeholder little. */
+  entropy: number;
+  /** Set when the value looks like documentation, a fixture or an obvious placeholder. */
+  placeholder: string | null;
+}
+
+/** Shapes their own issuers publish. Each one is a credential, not a guess about one. */
+const PATTERNS: Array<{ kind: string; what: string; re: RegExp; minEntropy?: number }> = [
+  { kind: 'aws-access-key-id', what: 'an AWS access key id', re: /\b((?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[A-Z0-9]{16})\b/g, minEntropy: 2.5 },
+  { kind: 'aws-secret-key', what: 'an AWS secret access key', re: /\baws_secret_access_key\s*[=:]\s*['"]?([A-Za-z0-9/+=]{40})\b/gi },
+  { kind: 'github-token', what: 'a GitHub token', re: /\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{60,})\b/g },
+  { kind: 'gitlab-token', what: 'a GitLab personal access token', re: /\b(glpat-[A-Za-z0-9_-]{20,})(?![A-Za-z0-9_-])/g },
+  { kind: 'slack-token', what: 'a Slack token', re: /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/g },
+  { kind: 'slack-webhook', what: 'a Slack incoming webhook', re: /(https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/+]{20,})/g },
+  // Stripe writes both "live" and "prod" on real keys; a "test" key is not a credential, and is
+  // left alone on purpose. The prod form was missed until a labelled sample showed it.
+  { kind: 'stripe-key', what: 'a live Stripe key', re: /\b((?:sk|rk)_(?:live|prod)_[A-Za-z0-9]{20,})(?![A-Za-z0-9])/g },
+  // A key may end in "-", where a word boundary never matches: a real Google key was missed that
+  // way. And "sk-ant-..." is Anthropic's, not OpenAI's, so the looser shape must exclude it or one
+  // credential gets reported twice under two names.
+  { kind: 'openai-key', what: 'an OpenAI API key', re: /\b(sk-(?:proj-|svcacct-|admin-)?(?!ant-)[A-Za-z0-9_-]{32,})(?![A-Za-z0-9_-])/g },
+  { kind: 'anthropic-key', what: 'an Anthropic API key', re: /\b(sk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{32,})(?![A-Za-z0-9_-])/g },
+  { kind: 'google-api-key', what: 'a Google API key', re: /\b(AIza[A-Za-z0-9_-]{35})(?![A-Za-z0-9_-])/g },
+  { kind: 'npm-token', what: 'an npm token', re: /\b(npm_[A-Za-z0-9]{36})\b/g },
+  { kind: 'pypi-token', what: 'a PyPI token', re: /\b(pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,})\b/g },
+  { kind: 'sendgrid-key', what: 'a SendGrid key', re: /\b(SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
+  { kind: 'twilio-key', what: 'a Twilio key', re: /\b(SK[a-f0-9]{32})\b/g },
+  { kind: 'digitalocean-token', what: 'a DigitalOcean token', re: /\b(dop_v1_[a-f0-9]{64})\b/g },
+  { kind: 'private-key', what: 'a private key', re: /(-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----)/g, minEntropy: 0 },
+  { kind: 'connection-string', what: 'a database URL with a password in it', re: /\b((?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^:\s'"]+:([^@\s'"]{6,})@[^\s'"]+)/g },
+  { kind: 'jwt', what: 'a signed token (JWT)', re: /\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})(?![A-Za-z0-9_-])/g },
+  // A password in a web address leaks the same way a database URL does, and is easier to miss.
+  { kind: 'url-credentials', what: 'a password inside a URL', re: /\b(https?:\/\/[^:/\s'"]+:([^@\s'"]{4,})@[^\s'"]+)/g, minEntropy: 2 },
+];
+
+/** How random a value is, in bits per character. A real key is above 3; "xxxxxxxx" is 0. */
+export function entropyOf(value: string): number {
+  if (!value) return 0;
+  const counts = new Map<string, number>();
+  for (const ch of value) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  let bits = 0;
+  for (const n of counts.values()) {
+    const p = n / value.length;
+    bits -= p * Math.log2(p);
+  }
+  return bits;
+}
+
+const PLACEHOLDER_WORDS = /example|placeholder|dummy|sample|changeme|your[-_ ]?(?:key|token|secret|api)|xxxx|redacted|fake|notreal|test[-_]?key|<[^>]+>|\$\{|\{\{/i;
+/** Files whose whole purpose is to show the shape of a secret, not to hold one. */
+const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\\/]*\.(?:md|rst|txt|adoc)|[^\\/]*example[^\\/]*|[^\\/]*sample[^\\/]*)$/i;
+
+/** Why this match is probably not a live credential, or null when nothing says so. */
+export function looksPlanted(value: string, line: string, file: string): string | null {
+  if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
+  if (PLACEHOLDER_WORDS.test(line)) return 'the line around it says it is an example';
+  if (DOC_FILE.test(file)) return 'it is in a documentation or example file';
+  if (/(.)\1{5,}/.test(value)) return 'the value repeats one character, so it is a stand-in';
+  return null;
+}
+
+const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next', '.cache']);
+const BINARY = /\.(?:png|jpe?g|gif|webp|ico|svg|pdf|zip|gz|tar|exe|dll|so|dylib|woff2?|ttf|eot|mp4|mp3|wav|class|jar|pyc|lock)$/i;
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+/** Every text file in a project, skipping what no repository owns. */
+export function sourceFiles(root: string, limit = 5000): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    if (out.length >= limit) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (out.length >= limit) return;
+      const path = join(dir, entry);
+      let info;
+      try {
+        info = statSync(path);
+      } catch {
+        continue;
+      }
+      if (info.isDirectory()) {
+        if (!SKIP_DIR.has(entry)) walk(path);
+        continue;
+      }
+      if (BINARY.test(entry) || info.size > MAX_FILE_BYTES) continue;
+      out.push(path);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** The value, blanked: first two characters, then dots. Tewip never prints a credential. */
+export function redact(line: string, value: string): string {
+  const shown = value.slice(0, 2);
+  const hidden = `${shown}${'.'.repeat(Math.min(12, Math.max(4, value.length - 2)))}`;
+  return line.replace(value, hidden).trim().slice(0, 200);
+}
+
+export function scanSecrets(root: string, files = sourceFiles(root)): SecretFinding[] {
+  const findings: SecretFinding[] = [];
+  const seen = new Set<string>();
+  for (const file of files) {
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    if (text.includes('\u0000')) continue; // binary after all
+    const lines = text.split('\n');
+    for (const { kind, what, re, minEntropy } of PATTERNS) {
+      for (const match of text.matchAll(re)) {
+        const value = match[1];
+        const entropy = entropyOf(value);
+        if (entropy < (minEntropy ?? 3)) continue;
+        const index = match.index ?? 0;
+        const line = text.slice(0, index).split('\n').length;
+        const rel = relative(root, file).split(sep).join('/');
+        // One credential, one finding: a value can match a loose shape and a tighter one, and the
+        // same key reported under two names reads as two leaks.
+        const key = `${rel}:${line}:${value}`;
+        if (seen.has(key) || seen.has(`${rel}:${line}`)) continue;
+        seen.add(key);
+        seen.add(`${rel}:${line}`);
+        findings.push({
+          kind,
+          what,
+          file: rel,
+          line,
+          evidence: redact(lines[line - 1] ?? '', value),
+          entropy: Number(entropy.toFixed(2)),
+          placeholder: looksPlanted(value, lines[line - 1] ?? '', rel),
+        });
+      }
+    }
+  }
+  return findings;
+}

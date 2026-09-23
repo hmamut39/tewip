@@ -40,6 +40,11 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+  tewip secure [--secrets-only] [--gate] [--out security.md]
+                                    Runs the scanners this project already has (npm audit,
+                                    pip-audit, osv-scanner) plus Tewip's own secret scan, then says
+                                    which findings need someone now and which are noise or not
+                                    reachable. No model, no cost, and it never prints a credential.
   tewip spec "<feature>" [--diff main...HEAD] [--url <page> ...] [--project PROJ] [--create]
                                     An epic, its user stories and their acceptance criteria, from
                                     this project's code, tests and failure history. Anything it
@@ -149,6 +154,18 @@ async function main(): Promise<void> {
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       });
+      return;
+    }
+    case 'secure': {
+      const { runSecure } = await import('../engine/secure/secure-command.ts');
+      const items = await runSecure({
+        root: process.cwd(),
+        out: flag(args, 'out'),
+        secretsOnly: args.includes('--secrets-only'),
+        gate: args.includes('--gate'),
+      });
+      // The gate fails a build only for what Tewip decided a person must act on now.
+      if (args.includes('--gate') && items.some((i) => i.verdict === 'real-risk')) process.exitCode = 1;
       return;
     }
     case 'spec': {

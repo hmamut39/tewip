@@ -135,10 +135,46 @@ fixture or a factory rather than the test file.
 
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 
-### Phase 9: Security Testing (`tewip secure`)
+### Phase 9: Security Testing (`tewip secure`) (BUILT — measured on a labelled public corpus; no web scan yet)
 Run established scanners (dependency audit, secret scanning, a baseline web scan) and apply Tewip's triage to their findings: real risk, false positive, or accepted, with evidence and a next step, and the same learning from corrections.
 
 Phase metric: precision of "real risk" on labelled findings; noise removed without hiding real issues.
+
+Status (2026-09-23). `tewip secure` runs what a project already has - `npm audit`, `pip-audit`,
+`osv-scanner` - plus Tewip's own offline secret scan, and then does the part scanners do not: decide
+which findings matter. No model is called, so it costs nothing, and it always prints what was **not**
+checked, because "no real risk found" is a statement about the checks that ran and nothing more.
+
+Four verdicts, each with evidence a person can check:
+
+- **real-risk**: a credential that is committed, or a vulnerable package this project imports;
+- **not-reachable**: true of the repository but not of what it runs - a development dependency, a
+  package nothing imports, or a secret in a file git does not track;
+- **noise**: a shape with no credential behind it (Amazon's own `AKIAIOSFODNN7EXAMPLE` is in their
+  documentation), listed rather than hidden;
+- **accepted**: a person already judged it, in `.tewip/security-accepted.txt`. Tewip never writes
+  that file itself.
+
+**A credential is located, never printed** - in the report, in CI, anywhere. The evidence line shows
+the first two characters and dots.
+
+Measured on a labelled corpus Tewip did not write: the validation samples the gitleaks project keeps
+beside each of its detection rules, for the credential kinds Tewip claims to cover, cleaned of the
+Go code and rule identifiers that sit in the same files.
+
+- **50 of 54 real credentials found**, and 2 of 5 look-alikes wrongly reported. The look-alike set
+  is small enough that the second number is weak evidence; it is reported as it is rather than
+  dressed up.
+- Four defects came out of that corpus and are fixed: a key ending in "-" was missed because a word
+  boundary never matches there; `sk-ant-...` was reported twice, as OpenAI's and as Anthropic's; a
+  Stripe **production** restricted key (`rk_prod_`) was missed while the live form was caught; and a
+  password inside an http URL was not looked for at all.
+- The four still missed are deliberate or unusable: an unsigned JWT (`alg: none`) and a JWE fragment
+  are not credentials, a truncated PyPI prefix is not a sample, and a Stripe **test** key is not a
+  risk.
+
+Not built: a baseline web scan of a running application, which the command names in its own output
+as not checked.
 
 ### Beyond Phase 5: Continuous Improvement
 The agent keeps getting stronger after the last phase, but only in measured steps: every human correction becomes a labelled example (built 2026-09-17: people reply `/triage CATEGORY #n reason` under the agent's own comment, and it uses their answer for that failure from then on), misclassifications drive new rules or prompt changes, accuracy and autonomy rate are re-measured on real data after every change. A change that lowers a measured number is not kept as it is: either its cause is fixed and everything is re-measured, or it is reverted. (Rule reworded on 2026-09-17 at the owner's request, so a regression leads to a root-cause fix rather than stopping.)

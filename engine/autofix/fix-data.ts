@@ -9,6 +9,7 @@
 // exactly as it was unless a candidate is accepted.
 import { relative, resolve, sep } from 'node:path';
 import type { PlannedAction } from '../decide.ts';
+import { chooseDataSite } from './data-site.ts';
 import type { Diagnosis, TriageRecord } from '../../reporters/types.ts';
 import type { AutofixDeps } from './autofix.ts';
 import { applyDataFix, collision, dataFixCandidates, findLiteral, languageOf, type LiteralSite } from './data.ts';
@@ -16,7 +17,7 @@ import { applyDataFix, collision, dataFixCandidates, findLiteral, languageOf, ty
 /** Two passes in a row: the second run is what proves the value is really unique. */
 export const REQUIRED_PASSES = 2;
 
-export type DataFixStatus = 'fixed' | 'not-eligible' | 'outside-sandbox' | 'no-collision' | 'value-unknown' | 'value-not-in-test' | 'no-candidate' | 'all-candidates-failed';
+export type DataFixStatus = 'fixed' | 'not-eligible' | 'outside-sandbox' | 'no-collision' | 'value-unknown' | 'value-not-in-test' | 'value-only-asserted' | 'value-ambiguous' | 'no-candidate' | 'all-candidates-failed';
 
 export interface DataFixResult {
   testId: string;
@@ -65,7 +66,12 @@ export async function attemptDataFix(
   const source = deps.readFile(specFile);
   const sites: LiteralSite[] = findLiteral(source, found.value);
   if (sites.length === 0) return stop('value-not-in-test', `"${found.value}" is not written in ${specFile}: it comes from a fixture or a factory, which a person should make unique`);
-  const site = sites[0];
+  // Not simply the first occurrence: a colliding value is often also a value the test checks, and
+  // rewriting that would change what the test asserts while leaving the collision in place.
+  const choice = chooseDataSite(source, sites, found.value);
+  if (!choice.site) return stop(choice.reason, `refused: ${choice.why}`);
+  const site = choice.site;
+  result.log.push(choice.why);
   result.line = site.line;
   result.original = site.text;
 

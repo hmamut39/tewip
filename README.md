@@ -14,7 +14,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 
 Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.
 
-**Status: phases 1 to 4 are built, Phase 5 (auto-fix) is in progress, and phases 6 and 7 (test plans and verified test writing) are built.** Those phases are collection, rule-based diagnosis, LLM diagnosis with a real-data eval, multi-role views, and planning and writing tests in the project's own framework. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; the caveats are in [eval/README.md](eval/README.md).
+**Status: phases 1 to 14 are built; the two auto-fix phases (5 and 8) are the ones still in progress.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
 
 ## Use it in your project
 

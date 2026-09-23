@@ -25,20 +25,31 @@ describe('choosing where to make a value unique', () => {
     const choice = choose(source, 'admin');
     assert.equal(choice.site, null);
     assert.equal(choice.site === null ? choice.reason : '', 'value-only-asserted');
-    assert.match(choice.site === null ? choice.why : '', /checking it rather than creating it/);
+    assert.match(choice.site === null ? choice.why : '', /checking it rather than creating anything/);
   });
 
-  it('picks the line that creates the record, not the line that checks it', () => {
-    const source = file(
-      "test('creates a user', async ({ page }) => {",
-      "  const email = 'sam@example.com';",
-      '  await createUser(email);',
-      "  await expect(page.getByText('sam@example.com')).toBeVisible();",
-      '});',
-    );
+  it('picks the creating line when nothing checks the value', () => {
+    const source = file("test('creates a user', async () => {", "  const email = 'sam@example.com';", '  await createUser(email);', '  expect(response.status).toBe(201);', '});');
     const choice = choose(source, 'sam@example.com');
     assert.ok(choice.site);
-    assert.equal(choice.site.line, 2, 'the assignment, not the assertion');
+    assert.equal(choice.site.line, 2, 'the assignment');
+  });
+
+  it('refuses when the value is both created and checked, since both must change together', () => {
+    // The commonest shape in the real commits: `name: "Secondi"` and then
+    // `expect(body.data.name).toBe("Secondi")`. Making only the data unique leaves the assertion
+    // looking for the old value, turning a flaky test into a failing one.
+    const source = file("test('creates a category', async () => {", '  const body = await post({', '    name: "Secondi",', '  });', '  expect(body.data.name).toBe("Secondi");', '});');
+    const choice = choose(source, 'Secondi');
+    assert.equal(choice.site, null);
+    assert.equal(choice.site === null ? choice.reason : '', 'value-also-asserted');
+    assert.match(choice.site === null ? choice.why : '', /have to change together/);
+  });
+
+  it('never rewrites a value that names an element rather than data', () => {
+    const source = file("test('clicks submit', async ({ page }) => {", "  await page.getByRole('button', { name: 'Submit' }).click();", '});');
+    const choice = choose(source, 'Submit');
+    assert.equal(choice.site, null, 'rewriting a locator would point the test at an element that does not exist');
   });
 
   it('refuses when several places create with the same value, since they belong together', () => {
@@ -54,13 +65,8 @@ describe('choosing where to make a value unique', () => {
     assert.match(choice.site === null ? choice.why : '', /break the link between them/);
   });
 
-  it('refuses when it cannot tell which occurrence is the data', () => {
-    const source = file(
-      "test('checks a label', async ({ page }) => {",
-      "  await page.getByRole('button', { name: 'Submit' }).click();",
-      "  await expect(page.getByText('Submit')).toBeVisible();",
-      '});',
-    );
+  it('refuses when every occurrence is a locator or an assertion', () => {
+    const source = file("test('checks a label', async ({ page }) => {", "  await page.getByRole('button', { name: 'Submit' }).click();", "  await expect(page.getByText('Submit')).toBeVisible();", '});');
     const choice = choose(source, 'Submit');
     assert.equal(choice.site, null);
     assert.equal(choice.site === null ? choice.reason : '', 'value-only-asserted');

@@ -17,7 +17,7 @@ import { applyDataFix, collision, dataFixCandidates, findLiteral, languageOf, ty
 /** Two passes in a row: the second run is what proves the value is really unique. */
 export const REQUIRED_PASSES = 2;
 
-export type DataFixStatus = 'fixed' | 'not-eligible' | 'outside-sandbox' | 'no-collision' | 'value-unknown' | 'value-not-in-test' | 'value-only-asserted' | 'value-ambiguous' | 'no-candidate' | 'all-candidates-failed';
+export type DataFixStatus = 'fixed' | 'not-eligible' | 'outside-sandbox' | 'no-collision' | 'value-unknown' | 'value-not-in-test' | 'value-only-asserted' | 'value-ambiguous' | 'value-also-asserted' | 'value-also-asserted' | 'no-candidate' | 'all-candidates-failed';
 
 export interface DataFixResult {
   testId: string;

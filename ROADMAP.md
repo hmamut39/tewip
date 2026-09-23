@@ -182,10 +182,44 @@ The refusals were read one by one, and they are the right answer rather than a s
 refuses, the developer typically waited for something Tewip cannot invent - one replaced the wait
 with `await page.waitForURL(/\/(auth|sign)/)`, another with a wait for the text `Mode: Command`.
 
+The **test-data half is now measured too**, in two parts.
+
+First, on the real thing: the labelled datasets contain 6 genuine collision failures, all from
+Supabase CI, and every one names only the constraint (`pg_extension_name_index`) and never the
+value. Tewip refused all 6 with "the error does not print the value that already existed, so there
+is nothing safe to make unique" - which is the correct answer, and the reason this fix refuses more
+often than it fires.
+
+Second, on 20 real commits from 18 public repositories in which a developer made a hard-coded test
+value unique. **All 12 proposals make the value unique per run** - 5 by the same mechanism the
+developer chose, 7 by a different but equally valid one (a timestamp where they used a uuid). The
+other 8 are refusals, each with a reason that holds up when the file is read.
+
+Two safety defects came out of it, both now tested:
+
+- **It rewrote a value the test was checking.** `findLiteral` returns every place a value is
+  written and the fix took the first - but a value that collides in a database is very often also a
+  value the test asserts on, and in real code the assertion often comes first. That is the worst
+  outcome this phase can produce: the collision stays, the assertion stops checking what it did,
+  and the test passes for the wrong reason.
+- **A value that is both created and checked cannot be fixed by this fix at all.** The commonest
+  real shape is `name: "Secondi"` and, five lines later, `expect(body.data.name).toBe("Secondi")`.
+  Making the data unique leaves the assertion looking for the old value, so both have to change
+  together - which is a bigger change than "make this one literal unique", and now a refusal that
+  says exactly that.
+
+It now prefers the occurrence that creates a record, never touches one that is only checked, never
+touches a value that names an element (`getByRole('button', { name: 'Submit' })` reads like data to
+a pattern but is a locator), and refuses where several places create with the same value, because
+making one unique would break the link between them.
+
 Honest limits: this measures the **proposal**, not the proof. Running 47 unrelated projects'
 end-to-end suites is out of reach here, so the three-passes-in-a-row gate was stubbed, and a
-proposal counted as agreeing when it contains the change the developer made. The test-data half of
-this phase is still unmeasured on real failures.
+proposal counted as agreeing when it contains the change the developer made. For the test-data
+half, the failure message was reconstructed in Postgres's own wording around the literal the
+developer changed, which hands Tewip the value: what is measured there is what it does with a value
+it has been given, not whether it can pull one out of a log. The 6 real Supabase collisions are the
+only part of that measurement where both the failure and the file are real.
 
 Phase metric: as Phase 5: success rate and false-fix rate, with false fixes near zero.
 

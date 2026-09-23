@@ -26,6 +26,7 @@ const FRAME_PATTERNS: RegExp[] = [
   /([\w.\-/\\]+\.(?:rb|php)):(\d+)/g, // Ruby, PHP
   / in ([A-Za-z]:[^():\s]+|\/[^():\s]+):line (\d+)/g, // .NET
   /[❯>]\s+(?:[\w$.]+ )?([\w.\-/\\]+\.[cm]?[jt]sx?):(\d+):\d+/g, // Vitest and Jest: "❯ src/utils.ts:35:11"
+  /^\s*([\w.\-/\\]+\.(?:py|rb|php|java|kt|cs|go)):(\d+):/gm, // pytest and friends: "src/humanize/number.py:164: OverflowError"
 ];
 
 /** Files that are tests, not the code under test. */
@@ -109,18 +110,22 @@ export function codeTarget(stack: string, root: string, test?: TestFacts, hint =
     refused.push(`${rel} (${verdict.why})`);
   }
   if (test) {
-    const imported = sourceUnderTest(test.file, test.source, root);
+    const imported = sourceUnderTest(test.file, test.source, root) ?? pythonModule(test.source, root);
     // A project with one module per feature exports them all through one file, so the file the test
     // imports is often not the file with the bug. The name of the failing test says which function
     // it is about, so the file that defines that function comes first.
     const byName = definers(imported ? dirname(imported) : dirname(test.file), hint, test.source.slice(0, 2000));
-    const ordered = [...byName, ...(imported && !byName.includes(imported) ? [imported] : [])].filter((f) => mayChange(f).allowed);
+    const ordered = [...byName, ...(imported && !byName.some((d) => d.file === imported) ? [{ file: imported, line: 1 }] : [])]
+      .filter((d) => mayChange(d.file).allowed)
+      // A file that only re-exports other files holds no bug, and offering it wastes an attempt:
+      // in a real run the model rightly answered "this only imports and re-exports that function".
+      .filter((d) => !isReExportOnly(d.file));
     if (ordered.length > 0) {
-      const say = (f: string) => `nothing threw inside the code, so the file that defines what the test is about was read: ${relative(resolve(root), f)}`;
+      const say = (d: { file: string; line: number }) => `nothing threw inside the code, so the file that defines what the test is about was read: ${relative(resolve(root), d.file)}${d.line > 1 ? `, around line ${d.line}` : ''}`;
       return {
-        target: { file: ordered[0], line: 1, why: say(ordered[0]) },
+        target: { ...ordered[0], why: say(ordered[0]) },
         why: '',
-        more: ordered.slice(1, 3).map((f) => ({ file: f, line: 1, why: say(f) })),
+        more: ordered.slice(1, 3).map((d) => ({ ...d, why: say(d) })),
       };
     }
   }
@@ -129,10 +134,53 @@ export function codeTarget(stack: string, root: string, test?: TestFacts, hint =
 }
 
 /**
+ * A file that defines no function and no class: a package's front door, which re-exports what other
+ * files implement. There is no bug to fix in one, and offering it wastes an attempt - in a real run
+ * the model answered, correctly, "this only imports and re-exports that function".
+ */
+export function isReExportOnly(file: string): boolean {
+  try {
+    const source = readFileSync(file, 'utf8');
+    const defines = /^\s*(?:async\s+)?def\s+\w|^\s*class\s+\w|(?:export\s+)?(?:function|class)\s+\w|=>\s*[{(]/m;
+    return !defines.test(source);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The project's own module a Python test imports. Python has no relative paths in an import, so the
+ * dotted name is turned back into a file under the layouts real projects use: `src/` beside the
+ * root, a package folder, or a single module.
+ */
+function pythonModule(testSource: string, root: string): string | null {
+  if (!/^\s*(?:from|import)\s+[\w.]+/m.test(testSource)) return null;
+  const modules = [...testSource.matchAll(/^\s*(?:from|import)\s+([\w.]+)/gm)]
+    .map((m) => m[1])
+    .filter((name) => !name.startsWith('.') && !STANDARD.has(name.split('.')[0]));
+  for (const dotted of modules) {
+    const parts = dotted.split('.');
+    // A submodule ("humanize.number") is a better answer than the package itself.
+    for (const depth of [parts.length, 1]) {
+      const head = parts.slice(0, depth);
+      for (const base of [join(root, 'src'), root]) {
+        for (const candidate of [join(base, ...head) + '.py', join(base, ...head, '__init__.py')]) {
+          if (existsSync(candidate) && statSync(candidate).isFile() && !isTestFile(candidate)) return candidate;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Modules that are never the code under test, so an import of them says nothing. */
+const STANDARD = new Set(['pytest', 'unittest', 'os', 'sys', 're', 'json', 'math', 'time', 'datetime', 'typing', 'pathlib', 'collections', 'decimal', 'itertools', 'functools', 'random', 'string', 'subprocess', 'freezegun', 'mock', 'hypothesis', '__future__']);
+
+/**
  * The source files in a folder that define the functions named in the failure, best match first.
  * This is what tells `parseQuery` in src/query.ts apart from everything else exported by src/.
  */
-function definers(dir: string, named: string, mentioned = ''): string[] {
+function definers(dir: string, named: string, mentioned = ''): Array<{ file: string; line: number }> {
   if (!existsSync(dir)) return [];
   const words = (text: string) => [...new Set((text.match(/[a-z][A-Za-z0-9_$]{3,}/g) ?? []).filter((n) => /[A-Z]/.test(n) || n.length > 5))].slice(0, 40);
   // The failing test's own name says which function it is about, and counts far more than a name
@@ -140,14 +188,21 @@ function definers(dir: string, named: string, mentioned = ''): string[] {
   const strong = words(named);
   const weak = words(mentioned).filter((n) => !strong.includes(n));
   if (strong.length === 0 && weak.length === 0) return [];
-  const defines = (source: string, name: string) => new RegExp(String.raw`(?:export\s+(?:async\s+)?(?:function|const|class)\s+|^def\s+)${name}\b`, 'm').test(source);
-  const scored: Array<{ file: string; score: number }> = [];
+  // Where a name is defined, not merely whether it is: a 600-line module keeps the function under
+  // test well past the point where a long file has to be cut, and the model must be sent that part.
+  const definition = (source: string, name: string): number => {
+    const at = new RegExp(String.raw`(?:export\s+(?:async\s+)?(?:function|const|class)\s+|^\s*def\s+)${name}\b`, 'm').exec(source);
+    return at ? source.slice(0, at.index).split('\n').length : 0;
+  };
+  const scored: Array<{ file: string; line: number; score: number }> = [];
   for (const entry of readdirSync(dir)) {
     const file = join(dir, entry);
     if (!/\.[cm]?[jt]sx?$|\.py$/.test(entry) || isTestFile(file) || !statSync(file).isFile()) continue;
     const source = readFileSync(file, 'utf8');
-    const score = strong.filter((n) => defines(source, n)).length * 5 + weak.filter((n) => defines(source, n)).length;
-    if (score > 0) scored.push({ file, score });
+    const strongAt = strong.map((n) => definition(source, n)).filter((line) => line > 0);
+    const weakAt = weak.map((n) => definition(source, n)).filter((line) => line > 0);
+    const score = strongAt.length * 5 + weakAt.length;
+    if (score > 0) scored.push({ file, line: strongAt[0] ?? weakAt[0] ?? 1, score });
   }
-  return scored.sort((a, b) => b.score - a.score).map((s) => s.file);
+  return scored.sort((a, b) => b.score - a.score).map(({ file, line }) => ({ file, line }));
 }

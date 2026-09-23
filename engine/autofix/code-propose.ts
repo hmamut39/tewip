@@ -69,7 +69,7 @@ export async function proposeCodeFix(model: LlmClient, ctx: FixContext): Promise
  * against real bug fixes the model copied text that still carried those numbers: the change matched
  * nothing in the file and was thrown away for a reason that was Tewip's fault, not the model's.
  */
-export function excerpt(source: string, around = 1, maxLines = 500): { text: string; from: number } {
+export function excerpt(source: string, around = 1, maxLines = 900): { text: string; from: number } {
   const lines = source.split('\n');
   if (lines.length <= maxLines) return { text: source, from: 1 };
   const from = Math.max(0, around - Math.floor(maxLines / 2));

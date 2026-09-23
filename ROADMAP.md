@@ -216,7 +216,7 @@ developer agrees with, and no designer has judged these. What this measurement s
 Tewip does not cry wolf on pages that match their design, and it does notice when they stop
 matching. The designer-judged number needs a real project with a real design file.
 
-### Phase 12: Verified Fixes to Application Code (`tewip fix --code`, opt-in) (BUILT — replayed on 8 real bug fixes, see status)
+### Phase 12: Verified Fixes to Application Code (`tewip fix --code`, opt-in) (BUILT — 16 of 16 real bug fixes in two languages, see status)
 
 The hardest and most valuable extension, and the one that must be built last, because it crosses the
 line Tewip has kept since Phase 1: it never edits application code.
@@ -241,30 +241,47 @@ Status (2026-09-23). `tewip fix --code <report>` is built. It never runs unless 
 `--code`, it takes only failures the engine itself called REAL_BUG at 0.85 or above, and it refuses
 to touch tests, configuration, CI files, lockfiles, migrations and anything holding secrets - a
 passing test proves nothing about a change to those. A change survives only if it applies exactly
-once, touches at most 20 lines, makes the failing test pass, and leaves the whole suite passing.
-Otherwise the file goes back byte for byte and Tewip explains the bug instead.
+once, adds or removes at most 20 lines, makes the failing test pass, and breaks nothing that was
+passing before. Otherwise the file goes back byte for byte and Tewip explains the bug instead.
 
-Measured the way the metric asks, on eight real bug fixes from a public repository (unjs/ufo): for
-each, the commit *before* the fix was checked out, only the tests from the fix commit were brought
-in, and the real bug was confirmed to reproduce (8 of 8). Writing model gpt-5.5.
+Measured the way the metric asks, by replaying real bug fixes from public repositories: check out
+the commit *before* each fix, bring in only that fix's tests, confirm the real bug reproduces, then
+let Tewip try. Writing model gpt-5.5 at medium reasoning.
 
-- **4 of 8** got a change proved by the tests. **4 of 4 were in the same file the developers
-  changed**, and all four are one-liners that do what the developers' own fix does (collapse leading
-  slashes, a null-prototype query object, protocol-relative input, strip a trailing slash only when
-  there is one). Judged by me against the real commits, not by a maintainer.
-- **0 wrong fixes were offered.** The other four ended in refusals: three times the model wanted a
-  rewrite of 50, 36 or 54 lines and the size rule threw it away, once the change did not make the
-  test pass. Each ends as an explanation, which is the designed outcome.
-- Three faults in Tewip itself were found by this measurement and fixed: the prompt used to send the
-  file with line numbers, which the model copied into its change so it matched nothing; the file to
-  change was picked by what the test imports, which in a package with one barrel is the wrong file
-  (now the failing test's own name decides, which moved parseQuery from src/utils.ts to src/query.ts
-  where the developers fixed it); and a runner that never ran the test at all was read as a failing
-  test, so every "fix" looked like it did not work.
+| Project | Language, runner | Bugs reproduced | Changes proved by the tests | In the file the developers changed |
+|---|---|---|---|---|
+| unjs/ufo | TypeScript, Vitest | 8 of 8 | **8** | **8 of 8** |
+| python-humanize/humanize | Python, pytest | 8 of 8 | **8** | **8 of 8** |
 
-Not yet measured: the share a reviewer merges unchanged, which needs real reviewers, and anything
-outside JavaScript/TypeScript. The loop itself is language-agnostic - it reads Python, Java, Go,
-Ruby, PHP and .NET stacks - but only JS/TS has been replayed.
+Every one of the sixteen is small: 1 to 16 changed lines, median 4. Read against the developers'
+own commits, most do exactly what the developers did (collapse leading slashes, a null-prototype
+query object, `round()` instead of truncation, fold a degenerate fraction into the integer part);
+a few take a different route to the same behaviour and pass the whole suite. **No wrong fix was
+offered**: every change that could not be proved was thrown away and the file restored. Those
+judgements are mine against the real commits, not a maintainer's, and the "merged unchanged" half
+of the metric still needs real reviewers.
+
+Six faults in Tewip itself were found by these measurements and fixed, which is what the exercise
+was for:
+
+1. the prompt sent the file with line numbers, which the model copied into its change, so the change
+   matched nothing;
+2. the file to change was chosen from what the test imports, which in a one-barrel package is the
+   wrong file (now the failing test's own name decides, and it moved `parseQuery` to src/query.ts,
+   where the developers fixed it);
+3. a runner that never ran the test - a bad flag, a missing module - was read as a failing test;
+4. a Windows checkout has CRLF line endings and a model answers in LF, so four correct fixes were
+   rejected as "not found in the file";
+5. the whole suite was required to be green, so in any project that already has a failing or
+   erroring test - here fifteen, from an uninstalled benchmark plugin - every correct fix was
+   rejected as "broke others". Now the suite is read once before the change and a fix is blamed only
+   for tests that were passing and now fail;
+6. the size of a change was measured as the span from the first differing line to the last, which
+   called a two-line fix in two places a "fifty-line rewrite" and printed ninety lines of patch for
+   a moved block. A real line diff now feeds both the size rule and the patch a person reads.
+
+Still not covered: Java, Go, C# and Ruby are read by the same code paths (their stacks are parsed
+and their runners supported) but have not been replayed against real bug fixes.
 
 ### Phase 13: Where Teams Already Are (daily use) (BUILT — four outlets; the phase metric needs a real team and four weeks)
 

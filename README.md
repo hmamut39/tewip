@@ -194,11 +194,17 @@ configuration, CI files, lockfiles, migrations or anything with secrets in it, b
 green after changing those proves nothing. If it cannot prove a change, it explains the bug instead
 and puts your file back byte for byte. It never commits and never merges.
 
-Measured by replaying **8 real bug fixes** from a public repository (unjs/ufo): the commit before
-each fix, with only that fix's tests, so the real bug reproduces. **4 of 8 got a change proved by
-the tests, 4 of 4 in the same file the developers changed, each a one-liner doing what the
-developers' own fix does. 0 wrong fixes were offered** - the other four were refused (three times
-the model wanted a 50-line rewrite, which the size rule threw away).
+Measured by replaying **16 real bug fixes** from two public repositories, in two languages: the
+commit before each fix, with only that fix's tests, so the real bug really reproduces.
+
+| Project | Language | Bugs | Proved by the tests | Right file |
+|---|---|---|---|---|
+| unjs/ufo | TypeScript, Vitest | 8 | **8** | 8 of 8 |
+| python-humanize/humanize | Python, pytest | 8 | **8** | 8 of 8 |
+
+Every change is small (1 to 16 lines, median 4) and most are what the developers themselves wrote.
+**No wrong fix was offered**: anything that could not be proved was thrown away and the file put
+back byte for byte.
 
 ## Where it has been tried
 

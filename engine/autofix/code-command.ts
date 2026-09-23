@@ -13,6 +13,7 @@ import { HistoryIndex } from '../history.ts';
 import { importJunit } from '../import/junit.ts';
 import { importBlobReportDir } from '../import/blob.ts';
 import { llmFromEnv } from '../llm/client.ts';
+import { writerFromEnv } from '../quality/model.ts';
 import { usageLine } from '../llm/usage.ts';
 import { buildItems } from '../../outlets/items.ts';
 import { chooseFramework, detectFrameworks, type Framework } from '../quality/frameworks.ts';
@@ -49,7 +50,8 @@ function testFileOf(file: string, root: string): string | null {
 }
 
 export async function runCodeFix(cmd: CodeFixCommand): Promise<CodeFixResult[]> {
-  const model = llmFromEnv();
+  // Fixing code is writing code, so it uses the writing model, not the small triage one.
+  const model = writerFromEnv(cmd.root);
   if (!model) throw new Error('fixing code needs a model. Set TEWIP_API_KEY (and TEWIP_PROVIDER), or OPENAI_API_KEY.');
   const path = resolve(cmd.report);
   if (!existsSync(path)) throw new Error(`no such report: ${cmd.report}`);

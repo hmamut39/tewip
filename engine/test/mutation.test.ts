@@ -17,7 +17,7 @@ function project(tree: Record<string, string>): string {
   return root;
 }
 const framework = (id: Framework['id'], cwd: string, label = id): Framework =>
-  ({ id, label, browser: id === 'playwright', cwd, testDir: cwd, example: null, fileFor: (x: string) => x, command: () => '' }) as Framework;
+  ({ id, label, browser: id === 'playwright', cwd, testDir: cwd, example: null, fileFor: (x: string) => x, command: () => '', suite: '' }) as Framework;
 
 describe('choosing a mutation tool', () => {
   it('uses the project\'s own StrykerJS when it is installed', () => {

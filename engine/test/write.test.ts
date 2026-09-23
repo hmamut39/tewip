@@ -74,7 +74,7 @@ describe('the broken-on-purpose version', () => {
   });
 });
 
-const FRAMEWORK = { id: 'playwright', label: 'Playwright', browser: true, cwd: '.', testDir: '.', example: null, fileFor: (id: string) => id, command: () => '' } as Framework;
+const FRAMEWORK = { id: 'playwright', label: 'Playwright', browser: true, cwd: '.', testDir: '.', example: null, fileFor: (id: string) => id, command: () => '', suite: '' } as Framework;
 const SCENARIO: Scenario = { id: 'LS-002', title: 'search', type: 'functional', priority: 'P0', preconditions: '', steps: [], expected: 'three results', automate: true, covered_by: '', grounded_on: '' };
 
 /** A model that answers from a queue, and a runner that passes or fails by what the file contains. */

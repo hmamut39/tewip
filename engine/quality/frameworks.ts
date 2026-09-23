@@ -23,6 +23,8 @@ export interface Framework {
   fileFor(id: string): string;
   /** The shell command that runs just this test file, from `cwd`. */
   command(file: string): string;
+  /** The shell command that runs the whole suite, from `cwd`: used to prove a fix broke nothing. */
+  suite: string;
   /** Extra environment for the runner, e.g. a browser for Karma. */
   env?: Record<string, string>;
 }
@@ -87,17 +89,17 @@ function jsFrameworks(dir: string, deps: string): Framework[] {
   if (pw) {
     const testDir = join(dir, read(pw).match(/testDir:\s*['"`]([^'"`]+)/)?.[1] ?? '.');
     const example = testFiles(testDir, /\.(spec|test)\.[mc]?[jt]s$/)[0] ?? null;
-    out.push({ id: 'playwright', label: 'Playwright Test (TypeScript/JavaScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : testDir, example, fileFor: sameSuffix(example, '.spec.ts', /\.(spec|test)\.[mc]?[jt]s$/), command: (f) => `npx playwright test ${q(relative(dir, f).replaceAll('\\', '/'))} --retries=0 --workers=1 --reporter=line` });
+    out.push({ id: 'playwright', label: 'Playwright Test (TypeScript/JavaScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : testDir, example, fileFor: sameSuffix(example, '.spec.ts', /\.(spec|test)\.[mc]?[jt]s$/), command: (f) => `npx playwright test ${q(relative(dir, f).replaceAll('\\', '/'))} --retries=0 --workers=1 --reporter=line`, suite: 'npx playwright test --retries=0 --workers=1 --reporter=line' });
   }
   const cy = config(['cypress.config.ts', 'cypress.config.js', 'cypress.config.mjs']);
   if (cy) {
     const example = testFiles(join(dir, 'cypress'), /\.cy\.[jt]sx?$/)[0] ?? null;
-    out.push({ id: 'cypress', label: 'Cypress (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'cypress', 'e2e'), example, fileFor: sameSuffix(example, '.cy.ts', /\.cy\.[jt]sx?$/), command: (f) => `npx cypress run --spec ${q(relative(dir, f))}` });
+    out.push({ id: 'cypress', label: 'Cypress (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'cypress', 'e2e'), example, fileFor: sameSuffix(example, '.cy.ts', /\.cy\.[jt]sx?$/), command: (f) => `npx cypress run --spec ${q(relative(dir, f))}`, suite: 'npx cypress run' });
   }
   const wdio = config(['wdio.conf.ts', 'wdio.conf.js']);
   if (wdio) {
     const example = testFiles(dir, /\.(e2e|spec|test)\.[jt]s$/)[0] ?? null;
-    out.push({ id: 'webdriverio', label: 'WebdriverIO (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test', 'specs'), example, fileFor: sameSuffix(example, '.e2e.ts', /\.(e2e|spec|test)\.[jt]s$/), command: (f) => `npx wdio run ${q(basename(wdio))} --spec ${q(relative(dir, f))}` });
+    out.push({ id: 'webdriverio', label: 'WebdriverIO (JavaScript/TypeScript)', browser: true, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test', 'specs'), example, fileFor: sameSuffix(example, '.e2e.ts', /\.(e2e|spec|test)\.[jt]s$/), command: (f) => `npx wdio run ${q(basename(wdio))} --spec ${q(relative(dir, f))}`, suite: `npx wdio run ${q(basename(wdio))}` });
   }
   // Angular runs its unit tests through the CLI (Karma with Jasmine, or the Vitest-based unit-test
   // builder), with the project's TestBed setup, so a spec must run through `ng test` as well.
@@ -116,6 +118,7 @@ function jsFrameworks(dir: string, deps: string): Framework[] {
       example,
       fileFor: (id) => `tewip-${kebab(id)}.spec.ts`,
       command: (f) => `npx ng test --watch=false --include=${q(relative(dir, f).replaceAll('\\', '/'))}${karma ? ' --browsers=ChromeHeadless' : ''}`,
+      suite: `npx ng test --watch=false${karma ? ' --browsers=ChromeHeadless' : ''}`,
       env: karma ? karmaChrome() : undefined,
     });
   }
@@ -128,7 +131,7 @@ function jsFrameworks(dir: string, deps: string): Framework[] {
     const testingLibrary = /"@testing-library\/[\w-]+"\s*:/.test(deps) ? ' and Testing Library' : '';
     const label = `${id === 'jest' ? 'Jest' : 'Vitest'}${browser ? ' with Selenium/Puppeteer' : ''}${ui.length ? ` for ${ui.join('/')}${testingLibrary}` : ''} (JavaScript/TypeScript)`;
     const run = id === 'jest' ? 'npx jest' : 'npx vitest run';
-    out.push({ id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}` });
+    out.push({ id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}`, suite: run });
     break;
   }
   return out;
@@ -149,7 +152,7 @@ function otherFramework(dir: string): Framework | null {
   const pyExample = testFiles(dir, /^test_.*\.py$|_test\.py$/)[0] ?? null;
   if (pyExample && (/pytest/i.test(py) || existsSync(join(dir, 'conftest.py')))) {
     const lib = /selenium/i.test(py) ? ' with Selenium' : /playwright/i.test(py) ? ' with Playwright' : '';
-    return { id: 'pytest', label: `pytest${lib} (Python)`, browser: lib !== '', cwd: dir, testDir: dirname(pyExample), example: pyExample, fileFor: (id) => `test_tewip_${kebab(id).replaceAll('-', '_')}.py`, command: (f) => `${q(pythonOf(dir))} -m pytest ${q(relative(dir, f))} -q -p no:cacheprovider` };
+    return { id: 'pytest', label: `pytest${lib} (Python)`, browser: lib !== '', cwd: dir, testDir: dirname(pyExample), example: pyExample, fileFor: (id) => `test_tewip_${kebab(id).replaceAll('-', '_')}.py`, command: (f) => `${q(pythonOf(dir))} -m pytest ${q(relative(dir, f))} -q -p no:cacheprovider`, suite: `${q(pythonOf(dir))} -m pytest -q -p no:cacheprovider` };
   }
   const javaExample = testFiles(join(dir, 'src', 'test'), /Tests?\.(java|kt)$/)[0] ?? null;
   const pom = read(join(dir, 'pom.xml'));
@@ -161,18 +164,18 @@ function otherFramework(dir: string): Framework | null {
     const lang = javaExample.endsWith('.kt') ? 'Kotlin' : 'Java';
     const wrapper = existsSync(join(dir, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew')) ? (process.platform === 'win32' ? 'gradlew.bat' : './gradlew') : 'gradle';
     return pom
-      ? { id: 'maven', label: `JUnit via Maven${lib} (${lang})`, browser: lib === ' with Selenium', cwd: dir, testDir: dirname(javaExample), example: javaExample, fileFor: (id) => `Tewip${pascal(id)}Test.${javaExample.endsWith('.kt') ? 'kt' : 'java'}`, command: (f) => `mvn -q test -Dtest=${cls(f)} -Dsurefire.failIfNoSpecifiedTests=false` }
-      : { id: 'gradle', label: `JUnit via Gradle${lib} (${lang})`, browser: lib === ' with Selenium', cwd: dir, testDir: dirname(javaExample), example: javaExample, fileFor: (id) => `Tewip${pascal(id)}Test.${javaExample.endsWith('.kt') ? 'kt' : 'java'}`, command: (f) => `${wrapper} test --tests ${cls(f)}` };
+      ? { id: 'maven', label: `JUnit via Maven${lib} (${lang})`, browser: lib === ' with Selenium', cwd: dir, testDir: dirname(javaExample), example: javaExample, fileFor: (id) => `Tewip${pascal(id)}Test.${javaExample.endsWith('.kt') ? 'kt' : 'java'}`, command: (f) => `mvn -q test -Dtest=${cls(f)} -Dsurefire.failIfNoSpecifiedTests=false`, suite: 'mvn -q test' }
+      : { id: 'gradle', label: `JUnit via Gradle${lib} (${lang})`, browser: lib === ' with Selenium', cwd: dir, testDir: dirname(javaExample), example: javaExample, fileFor: (id) => `Tewip${pascal(id)}Test.${javaExample.endsWith('.kt') ? 'kt' : 'java'}`, command: (f) => `${wrapper} test --tests ${cls(f)}`, suite: `${wrapper} test` };
   }
   const csproj = readdirSync(dir).find((n) => n.endsWith('.csproj') && /Microsoft\.NET\.Test\.Sdk/.test(read(join(dir, n))));
   if (csproj) {
     const example = testFiles(dir, /Tests?\.cs$/)[0] ?? null;
     const lib = /Selenium/.test(read(join(dir, csproj))) ? ' with Selenium' : /Playwright/.test(read(join(dir, csproj))) ? ' with Playwright' : '';
-    return { id: 'dotnet', label: `.NET test${lib} (C#)`, browser: lib !== '', cwd: dir, testDir: example ? dirname(example) : dir, example, fileFor: (id) => `Tewip${pascal(id)}Tests.cs`, command: (f) => `dotnet test --filter FullyQualifiedName~${basename(f, '.cs')}` };
+    return { id: 'dotnet', label: `.NET test${lib} (C#)`, browser: lib !== '', cwd: dir, testDir: example ? dirname(example) : dir, example, fileFor: (id) => `Tewip${pascal(id)}Tests.cs`, command: (f) => `dotnet test --filter FullyQualifiedName~${basename(f, '.cs')}`, suite: 'dotnet test' };
   }
   if (existsSync(join(dir, 'go.mod'))) {
     const example = testFiles(dir, /_test\.go$/)[0] ?? null;
-    if (example) return { id: 'go', label: 'Go testing', browser: false, cwd: dir, testDir: dirname(example), example, fileFor: (id) => `tewip_${kebab(id).replaceAll('-', '_')}_test.go`, command: (f) => `go test ./${relative(dir, dirname(f)).replaceAll('\\', '/') || '.'}` };
+    if (example) return { id: 'go', label: 'Go testing', browser: false, cwd: dir, testDir: dirname(example), example, fileFor: (id) => `tewip_${kebab(id).replaceAll('-', '_')}_test.go`, command: (f) => `go test ./${relative(dir, dirname(f)).replaceAll('\\', '/') || '.'}`, suite: 'go test ./...' };
   }
   return null;
 }

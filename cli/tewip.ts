@@ -40,6 +40,11 @@ Usage:
                                     File the plan's scenarios as test-case issues, linked to the
                                     story. Shows what it would create; --create actually files
                                     them, and the same scenario is never filed twice.
+  tewip fix --code <report> [--only "<test title>"] [--max 3] [--apply] [--suite "<command>"]
+                                    Opt-in: for failures diagnosed as a real bug, propose the
+                                    smallest change to application code, and keep it only if the
+                                    failing test then passes AND the whole suite still passes. The
+                                    change is written as a patch; nothing is committed or merged.
   tewip design <figma link | frame.json> [--url <page>] [--frame "<name>"] [--out drift.md]
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
@@ -124,6 +129,24 @@ async function main(): Promise<void> {
         issueKey: flag(args, 'issue'),
         create: args.includes('--create'),
         only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      return;
+    }
+    case 'fix': {
+      // Changing application code is the one thing Tewip has always refused, so it happens only
+      // when a person asks for it by name. Without --code, this says so rather than guessing.
+      if (!args.includes('--code')) throw new Error('usage: tewip fix --code <report> [--only "<test title>"] [--max 3] [--apply]\n\nTewip only changes application code when you ask for it with --code, and only for failures it diagnosed as a real bug. Locator and wait fixes to tests are made by the GitHub Action, not here.');
+      const report = args.find((a, i) => !a.startsWith('--') && !['--only', '--max', '--suite'].includes(args[i - 1] ?? ''));
+      if (!report) throw new Error('usage: tewip fix --code <report.xml | reports-dir | blob-report-dir>');
+      process.env.TEWIP_LLM_CACHE ??= join(process.cwd(), '.tewip', 'llm-cache.jsonl');
+      const { runCodeFix } = await import('../engine/autofix/code-command.ts');
+      await runCodeFix({
+        root: process.cwd(),
+        report,
+        only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+        max: Math.max(1, Number(flag(args, 'max')) || 3),
+        apply: args.includes('--apply'),
+        suiteCommand: flag(args, 'suite'),
       });
       return;
     }

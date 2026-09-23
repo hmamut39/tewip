@@ -121,6 +121,7 @@ collects environment failures in one issue, and (optionally) opens a fix pull re
 | `tewip write` | Turns the plan's scenarios into real tests in your own framework, and keeps only the ones that pass repeatedly **and** fail when their check is broken on purpose | When you know what to test but not how to write it |
 | `tewip plan --issue PROJ-123` | Plans from the Jira ticket itself: its description and acceptance criteria | "Here's the story, what should we test?" |
 | `tewip jira plan.json --project PROJ` | Files the plan's scenarios as test-case tickets, linked to the story | Handing work to the team |
+| `tewip fix --code report.xml` | Opt-in: proposes the smallest change to application code for a real bug, and keeps it only if the failing test passes and the whole suite still passes | "It is a real bug and I want a starting patch" |
 | `tewip design <figma link> --url <page>` | Compares a Figma frame against the running page: the words the design specifies and the controls its layer names imply | "Did we build what was designed?" |
 | `tewip mcp` | Serves all of the above to your editor's AI assistant | Set up once |
 
@@ -185,8 +186,10 @@ job and kept in a GitHub issue, or can be asked for through an AI assistant.
 
 These are enforced in the code, not promises in a document:
 
-- It **never edits your application code**. It changes only test files, and only inside the folder
-  you allow.
+- It **never edits your application code** unless you run `tewip fix --code` yourself. Even then it
+  changes nothing it cannot prove: the failing test must pass and the whole suite must still pass,
+  or your file goes back exactly as it was. It will not edit tests, configuration, CI files,
+  lockfiles or migrations at all.
 - It **never merges anything**. Fixes are opened as a pull request for a person to review.
 - It **never keeps a test it has not proved**: a written test is kept only if it passed every run
   and failed when its main check was deliberately broken.

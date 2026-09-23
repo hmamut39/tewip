@@ -164,6 +164,27 @@ from them): 38 checks, **0 differences reported on pages that match their design
 injected drifts caught** - a renamed button, a dropped sentence, a region that stopped being marked
 up. No designer has judged the output yet, so the roadmap's own metric is still open.
 
+## Fix the code, but only when the tests prove it (Phase 12, new, opt-in)
+
+```bash
+tewip fix --code report.xml          # shows the patch; your files are left as they were
+tewip fix --code report.xml --apply  # leaves the proved change in your working tree
+```
+
+Tewip has refused to touch application code since day one. This is the one exception, and it only
+runs when you type `--code`. It takes a failure **it** diagnosed as a real bug (0.85 confidence or
+more), finds the file the failure points at, asks for the smallest change, and then proves it: the
+failing test must pass **and** the whole suite must still pass. It will not edit tests,
+configuration, CI files, lockfiles, migrations or anything with secrets in it, because a test going
+green after changing those proves nothing. If it cannot prove a change, it explains the bug instead
+and puts your file back byte for byte. It never commits and never merges.
+
+Measured by replaying **8 real bug fixes** from a public repository (unjs/ufo): the commit before
+each fix, with only that fix's tests, so the real bug reproduces. **4 of 8 got a change proved by
+the tests, 4 of 4 in the same file the developers changed, each a one-liner doing what the
+developers' own fix does. 0 wrong fixes were offered** - the other four were refused (three times
+the model wanted a 50-line rewrite, which the size rule threw away).
+
 ## Where it has been tried
 
 | Project | How | Result |

@@ -23,6 +23,8 @@ export interface SecretFinding {
   entropy: number;
   /** Set when the value looks like documentation, a fixture or an obvious placeholder. */
   placeholder: string | null;
+  /** Set when the file is a template or documentation, whatever the value looks like. */
+  template: boolean;
 }
 
 /** Shapes their own issuers publish. Each one is a credential, not a guess about one. */
@@ -71,14 +73,24 @@ const PLACEHOLDER_WORDS = /example|placeholder|dummy|sample|changeme|your[-_ ]?(
 /** Files whose whole purpose is to show the shape of a secret, not to hold one. */
 const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\\/]*\.(?:md|rst|txt|adoc)|[^\\/]*example[^\\/]*|[^\\/]*sample[^\\/]*)$/i;
 
-/** Why this match is probably not a live credential, or null when nothing says so. */
+/**
+ * Why this match is probably not a live credential, or null when nothing says so.
+ *
+ * The file's name is deliberately not enough on its own any more. A realistic AWS key placed in
+ * `src/config-sample.js` was dismissed as noise - "nothing: this is not a credential" - while the
+ * identical key in `src/settings.js` was reported as critical. A filename is the weakest evidence
+ * there is, and a key pasted into an example file by accident is one of the commonest ways
+ * credentials leak. That case is now shown as a template finding instead of being dismissed.
+ */
 export function looksPlanted(value: string, line: string, file: string): string | null {
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
   if (PLACEHOLDER_WORDS.test(line)) return 'the line around it says it is an example';
-  if (DOC_FILE.test(file)) return 'it is in a documentation or example file';
   if (/(.)\1{5,}/.test(value)) return 'the value repeats one character, so it is a stand-in';
   return null;
 }
+
+/** True when only the file's name suggests a template, whatever the value itself looks like. */
+export const inATemplate = (file: string): boolean => DOC_FILE.test(file);
 
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next', '.cache']);
 const BINARY = /\.(?:png|jpe?g|gif|webp|ico|svg|pdf|zip|gz|tar|exe|dll|so|dylib|woff2?|ttf|eot|mp4|mp3|wav|class|jar|pyc|lock)$/i;
@@ -157,6 +169,7 @@ export function scanSecrets(root: string, files = sourceFiles(root)): SecretFind
           evidence: redact(lines[line - 1] ?? '', value),
           entropy: Number(entropy.toFixed(2)),
           placeholder: looksPlanted(value, lines[line - 1] ?? '', rel),
+          template: inATemplate(rel),
         });
       }
     }

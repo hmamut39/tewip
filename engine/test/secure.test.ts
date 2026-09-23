@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { entropyOf, looksPlanted, redact, scanSecrets } from '../secure/secrets.ts';
+import { entropyOf, inATemplate, looksPlanted, redact, scanSecrets } from '../secure/secrets.ts';
 import { triageDependency, triageSecret, worstFirst, type SecurityItem } from '../secure/triage.ts';
 import type { DepFinding } from '../secure/deps.ts';
 
@@ -48,8 +48,19 @@ describe('finding a credential without printing it', () => {
   it('knows an example from a credential', () => {
     assert.match(looksPlanted('AKIAIOSFODNN7EXAMPLE', 'key = AKIAIOSFODNN7EXAMPLE', 'src/a.ts') ?? '', /example/);
     assert.match(looksPlanted('abc', 'AWS_KEY=your-key-here', 'src/a.ts') ?? '', /example/);
-    assert.match(looksPlanted('abc', 'x', 'docs/setup.md') ?? '', /documentation/);
     assert.equal(looksPlanted(FAKE_AWS, `key = "${FAKE_AWS}"`, 'src/config.ts'), null);
+  });
+
+  it('does not let a filename alone dismiss a credential', () => {
+    // A realistic key in `src/config-sample.js` used to be reported as noise - "this is not a
+    // credential" - while the same key in `src/settings.js` was critical. A key pasted into an
+    // example file by accident is one of the commonest ways credentials leak, so the file's name
+    // now marks it as a template, which is shown, instead of dismissing it.
+    assert.equal(looksPlanted(FAKE_AWS, `key = "${FAKE_AWS}"`, 'src/config-sample.js'), null, 'the value says nothing about being an example');
+    assert.equal(inATemplate('src/config-sample.js'), true);
+    assert.equal(inATemplate('.env.example'), true);
+    assert.equal(inATemplate('docs/setup.md'), true);
+    assert.equal(inATemplate('src/settings.js'), false);
   });
 
   it('measures randomness, so a stand-in is not mistaken for a key', () => {

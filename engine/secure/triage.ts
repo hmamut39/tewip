@@ -83,6 +83,18 @@ export function triageSecret(finding: SecretFinding, root: string, accepted: Set
   if (finding.placeholder) {
     return { ...base, verdict: 'noise', severity: 'low', why: `${finding.placeholder}: ${finding.evidence}`, next: 'nothing: this is not a credential' };
   }
+  if (finding.template) {
+    // Only the file's name says this is a template; the value itself looks like a real credential.
+    // Dismissing it would hide the commonest accident there is - a working key pasted into an
+    // example file - so it is shown, below the ones that need acting on now.
+    return {
+      ...base,
+      verdict: 'not-reachable',
+      severity: 'medium',
+      why: `${finding.evidence} - the file is a template or documentation, but the value itself does not say it is an example`,
+      next: 'check whether this was ever a working credential; if it was, rotate it and replace it here with an obvious placeholder',
+    };
+  }
   const tracked = isTracked(root, finding.file);
   if (!tracked) {
     return {

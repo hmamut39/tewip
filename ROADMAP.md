@@ -466,6 +466,24 @@ Go code and rule identifiers that sit in the same files.
   are not credentials, a truncated PyPI prefix is not a sample, and a Stripe **test** key is not a
   risk.
 
+**Precision on real code, and a false negative that mattered** (2026-09-23). The recall number
+above came from a labelled corpus, but the look-alike set was only five, so how often the scan cries
+wolf on ordinary code was untested. It was run on five real public repositories - croner, sinatra,
+piscina, humanize and a PHP library - and reported **nothing at all** on any of them. To be sure
+that silence meant something rather than nothing, credentials were planted: it found them, and
+correctly ignored one planted inside `node_modules`.
+
+That test exposed the opposite fault, which is worse in a security tool. A realistic AWS key in
+`src/config-sample.js` was dismissed as **noise**, "nothing: this is not a credential", while the
+identical key in `src/settings.js` was reported as critical. The filename alone decided it - and a
+working key pasted into an example file is one of the commonest ways credentials leak.
+
+A filename is now the weakest evidence there is. Only the **value** or the line around it can make
+something noise; a credible value in a template or documentation file is reported as *real, but not
+reachable here*, at medium severity, with "check whether this was ever a working credential; if it
+was, rotate it". Amazon's own `AKIAIOSFODNN7EXAMPLE` in the same file stays noise, because the value
+says so itself. The five real repositories still report nothing.
+
 **The baseline web check** (`tewip secure --url http://localhost:3000`) was added the same day. It
 asks for the page the way a browser does and reports what the response verifiably shows: missing
 Content-Security-Policy, X-Content-Type-Options or Referrer-Policy, a page that can be framed, a

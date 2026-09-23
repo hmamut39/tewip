@@ -27,7 +27,7 @@ Output: root cause classification + confidence + evidence for each failure; auto
 ### Phase 1: Collection Layer (DONE)
 Custom reporter writes failure records to JSONL; history script aggregates failure rates and flags SUSPECTED_FLAKY.
 
-### Phase 2: Rule-Based Diagnosis Layer (BUILT — coverage target missed on synthetic data: 43.5% vs 50%)
+### Phase 2: Rule-Based Diagnosis Layer (BUILT — target met on real data: 77.4% coverage at 98.4% correct; 43.5% was the synthetic figure)
 Create an engine/ directory with a purely deterministic rule engine. Input: one failure record + that test's history. Output: one of the five categories + confidence score + evidence explanation.
 
 Rules must include at minimum:
@@ -40,6 +40,31 @@ Rules must include at minimum:
 Anything the rules cannot decide is marked UNKNOWN with confidence 0 and left for Phase 3.
 
 Phase metric: run against all collected history and print the coverage ratio (share of non-UNKNOWN classifications). Target ≥ 50%.
+
+Status (2026-09-23): **met, and measured the way the metric says - against all collected history,
+not the synthetic set.** The 43.5% in the old heading came from synthetic failures. On 3,556 real
+collected failures across eleven datasets from six public projects the rules decide **75.1%** on
+their own; on the six datasets that also carry labels it is 77.4%.
+
+Coverage on its own would be a number worth nothing, so here is the other half: on every labelled
+case the rules decided, they were right **1,979 times out of 2,012 = 98.4%** (Supabase 100%,
+August 99.4%, fresh 98.3%, dev 97.8%, August-2 96.7%, held-out 93.1%).
+
+| | share | accuracy |
+| --- | --- | --- |
+| Decided by rules, no model call | 77.4% | 98.4% |
+| Sent to the model | 22.6% | see Phase 3 |
+
+Almost three quarters of that work is done by five rules: `timing-retry-pass` (71.3% of all rule
+decisions), `env-network` (14.9%), `real-bug-assertion` (5.4%), `timing-flaky` (3.1%) and
+`env-server-error` (1.9%).
+
+**What it costs, measured rather than estimated.** A failure the rules decide costs nothing at all.
+Three real uncached calls on held-out failures billed 3,624 prompt and 499 completion tokens each,
+$0.00496 a call at gpt-5.4-mini's published price - so triaging **1,000 real failures costs about
+$1.12**, and a real week costs less because repeated failures are answered from cache. (A first
+estimate of $0.89 was made by counting characters; the real calls showed it was low, chiefly
+because reasoning tokens are billed as output. The measured number is the one kept.)
 
 ### Phase 3: LLM Diagnosis Layer (BUILT — held-out real accuracy 83.2%, see caveats in eval/README.md)
 > Held-out set: 155 real WordPress Gutenberg CI failures (Sep 4–7 2026), labelled by Claude from CI evidence, never used for tuning. 83.2% overall; but on the cases whose labels do not share a signal with the rules, accuracy is 10/36 (recurring cross-branch flakes 0/22, PR-caused REAL_BUG 10/14). TEST_DATA and LOCATOR_DRIFT are not yet measured on real data.

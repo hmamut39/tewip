@@ -16,6 +16,22 @@ Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub re
 
 **Status: phases 1 to 14 are built; the two auto-fix phases (5 and 8) are the ones still in progress.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
 
+## What it costs
+
+Most failures never reach a model. On 3,556 real CI failures from six public projects, the
+deterministic rules answered **75.1%** on their own - and on the labelled ones they answered
+correctly **1,979 times out of 2,012 (98.4%)**. A rule-answered failure costs nothing, explains
+itself, and gives the same answer every time.
+
+Only the remaining quarter is sent to a model, so triaging **1,000 real failures costs about
+$1.12** at gpt-5.4-mini's published price. That is measured, not estimated: three real uncached
+calls on held-out failures billed 3,624 prompt and 499 completion tokens each. A real week costs
+less, because a failure that repeats is answered from cache, and a failure someone has corrected
+never goes to the model again.
+
+Tewip prints what every command costs, caps its own spend, and works with no key at all - the rules
+run on their own and everything they cannot settle is left as UNKNOWN rather than guessed.
+
 ## Use it in your project
 
 **Giving it to your team (or another company): [TEAM-GUIDE.md](TEAM-GUIDE.md)** — what to install, what each role uses it for, and what it never does.

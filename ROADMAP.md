@@ -255,6 +255,37 @@ is named, not edited blindly.
 Selenium's own way of printing a selector (`css selector=#submit-btn`, `id=submit-btn`) is read, and
 the replacement is written back in the form the test actually uses.
 
+### Writing feature code (`tewip build`) (BUILT 2026-09-23, at the owner's request)
+
+The promise that replaces "it never touches application code" is harder and better: **it cannot
+change your code without showing you it works.** The order is the product:
+
+1. Tewip writes the test for the feature **first**, and runs it. **It must fail.** A test that
+   passes before the feature exists is testing nothing, and this single check is what stops a model
+   from writing code that agrees with itself.
+2. It reads what is already failing in the project, so the feature is never blamed for it.
+3. It writes the smallest code that makes that test pass, in files it is allowed to touch - never a
+   test, never configuration, never a lockfile, never anything outside the project.
+4. It keeps the work only when the new test passes **and** nothing that was passing has started to
+   fail. Otherwise every file goes back byte for byte, including the test it wrote and any file it
+   created. Nothing is ever committed.
+
+Tried end to end on two real public projects, in two languages:
+
+| Project | Feature asked for | Result |
+|---|---|---|
+| unjs/ufo (TypeScript, Vitest) | `withoutTrailingSlash` should also trim the path of a full URL | **Built**: 4 lines in src/utils.ts, its own test passing, the whole suite still green. 2 model calls, $0.18 |
+| python-humanize (Python, pytest) | `naturalsize` should take a `sep` argument | **Built**: 2 lines in src/humanize/filesize.py, suite still green. 2 model calls, $0.10 |
+
+And the refusals, which matter more. Asked for something ufo already does (`joinURL('a','b')`), the
+test passed immediately and Tewip kept nothing, saying so after one model call: *"the test passes
+without any new code, so it is not testing the feature."* Asked for the Python feature while its
+own file-finding was broken, it answered *"the source for naturalsize is not included... I cannot
+make a verified edit without guessing"* rather than inventing something - which is exactly the
+behaviour that makes this safe, and which also exposed the bug: the files handed to the model came
+from similarity alone, so `number.py` and `time.py` arrived instead of `filesize.py`. The file that
+**defines** what the feature names is now searched for and sent first.
+
 ### The risk review (`tewip review`) (BUILT 2026-09-23 — coverage measured on 16 real commits)
 
 A coding agent can read a diff. What it cannot say is that the two tests covering your change have

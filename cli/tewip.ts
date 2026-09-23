@@ -69,6 +69,11 @@ Usage:
                                     the GitLab merge request, tells Slack or Teams only when a
                                     failure needs a person, and with --gate fails the build only on
                                     those failures.
+  tewip build "<what it should do>" [--dry-run] [--repairs 2] [--out feature.patch]
+                                    Writes a feature, test first: the test must fail without the
+                                    code and pass with it, and every test that was passing must
+                                    still pass - otherwise everything goes back byte for byte.
+                                    Nothing is committed.
   tewip review [--diff main...HEAD] [--out review.md]
                                     Before anyone reads the diff: which tests cover this change,
                                     which of them have flaked before, what has gone wrong in these
@@ -249,6 +254,24 @@ async function main(): Promise<void> {
       });
       // The gate fails the build only for failures that are not known flaky or environment noise.
       if (args.includes('--gate') && result.blocking > 0) process.exitCode = 1;
+      return;
+    }
+    case 'build': {
+      const feature = args.filter((a, i) => !a.startsWith('--') && !['--repairs', '--out', '--max-lines'].includes(args[i - 1] ?? '')).join(' ').trim();
+      if (!feature) throw new Error('usage: tewip build "<what the feature should do>" [--dry-run] [--repairs 2] [--out feature.patch]');
+      const { runBuild, renderBuild } = await import('../engine/build/build-command.ts');
+      const dryRun = args.includes('--dry-run');
+      const result = await runBuild({
+        feature,
+        root: process.cwd(),
+        dryRun,
+        repairs: flag(args, 'repairs') === undefined ? 2 : Math.max(0, Number(flag(args, 'repairs')) || 0),
+        maxLines: flag(args, 'max-lines') ? Number(flag(args, 'max-lines')) : undefined,
+        out: flag(args, 'out'),
+      });
+      console.log(`
+${renderBuild(result, feature, dryRun)}`);
+      if (result.status !== 'built') process.exitCode = 1;
       return;
     }
     case 'review': {

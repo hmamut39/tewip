@@ -181,6 +181,27 @@ Each reader was checked against real reports published in public repositories, w
 defects were found before release - a Robot timestamp that is not a date, k6's numbers living under
 `values`, and a JMeter line that read "mostly 200" when an assertion had failed.
 
+## Build a feature, test first (new)
+
+```bash
+tewip build "naturalsize should take a sep argument that goes between the number and the unit"
+tewip build "..." --dry-run     # prove it, show the patch, leave nothing on disk
+```
+
+Tewip writes the **test first** and runs it. **If that test passes, it stops and keeps nothing** —
+a test that passes before the feature exists is testing nothing. Then it writes the smallest code
+that makes the test pass, and keeps the work only if the new test passes *and* nothing that was
+passing has started to fail. Otherwise every file goes back byte for byte, including the test it
+wrote. Nothing is ever committed.
+
+Tried on two real public projects: it added a trailing-slash rule to **unjs/ufo** (4 lines,
+TypeScript, $0.18) and a `sep` argument to **python-humanize** (2 lines, Python, $0.10), each with
+its own failing-then-passing test and the project's whole suite still green. Asked for something
+that already worked, it stopped after one model call and kept nothing.
+
+The old promise was *"it can't touch your code"*. The new one is *"it can't change your code without
+showing you it works"*.
+
 ## Before anyone reads the diff (new)
 
 ```bash

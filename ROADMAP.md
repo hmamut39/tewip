@@ -222,13 +222,17 @@ merely contain one, and a control's name has to be short enough to be a label â€
 tests.
 
 Measured end to end on four real design/page pairs (paulasilvatech/Figma-to-Code-Dev: a Figma export
-and the page built from that export, in the same repository):
+and the page built from that export, in the same repository), and widened on 2026-09-23 to ask the
+harder question as well - not only whether drift is caught, but whether anything else is reported:
 
 - 38 checks across the four pages, and **0 differences reported** on the untouched pages. One false
-  positive was found during this run and fixed: a frame called "Section Header" was read as the
+  positive was found during the first run and fixed: a frame called "Section Header" was read as the
   page's banner, when it is the heading of a section.
-- **8 of 8 injected drifts caught**, each named correctly: a renamed button, a dropped phrase, and a
-  region that stopped being marked up were all reported as "the design says X, the page says Y".
+- **11 of 11 real drifts caught**, each named correctly: a renamed control, a dropped phrase, a word
+  replaced inside a sentence, and a region that stopped being marked up.
+- **5 of 5 harmless changes left alone**: a label shouted in capitals, extra spaces and punctuation,
+  a button implemented as a link, and a page whose sections were reordered with every word kept. A
+  checker that reports those is worse than no checker, because it gets switched off.
 
 Metric caveat, stated plainly: the phase metric asks what share of reported drifts a designer or
 developer agrees with, and no designer has judged these. What this measurement shows is narrower â€”

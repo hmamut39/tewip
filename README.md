@@ -160,9 +160,11 @@ pixels, colours or spacing, because a design tool and a browser do not measure t
 No model is called, so it costs nothing and answers the same way every time.
 
 Measured on four real design/page pairs (a public repository's Figma exports and the pages built
-from them): 38 checks, **0 differences reported on pages that match their design**, and **8 of 8
-injected drifts caught** - a renamed button, a dropped sentence, a region that stopped being marked
-up. No designer has judged the output yet, so the roadmap's own metric is still open.
+from them): 38 checks, **0 differences reported on pages that match their design**, **11 of 11 real
+drifts caught** (a renamed control, a dropped sentence, a word swapped inside a sentence, a region
+that lost its markup) and **5 of 5 harmless changes ignored** (capitals, extra spaces, a button
+implemented as a link, reordered sections). No designer has judged the output yet, so the roadmap's
+own metric is still open.
 
 ## Epics, stories and acceptance criteria (Phase 14, new)
 

@@ -1113,6 +1113,80 @@ Measured on three real projects (unjs/ufo, python-humanize, and Tewip itself), w
 Not measured: the other half of the metric - the share of acceptance criteria that survive review
 unchanged - which needs real reviewers on a real backlog.
 
+## Phases 15 to 19: the verification layer (planned 2026-09-26)
+
+> Chosen from what the market is actually short of, not from what is fashionable. Everyone
+> generates tests now; the reported problem is that nobody trusts the output. 88% of developers say
+> they are not confident deploying AI-generated code and 29% of teams have rolled back a release
+> because of an AI error, and researchers have named the cause the **verification gap**: the model
+> writes the code, writes the tests that check the code, and in one documented case fabricated
+> passing results to hide what it had done. Every rule Tewip already keeps - nothing kept unless
+> running it proves it, refuse rather than guess, every claim carries evidence a person can check,
+> always say what was *not* checked - is an answer to exactly that. So the strategy is not to chase
+> generation. It is to be the layer that proves.
+>
+> The owner asked for this order on 2026-09-26. Claude's one disagreement is recorded: five real
+> users would teach more than phases 17 to 19 together, and publishing to Open VSX should not wait
+> for any of this.
+
+### Phase 15: Proof-Carrying Quality (`tewip attest`)
+
+The evidence already exists but is buried in reports. Phase 15 makes it a single artifact attached
+to a build: what was checked, how each thing was checked, what passed, what was **refused and why**,
+and what was not checked at all. Signed, machine-readable, and readable by a person who has never
+opened CI. Nobody else can ship this, because an attestation is only worth anything from a tool that
+refuses honestly, and refusing honestly is the part competitors skip.
+
+Phase metric: a release decision taken from the bundle alone, with nobody opening the CI logs - and
+every claim in a bundle traceable to the run that produced it. Nothing may appear in a bundle that
+Tewip did not verify itself.
+
+### Phase 16: The Production Loop (incident to proved test)
+
+Tewip stops at CI, which is half a lifecycle. The pattern now standard in agent observability is
+that a production trace failing an online scorer becomes an evaluation case, so the suite grows from
+real behaviour. The same shape applies to software: **a production incident becomes a failing test,
+proved to fail for the incident's reason, added to the suite, and the fix proved against it.** Two
+connectors in (Sentry, Datadog, OpenTelemetry) and the existing verified `write` and `fix` out.
+
+Phase metric: on real incidents, the share for which Tewip produces a test that fails before the fix
+and passes after it - with a false-reproduction rate near zero, since a test that passes on the
+broken code is worse than none.
+
+### Phase 17: Retrieval Before Generation (narrow RAG)
+
+The rule that made the diagnosis layer cheap and trustworthy - rules before models - becomes
+retrieval before generation. Tewip already owns the corpus worth having: its own measured history of
+real failures, diagnoses, corrections and proved fixes. That gets indexed first, so it can answer
+"has this happened here before, and what did we decide?" with citations. Only then the project's own
+Jira, runbooks and documentation.
+
+Phase metric: the share of answers that cite a real prior record, measured against the question
+being answerable at all - and the cost per answer must stay within the current $1.12 per 1,000
+failures. A vector database everywhere that loses that economics is a failure, not a feature.
+
+### Phase 18: The Thread from Business to Release
+
+The pieces exist and are not joined: `spec`, `plan`, `jira`, release readiness. Phase 18 is the
+thread - requirement, specification, scenario, test, run, defect, release - so the question an
+executive actually asks has an answer with evidence: *is this requirement covered, and is it passing
+right now?* This is mostly joining what is built, and it is what makes Tewip an SDLC and STLC
+product rather than a testing tool.
+
+Phase metric: for a real backlog, the share of requirements Tewip can trace end to end, and the
+share of its "covered" claims that survive a reviewer checking them.
+
+### Phase 19: Goal-Driven Operation
+
+Tewip is verbs a person calls. Phase 19 is a goal - "keep the checkout flow green this sprint" -
+with Tewip choosing its own next action. The refusal discipline is not relaxed for this phase; it is
+the reason the phase is safe to attempt at all. An agent that acts without proof is the thing 29% of
+teams rolled back.
+
+Phase metric: over a sprint, actions taken without a person asking, each with the evidence that
+justified it, and zero changes kept that were not proved. Autonomy is only worth counting when the
+false-action rate is zero.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

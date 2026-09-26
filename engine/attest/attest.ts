@@ -13,6 +13,8 @@
 // The rule this file keeps: nothing enters a bundle that Tewip did not verify itself. Every claim
 // names the run it came from, and anything undecided is stated as undecided rather than dropped.
 import type { TriageRecord, RunSummary } from '../../reporters/types.ts';
+import { readFileSync } from 'node:fs';
+import { seal, type Seal } from './seal.ts';
 
 export interface AttestedClaim {
   /** What is being claimed, in one line. */
@@ -50,6 +52,8 @@ export interface Attestation {
   refusals: Refusal[];
   /** Tewip's version and rule-engine version, so a bundle can be reproduced. */
   producedBy: { tool: string; engine: string; at: string };
+  /** A digest of the content, and a signature when a key was available. */
+  seal?: Seal;
 }
 
 const sourceOf = (record: TriageRecord): string => String((record.diagnosis as { source?: string } | undefined)?.source ?? '');
@@ -96,7 +100,7 @@ export function attestRun(
     });
   }
 
-  return {
+  const bundle = {
     project,
     commit: run.gitSha ?? '',
     runId: run.runId,
@@ -110,6 +114,20 @@ export function attestRun(
     refusals,
     producedBy: { tool, engine, at: new Date().toISOString() },
   };
+  // Sealed last, over everything above: the digest is of the content, never of itself.
+  return { ...bundle, seal: seal(bundle, signingKey()) };
+}
+
+/** The Ed25519 private key to sign with, from TEWIP_ATTEST_KEY: a PEM, or a path to one. */
+function signingKey(): string | undefined {
+  const given = process.env.TEWIP_ATTEST_KEY?.trim();
+  if (!given) return undefined;
+  if (given.includes('BEGIN')) return given;
+  try {
+    return readFileSync(given, 'utf8');
+  } catch (error) {
+    throw new Error(`TEWIP_ATTEST_KEY points at ${given}, which could not be read: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /** The bundle as a person reads it. The refusals are not hidden at the bottom; they are the point. */
@@ -158,6 +176,11 @@ export function renderAttestation(a: Attestation): string {
     '---',
     '',
     `Produced by ${a.producedBy.tool} (${a.producedBy.engine}) at ${a.producedBy.at.slice(0, 19).replace('T', ' ')} UTC.`,
+    a.seal?.signature
+      ? `Signed (${a.seal.algorithm}); digest ${a.seal.digest.slice(0, 16)}…. Check it with \`tewip attest --verify <bundle.json> --key <public.pem>\`.`
+      : a.seal
+        ? `Digest ${a.seal.digest.slice(0, 16)}…, which is not a signature: it shows the bundle is undamaged, not that nobody edited it. Set TEWIP_ATTEST_KEY to sign.`
+        : '',
     'Every claim above names the run it came from and the layer that decided it. This is a statement',
     'about the checks listed under "what was checked" and nothing else.',
   );

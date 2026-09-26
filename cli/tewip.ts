@@ -204,6 +204,14 @@ async function main(): Promise<void> {
       return;
     }
     case 'attest': {
+      const verify = flag(args, 'verify');
+      if (verify) {
+        const { verifyAttestation } = await import('../engine/attest/attest-command.ts');
+        const { ok, report } = verifyAttestation(verify, flag(args, 'key'));
+        console.log(report);
+        if (!ok) process.exitCode = 1;
+        return;
+      }
       const { runAttest } = await import('../engine/attest/attest-command.ts');
       runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });
       return;

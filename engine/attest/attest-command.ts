@@ -1,10 +1,34 @@
 // `tewip attest`: the evidence for one run, as an artifact a build can carry.
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { ENGINE_VERSION } from '../engine.ts';
 import { attestRun, renderAttestation, type Attestation } from './attest.ts';
+import { check } from './seal.ts';
+
+/**
+ * Checks a bundle somebody was handed. It reports what the check establishes and, just as
+ * importantly, what it does not: a digest that matches proves the file is undamaged, and only a
+ * signature checked against a key says who made it.
+ */
+export function verifyAttestation(file: string, keyFile?: string): { ok: boolean; report: string } {
+  const bundle = JSON.parse(readFileSync(resolve(file), 'utf8')) as Record<string, unknown>;
+  const publicKey = keyFile ? readFileSync(resolve(keyFile), 'utf8') : undefined;
+  const checked = check(bundle, publicKey);
+  const ok = checked.contentMatches && checked.signature !== 'invalid';
+  const report = [
+    `# ${ok ? 'Checked' : 'Do not trust this bundle'}: ${file.split(/[\/]/).pop()}`,
+    '',
+    `Content matches its digest: ${checked.contentMatches ? 'yes' : 'NO'}`,
+    `Signature: ${checked.signature.replace(/-/g, ' ')}`,
+    '',
+    checked.says + '.',
+    '',
+    ...(checked.signature === 'no-key-given' ? ['Pass `--key <public.pem>` to check the signature itself.'] : []),
+  ].join(String.fromCharCode(10));
+  return { ok, report };
+}
 
 export interface AttestCommand {
   root: string;

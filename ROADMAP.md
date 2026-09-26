@@ -1133,7 +1133,7 @@ unchanged - which needs real reviewers on a real backlog.
 
 The evidence already exists but is buried in reports. Phase 15 makes it a single artifact attached
 to a build: what was checked, how each thing was checked, what passed, what was **refused and why**,
-and what was not checked at all. Signed, machine-readable, and readable by a person who has never
+and what was not checked at all. Sealed, machine-readable, and readable by a person who has never
 opened CI. Nobody else can ship this, because an attestation is only worth anything from a tool that
 refuses honestly, and refusing honestly is the part competitors skip.
 
@@ -1158,6 +1158,29 @@ Proved on a real third-party project rather than a fixture: humanize's own pytes
 bundle reads "744 test(s) attempted, 15 failed", lists the 15 as ENV with the fixture evidence and
 the rule that decided them, and states plainly that no security scan, no passing test and nothing
 uncovered by any test is included.
+
+**Sealed, and precise about what that is worth** (2026-09-26). The phase said "signed" and the
+first implementation signed nothing, which is exactly the overclaim this project exists not to
+make. Every bundle now carries a **digest**, and carries a **signature** when `TEWIP_ATTEST_KEY`
+holds an ed25519 private key. `tewip attest --verify <bundle.json> [--key <public.pem>]` checks one
+and exits non-zero when it should not be trusted, so a pipeline can gate on it.
+
+The two are deliberately never conflated, in the type, the report and the verifier:
+
+- a **digest** says the content matches the fingerprint recorded inside it - which anyone who edits
+  the bundle can recompute, so it shows the file is undamaged, **not** that nobody edited it;
+- a **signature** says the holder of a key produced this exact content, and that is only available
+  when a key exists.
+
+A bundle with a signature and no key to check it against reports "the signature was not checked"
+rather than anything warmer. A key that cannot be used stops the run instead of quietly shipping an
+unsigned bundle.
+
+Proved by tampering: a real bundle of 15 claims was signed, verified valid, then had one claim
+removed - the edit someone hiding a failure would make - and the verifier answered "Do not trust
+this bundle: it has been changed since it was written", exit code 1. The first attempt at that test
+was a no-op, because the bundle had no refusals to delete and the "tampering" changed nothing; that
+is recorded because a test that cannot fail is worse than no test.
 
 **In CI from 2026-09-26.** Every run of the Action now writes `attestation.md` and
 `attestation.json` beside the role views, into the artifact it already uploads: no new step, no

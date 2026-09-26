@@ -125,10 +125,14 @@ Usage:
                                     it fails for the incident's own reason. A test that passes, or
                                     fails its own way, is reported and thrown away.
   tewip attest [--run <id>] [--out attestation.md] [--json bundle.json]
+  tewip attest --verify <bundle.json> [--key <public.pem>]
                                     What Tewip checked for a build, as one artifact: the claims with
                                     their evidence and which layer decided each, what it refused to
                                     decide and why, and what it did not check at all. Nothing enters
-                                    it that Tewip did not verify itself. No model, no cost.
+                                    it that Tewip did not verify itself. Every bundle carries a
+                                    digest; set TEWIP_ATTEST_KEY to an ed25519 private key to sign
+                                    it too. `--verify` says what it checked and what that does not
+                                    establish - a digest means undamaged, not unedited. No cost.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 

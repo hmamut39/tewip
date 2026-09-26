@@ -1383,6 +1383,51 @@ Not measured: the phase metric, which is a sprint of real use. What can be said 
 action rate is zero by construction - `pursue` has never changed a file - and that the policy is
 deterministic, which a test asserts by deciding the same state five times.
 
+### Phase 21: Carrying It Out
+
+Phase 19 decided and stopped. Phase 21 lets `tewip pursue --act` do the thing it chose. This is the
+first place Tewip acts because it decided to rather than because somebody typed a verb, so nearly
+all of it is refusals.
+
+Phase metric: over a sprint of real use, actions taken without being asked, each with the evidence
+that justified it, and zero kept changes that were not proved.
+
+Status (2026-09-26): **built**, as `--act` on `tewip pursue`.
+
+Five rules hold it in place:
+
+1. **It never does the work itself.** Every action it may take is an existing command that already
+   proves what it changes - `write` keeps a test only when it passes and also fails when broken.
+   Nothing new is trusted here; the measured gates stay in the path.
+2. **Only an allowlist runs.** Two things are on it: write a missing test, and attest a green goal.
+   Everything else is refused by name, so widening autonomy later is an edit somebody makes on
+   purpose rather than a behaviour that emerges. A real bug is deliberately not actionable - Tewip
+   will not work around one.
+3. **One action, then stop.** There is no loop that runs until it decides to stop.
+4. **Everything is written down**, to `.tewip/actions.jsonl`: what it did, what it refused, why, on
+   which run, and what came of it. "The agent changed something" is never a mystery.
+5. **It will not repeat itself.** The same action on the same target is refused until a new run
+   gives it new evidence, which is what stops a scheduled job grinding at an impossible task.
+
+Verified end to end on a real report rather than fixtures: a failing checkout total was called
+REAL_BUG by the model at 0.99, and `--act` refused it in those words and logged the refusal; the
+same goal, once green, had its attestation actually produced; and running it again over the same
+report refused to repeat the work and said when it had last tried.
+
+One real defect came out of building it, and it is worth recording because it is the exact failure
+mode this phase is about. The first version re-entered Tewip with `process.argv[1]`, which is the
+command line only when a person typed it. Under the test runner `argv[1]` is the test file, so
+acting ran the test file, which acted, which ran it again: a fork bomb that froze the machine twice
+before the cause was clear. What re-enters Tewip is now resolved from the build's own location, and
+if it cannot be found nothing is carried out at all. A test asserts the entry point is the command
+line and never a test file. **An agent allowed to start processes needs to know exactly which
+process it is starting** - the blast radius of a wrong answer is not a bad report, it is the
+machine.
+
+Not measured: the phase metric, which needs a sprint of somebody's real use. What can be said today
+is that no action outside the allowlist has ever run, and that every action and refusal is on disk
+to be checked.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

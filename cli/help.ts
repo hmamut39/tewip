@@ -105,8 +105,11 @@ Usage:
                                     green" - and it says what it would do next and why, from what
                                     it can actually see. The order is fixed and written down: a
                                     real bug first, then the environment, then flakiness, then a
-                                    coverage gap. It decides; it does not act unless you ask, and
-                                    even then only through the gates that prove a change.
+                                    coverage gap. It decides; it does not act unless you ask. With
+                                    --act it carries out the two safe ones - writing a missing test,
+                                    or attesting a green goal - by running the command that already
+                                    proves them. It will not touch a real bug, and it writes what it
+                                    did or refused to .tewip/actions.jsonl.
   tewip trace [--only "<ticket or title>"] [--out trace.md]
                                     Is this requirement covered, and is it passing right now? Joins
                                     the plans Tewip wrote to the tests that cover them and the runs

@@ -4,10 +4,12 @@
 // it chose, and only through the gates that already prove a change before keeping it. There is no
 // mode in which it loops unattended: an agent that keeps going until it decides to stop is the
 // thing teams roll back, and nothing here needs it.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
+import { alreadyTried, cannotAct, planFor, type ActionRecord } from './act.ts';
 import { decide, type Decision, type Observed } from './policy.ts';
 
 export interface PursueCommand {
@@ -65,6 +67,7 @@ export function observe(root: string, goal: string, only?: string): Observed {
     uncovered: uncoveredScenarios(root, wanted, attempted),
     passing: attempted.length - failing.length,
     noHistory: runs.length === 0,
+    runId: newest?.runId ?? '',
   };
 }
 
@@ -122,15 +125,105 @@ export function renderPursuit(goal: string, seen: Observed, decision: Decision, 
   return lines.join('\n');
 }
 
+/** The audit file the team owns: every action Tewip took on its own, and every one it refused. */
+const auditPath = (root: string) => join(root, '.tewip', 'actions.jsonl');
+
+export function actionsTaken(root: string): ActionRecord[] {
+  try {
+    return readFileSync(auditPath(root), 'utf8')
+      .split(String.fromCharCode(10))
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as ActionRecord);
+  } catch {
+    return [];
+  }
+}
+
+function record(root: string, entry: ActionRecord): void {
+  mkdirSync(dirname(auditPath(root)), { recursive: true });
+  appendFileSync(auditPath(root), JSON.stringify(entry) + String.fromCharCode(10), 'utf8');
+}
+
+/**
+ * The Tewip command line belonging to *this* build, found from this file rather than from how the
+ * process was started.
+ *
+ * This is not a detail. The first version used process.argv[1], which is the command line only when
+ * a person typed it: under a test runner argv[1] is the test file, so acting re-ran the test file,
+ * which acted again, which re-ran it - a fork bomb that froze the machine it was written on. What
+ * re-enters Tewip has to be Tewip, established here, or nothing is carried out at all.
+ */
+export function cliEntry(): string | null {
+  const here = import.meta.dirname;
+  for (const candidate of [join(here, '..', '..', 'cli', 'tewip.ts'), join(here, '..', '..', 'cli', 'tewip.js')]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Carries out the one action that was decided, by running the command that already proves it.
+ * Tewip does not do the work here; it asks the gate to.
+ */
+function carryOut(cmd: PursueCommand, decision: Decision, observed: Observed): string {
+  const plan = planFor(decision);
+  const runId = observed.runId ?? '';
+  const note = (outcome: ActionRecord['outcome'], detail: string, target = plan?.target ?? ''): ActionRecord => ({
+    at: new Date().toISOString(),
+    goal: cmd.goal,
+    act: decision.act,
+    target,
+    command: plan ? 'tewip ' + plan.command.join(' ') : '',
+    runId,
+    outcome,
+    detail,
+  });
+
+  if (!plan) {
+    const why = cannotAct[decision.act] || 'this is not something Tewip carries out on its own';
+    record(cmd.root, note('refused', why, decision.act));
+    return 'Not carried out: ' + why + '.';
+  }
+
+  const tried = alreadyTried(actionsTaken(cmd.root), decision.act, plan.target, runId);
+  if (tried) {
+    record(cmd.root, note('refused', 'already attempted at ' + tried.at + ', on the same evidence'));
+    return ['Not carried out: Tewip already attempted this at ' + tried.at.slice(0, 19).replace('T', ' ') + ' UTC, and nothing has happened since that would make the outcome different.', '', 'That attempt ' + (tried.outcome === 'done' ? 'succeeded' : 'did not finish') + ': ' + tried.detail, '', 'Run ' + tried.command + ' yourself if you want it tried again.'].join(String.fromCharCode(10));
+  }
+
+  // Re-enter this same build, so an installed Tewip runs the installed gates and a checkout runs
+  // the checkout's - never a different version from the one that decided, and never whatever
+  // happens to have started this process.
+  const entry = cliEntry();
+  if (!entry) {
+    record(cmd.root, note('refused', 'the Tewip command line could not be found next to this build, so there is nothing safe to re-enter'));
+    return 'Not carried out: Tewip could not find its own command line beside this build, and it will not guess at one. Run ' + 'tewip ' + plan.command.join(' ') + ' yourself.';
+  }
+  const ran = spawnSync(process.execPath, [entry, ...plan.command], { cwd: cmd.root, encoding: 'utf8', timeout: 20 * 60_000, maxBuffer: 32 * 1024 * 1024 });
+  const output = ((ran.stdout ?? '') + (ran.stderr ?? '')).trim();
+  const ok = ran.status === 0;
+  // What the audit file remembers: the headline of a success, the tail of a failure. A failure's
+  // reason is at the end of what it printed; a success's is at the start.
+  const lines = output.split(String.fromCharCode(10)).map((l) => l.trim()).filter(Boolean);
+  const detail = (ok ? lines[0] ?? 'it printed nothing' : lines.slice(-3).join(' ')).slice(0, 300);
+  record(cmd.root, note(ok ? 'done' : 'failed', detail));
+  return [
+    ok ? 'Carried out: tewip ' + plan.command.join(' ') : 'Tried and did not finish: tewip ' + plan.command.join(' '),
+    '',
+    output.slice(-2000),
+    '',
+    ok
+      ? 'Anything kept by that command was proved by it; anything unproved was thrown away. Written to .tewip/actions.jsonl.'
+      : 'Nothing was kept. Written to .tewip/actions.jsonl.',
+  ].join(String.fromCharCode(10));
+}
+
 export function runPursue(cmd: PursueCommand): { decision: Decision; observed: Observed } {
   const observed = observe(cmd.root, cmd.goal, cmd.name);
   const decision = decide(cmd.goal, observed);
   const report = renderPursuit(cmd.goal, observed, decision, Boolean(cmd.act));
   console.log(report);
-  if (cmd.act && decision.changesFiles) {
-    console.error('\n`--act` is accepted, but Tewip carries out a change only through the command that proves it.');
-    console.error(`Run: ${decision.next}`);
-  }
+  if (cmd.act) console.log(String.fromCharCode(10) + '---' + String.fromCharCode(10) + carryOut(cmd, decision, observed));
   if (cmd.out) {
     mkdirSync(dirname(resolve(cmd.out)), { recursive: true });
     writeFileSync(resolve(cmd.out), `${report}\n`, 'utf8');

@@ -22,6 +22,8 @@ export interface Observed {
   passing: number;
   /** True when no run has been kept for this project at all. */
   noHistory: boolean;
+  /** The run this describes. An action is not attempted twice against the same evidence. */
+  runId?: string;
 }
 
 export type Act =

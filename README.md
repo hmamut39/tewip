@@ -7,7 +7,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 | Where | How |
 |---|---|
 | **Terminal** | `npm install -g tewip-ai`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
-| **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension: registers Tewip with the editor's AI assistant and adds *Explain a test report* and *Why did CI fail on this branch?* |
+| **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension ([download](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)): registers Tewip with the editor's AI assistant and adds six commands - explain a report, why CI failed on this branch, the risk review of your change, which flaky tests to quarantine, the security check, and what your corrections add up to |
 | **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
 | **Any model** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama (no account, nothing leaves the computer): `TEWIP_PROVIDER` |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
@@ -95,6 +95,20 @@ jobs:
 The report reads the history cache of the branch it runs on, usually the default branch.
 
 The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. Pull requests opened by the workflow token don't trigger CI themselves; the agent verified each change by re-running the test before opening the PR. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
+
+### The editor extension (VS Code, Cursor, Windsurf, VSCodium)
+
+Download **[tewip-0.5.0.vsix](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)**, then in the
+editor press `Ctrl+Shift+P` and run **Extensions: Install from VSIX…**. It needs the command line:
+`npm install -g tewip-ai`.
+
+Press `Ctrl+Shift+P` and type "Tewip" for: *Explain a test report…*, *Why did CI fail on this
+branch?*, *Risk review of this change*, *Which flaky tests to quarantine*, *Check secrets and
+dependencies*, and *What our corrections add up to*. The editor's AI assistant also picks Tewip up
+as an MCP server with nothing to configure.
+
+It is not in the Visual Studio Marketplace: publishing there now requires an Azure subscription,
+which means a credit card for a free extension. The file above installs exactly the same thing.
 
 ### 2. From any AI assistant, through MCP (the whole IT team)
 

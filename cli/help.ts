@@ -131,7 +131,7 @@ Usage:
                                     decide and why, and what it did not check at all. Nothing enters
                                     it that Tewip did not verify itself. Every bundle carries a
                                     digest; set TEWIP_ATTEST_KEY to an ed25519 private key to sign
-                                    it too. `--verify` says what it checked and what that does not
+                                    it too. --verify says what it checked and what that does not
                                     establish - a digest means undamaged, not unedited. No cost.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.

@@ -100,6 +100,12 @@ Usage:
                                     same way more than once, which rule decided it, and the failures
                                     it came from. Says "not yet" rather than inventing a pattern
                                     from two cases. No model, no cost.
+  tewip trace [--only "<ticket or title>"] [--out trace.md]
+                                    Is this requirement covered, and is it passing right now? Joins
+                                    the plans Tewip wrote to the tests that cover them and the runs
+                                    that attempted them. A scenario counts as covered only when a
+                                    real test can be named, and passing only when a real run
+                                    attempted it. No model, no cost.
   tewip recall "<an error, or a question>" [--test "<id>"] [--limit 5]
                                     What this project already concluded: earlier failures that look
                                     like this one, what was decided, by which rule or which person,

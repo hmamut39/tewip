@@ -1256,6 +1256,35 @@ product rather than a testing tool.
 Phase metric: for a real backlog, the share of requirements Tewip can trace end to end, and the
 share of its "covered" claims that survive a reviewer checking them.
 
+Status (2026-09-26): **built** as `tewip trace`. Nothing new is stored: it joins what was already
+there - the plans `tewip plan` wrote, the tests `tewip write` created, and the runs `tewip explain`
+kept - and answers the one question the rest of Tewip could not: *is this requirement covered, and
+is it passing right now?*
+
+Four standings, and three of them are admissions:
+
+- **passing** - a real run attempted the test and recorded no failure;
+- **failing** - a real run recorded a failure, quoted with Tewip's own diagnosis and confidence;
+- **never run** - a test is named, but no run kept here has attempted it, so its standing is
+  unknown rather than assumed good;
+- **not covered** - no test can be named for it, so nothing is checking it.
+
+Proved end to end on a real project, both ways. A plan of 7 scenarios began as 7 *not covered* -
+truthfully, because the planner marks coverage only when it can cite a real test. `tewip write`
+turned two of them into verified tests; after a run, the thread read **2 passing** with the run
+quoted. Breaking the code on purpose turned CT-005 into **FAILING - REAL_BUG at 0.70 (rules)**,
+traced from the words someone asked for all the way to the diagnosis. Restoring the code turned it
+back.
+
+Two faults were found by running it on that project rather than on a fixture: plans are saved as
+`{ plan, feature, urls, model }`, so reading the top level found no plans at all in a project that
+had one; and a scenario nothing checks was printed with the last run beside it, which invited the
+reader to think something had checked it. A run is now quoted only where it says something about
+that scenario.
+
+Not measured: the phase metric, which needs a real backlog and a reviewer willing to check the
+"covered" claims. The mechanism is proved; the number needs people.
+
 ### Phase 19: Goal-Driven Operation
 
 Tewip is verbs a person calls. Phase 19 is a goal - "keep the checkout flow green this sprint" -

@@ -175,6 +175,11 @@ async function main(): Promise<void> {
       runLearn({ root: process.cwd(), name: flag(args, 'name'), labels: flag(args, 'labels'), out: flag(args, 'out') });
       return;
     }
+    case 'trace': {
+      const { runTrace } = await import('../engine/trace/trace-command.ts');
+      runTrace({ root: process.cwd(), only: flag(args, 'only'), name: flag(args, 'name'), out: flag(args, 'out') });
+      return;
+    }
     case 'recall': {
       const question = args.filter((a, i) => !a.startsWith('--') && !['--test', '--limit', '--name', '--out'].includes(args[i - 1] ?? '')).join(' ').trim();
       if (!question) throw new Error('usage: tewip recall "<an error, or a question>" [--test "<test id>"] [--limit 5]');

@@ -1213,6 +1213,38 @@ Phase metric: the share of answers that cite a real prior record, measured again
 being answerable at all - and the cost per answer must stay within the current $1.12 per 1,000
 failures. A vector database everywhere that loses that economics is a failure, not a feature.
 
+Status (2026-09-26): **built** as `tewip recall "<an error, or a question>"`, and the measurement
+settled the design question before any code shipped: **no vector database, no embeddings, no
+network, no cost.**
+
+The test was run the way the feature is used - walk a real labelled dataset in order, and at each
+failure ask the history *only what came before it*, then check whether what came back carried the
+same human label. The baseline to beat is what a person does without any of this: scroll to the
+most recent failure.
+
+| Dataset | Top memory has the same label | One of the top five | Baseline: the newest failure |
+| --- | --- | --- | --- |
+| Gutenberg held-out (167 questions) | **87.4%** | 93.4% | 62.9% |
+| Gutenberg August-2 (483) | **94.8%** | 96.7% | 61.9% |
+| Supabase (727) | **99.7%** | 99.9% | 97.2% |
+
+A free lexical index beats scrolling by 25 to 33 points on the two Gutenberg weeks. Embeddings were
+therefore not bought: they would have to beat *this*, not beat nothing, and the cost per answer
+stays at zero. That is the phase's own rule honoured - retrieval before generation, and only pay
+for the model when the free thing has been measured and found wanting.
+
+What makes the answers citable rather than plausible: every line names the run it came from, the
+date, and which rule or which **person** decided it. A failure someone corrected outranks one only
+Tewip decided, because what the team concluded beats what the tool concluded. When nothing
+resembles the question it says so - "that is an answer, not a failure" - instead of returning the
+nearest thing it has.
+
+Found by running it on a stranger's project rather than a fixture: the index was built from a
+220-character *display* string, and pytest puts a long absolute path first, so on humanize every
+indexed character was the path and the words that mattered were never indexed at all. Searching a
+history made entirely of one error found nothing. It now indexes the whole message and trims only
+for reading.
+
 ### Phase 18: The Thread from Business to Release
 
 The pieces exist and are not joined: `spec`, `plan`, `jira`, release readiness. Phase 18 is the

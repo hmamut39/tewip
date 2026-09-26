@@ -175,6 +175,13 @@ async function main(): Promise<void> {
       runLearn({ root: process.cwd(), name: flag(args, 'name'), labels: flag(args, 'labels'), out: flag(args, 'out') });
       return;
     }
+    case 'recall': {
+      const question = args.filter((a, i) => !a.startsWith('--') && !['--test', '--limit', '--name', '--out'].includes(args[i - 1] ?? '')).join(' ').trim();
+      if (!question) throw new Error('usage: tewip recall "<an error, or a question>" [--test "<test id>"] [--limit 5]');
+      const { runRecall } = await import('../engine/recall/recall-command.ts');
+      runRecall({ root: process.cwd(), question, testId: flag(args, 'test'), limit: Number(flag(args, 'limit')) || undefined, name: flag(args, 'name'), out: flag(args, 'out') });
+      return;
+    }
     case 'incident': {
       const file = args.find((a, i) => !a.startsWith('--') && !['--framework', '--out'].includes(args[i - 1] ?? ''));
       if (!file) throw new Error('usage: tewip incident <sentry.json | otel.json | stack.txt> [--framework pytest] [--keep] [--out incident.md]');

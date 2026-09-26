@@ -100,6 +100,11 @@ Usage:
                                     same way more than once, which rule decided it, and the failures
                                     it came from. Says "not yet" rather than inventing a pattern
                                     from two cases. No model, no cost.
+  tewip recall "<an error, or a question>" [--test "<id>"] [--limit 5]
+                                    What this project already concluded: earlier failures that look
+                                    like this one, what was decided, by which rule or which person,
+                                    and the run each came from. Searches the history Tewip keeps -
+                                    no model, no network, nothing to set up.
   tewip incident <sentry.json | otel.json | stack.txt> [--framework <id>] [--out incident.md]
                                     Turn a production incident into a test that proves it: reads
                                     Sentry, OpenTelemetry or a pasted stack trace, writes a test

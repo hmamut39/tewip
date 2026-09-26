@@ -1296,6 +1296,45 @@ Phase metric: over a sprint, actions taken without a person asking, each with th
 justified it, and zero changes kept that were not proved. Autonomy is only worth counting when the
 false-action rate is zero.
 
+Status (2026-09-26): **built** as `tewip pursue "<a goal>"`, and the design is the argument.
+
+"Agentic" usually means a model deciding what to do next. That is the part teams roll back: an
+agent choosing freely cannot be predicted, and its reasons are a paragraph rather than a rule. The
+answer here is the one that made diagnosis cheap and trustworthy, one level up - **the deciding is
+a written policy over observed state, not a model.** The model still does the work where it is
+good; it does not decide whether to act, where it is a liability.
+
+The order is fixed, published, and testable:
+
+1. a **real bug** - the goal is already broken, and it goes in front of a person;
+2. every failure is the **environment** - re-run, and do not touch the tests, because nothing about
+   the code has been shown;
+3. **flakiness** - the code may be fine and the test is lying;
+4. anything **still failing that Tewip cannot explain** - it will not move on while something it is
+   watching is red;
+5. a **coverage gap**, worst priority first, only once nothing is failing;
+6. **attest**, and stop - "there is no next action worth taking".
+
+Deciding is free and always allowed; anything that changes a file is refused unless the person asks,
+and even then it runs through the gates that already prove a change. There is no unattended loop.
+
+Two real faults came out of running it against a live project rather than fixtures:
+
+- The policy printed "3 failing" in its own state line and then said "nothing the goal depends on is
+  failing", because an **undecided** failure matched none of its branches and fell through to the
+  coverage gap. Exactly the shape of contradiction this project exists to refuse. There is now a
+  branch for it and an invariant test: for every category, a failing test is never walked past.
+- Underneath it, `timing-intermittent` called a regression flaky. It was right by its own lights -
+  the test really had flipped, because the code was broken and restored several times - but the
+  runs recorded **no commit**, and without commits "the test comes and goes" and "somebody kept
+  changing the code" are the same history. The rule now declines rather than guessing, and says so.
+  Accuracy on all six real datasets is unchanged (96.4%, 86.1%, 93.4%, 97.9%, 89.0%, 99.7%), because
+  real CI records the commit.
+
+Not measured: the phase metric, which is a sprint of real use. What can be said is that the false
+action rate is zero by construction - `pursue` has never changed a file - and that the policy is
+deterministic, which a test asserts by deciding the same state five times.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

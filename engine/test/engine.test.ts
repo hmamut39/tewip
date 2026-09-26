@@ -31,7 +31,9 @@ function record(testId: string, runId: string, errorMessage: string, minute = 0)
 
 function summary(runId: string, minute: number, testIds: string[]): RunSummary {
   const at = new Date(Date.UTC(2026, 0, 1, 0, minute)).toISOString();
-  return { schemaVersion: 1, runId, gitSha: '', startedAt: at, finishedAt: at, status: 'failed', attempts: Object.fromEntries(testIds.map((t) => [t, 1])) };
+  // Real CI records which commit it tested, and some rules may only reason about a test flipping
+  // when that is known - otherwise code that kept changing is indistinguishable from a flake.
+  return { schemaVersion: 1, runId, gitSha: `c0ffee${minute}`, startedAt: at, finishedAt: at, status: 'failed', attempts: Object.fromEntries(testIds.map((t) => [t, 1])) };
 }
 
 /** Builds runs from a per-test outcome script: 'P' = pass, any other string = failure message. */
@@ -167,6 +169,23 @@ describe('TIMING rule', () => {
     const d = diagnoseLast({ a: ['P', 'Error: same', 'P', 'Error: same', 'P', 'Error: same'] }, 'a');
     assert.equal(d.category, 'TIMING');
     assert.ok(d.confidence < 0.85, 'stays below the auto-fix threshold');
+  });
+
+  it('will not call flipping intermittent when no run recorded a commit', () => {
+    // Found while pursuing a goal on a real project: a regression was broken and restored several
+    // times, and this rule called it flaky with the confidence it gives a genuine flake. With no
+    // commits kept, "the test comes and goes" and "somebody kept changing the code" are the same
+    // history, so the claim is not available.
+    const script = { a: ['P', 'Error: same', 'P', 'Error: same', 'P', 'Error: same'] as Array<'P' | string> };
+    const { index, records } = history(script);
+    const target = records.filter((r) => r.testId === 'a').at(-1)!;
+    const run = { ...index.runContext(target.runId), commitsKnown: false };
+    const d = diagnose({ record: target, history: index.historyAsOf('a', target.runId), run, loadSnapshot: () => null });
+    assert.notEqual(d.category, 'TIMING');
+    assert.ok(
+      d.evidence.some((e) => /no way to tell a flaky test from code that kept changing/.test(e.message)),
+      `the refusal is said out loud: ${JSON.stringify(d.evidence.map((e) => e.message))}`,
+    );
   });
 });
 

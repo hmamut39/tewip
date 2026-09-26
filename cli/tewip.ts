@@ -175,6 +175,13 @@ async function main(): Promise<void> {
       runLearn({ root: process.cwd(), name: flag(args, 'name'), labels: flag(args, 'labels'), out: flag(args, 'out') });
       return;
     }
+    case 'pursue': {
+      const goal = args.filter((a, i) => !a.startsWith('--') && !['--name', '--out'].includes(args[i - 1] ?? '')).join(' ').trim();
+      if (!goal) throw new Error('usage: tewip pursue "<a goal, e.g. keep the checkout flow green>" [--act]');
+      const { runPursue } = await import('../engine/pursue/pursue-command.ts');
+      runPursue({ root: process.cwd(), goal, act: args.includes('--act'), name: flag(args, 'name'), out: flag(args, 'out') });
+      return;
+    }
     case 'trace': {
       const { runTrace } = await import('../engine/trace/trace-command.ts');
       runTrace({ root: process.cwd(), only: flag(args, 'only'), name: flag(args, 'name'), out: flag(args, 'out') });

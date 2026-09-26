@@ -52,6 +52,12 @@ export interface RunContext {
   /** Distinct tests attempted in the run. */
   testsAttempted: number;
   failures: TriageRecord[];
+  /**
+   * True when the kept runs record which commit they tested. Without that, a test that flips
+   * between passing and failing cannot be told apart from code someone kept changing, so any rule
+   * reasoning about flipping has to decline rather than guess.
+   */
+  commitsKnown: boolean;
 }
 
 interface RunEntry {
@@ -168,7 +174,10 @@ export class HistoryIndex {
 
   runContext(runId: string): RunContext {
     const e = this.runs[this.indexOf(runId)];
-    return { runId, branch: e.branch, testsAttempted: Object.keys(e.attempts).length, failures: e.failures };
+    // "Some run knows its commit" is the weakest true statement available: a single kept run with a
+    // sha means the history can distinguish code changes from flakiness at all.
+    const commitsKnown = this.runs.some((r) => Boolean(r.sha));
+    return { runId, branch: e.branch, testsAttempted: Object.keys(e.attempts).length, failures: e.failures, commitsKnown };
   }
 
   private indexOf(runId: string): number {

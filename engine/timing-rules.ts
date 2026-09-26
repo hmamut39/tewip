@@ -173,9 +173,20 @@ export const INTERMITTENT_MIN_ALTERNATIONS = 3;
  */
 export const timingIntermittent: Rule = {
   id: 'timing-intermittent',
-  evaluate({ history, loadFailedRequests }) {
+  evaluate({ history, loadFailedRequests, run }) {
     const { alternations, runs, failures } = history;
     if (alternations < INTERMITTENT_MIN_ALTERNATIONS) return null;
+    // Flipping only means flakiness if the code stayed the same while it flipped. Where no run
+    // carries a commit, nothing can tell "the test comes and goes" from "somebody kept changing
+    // the code" - which is exactly what happened when a regression was broken and restored several
+    // times in a row, and this rule called the regression flaky with the same confidence it gives
+    // a genuine flake. Without commits, that claim is not available.
+    if (!run.commitsKnown) {
+      return declined(
+        this.id,
+        `this test flipped ${alternations} times in ${runs} runs, but no run recorded a commit, so there is no way to tell a flaky test from code that kept changing`,
+      );
+    }
     // A dependency that fails now and then also makes a test come and go, and that is ENV, not a
     // race in the test. Seen on held-out data, where an external media API broke this test.
     const failed = dependencyFailure(loadFailedRequests);

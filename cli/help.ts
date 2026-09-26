@@ -100,6 +100,13 @@ Usage:
                                     same way more than once, which rule decided it, and the failures
                                     it came from. Says "not yet" rather than inventing a pattern
                                     from two cases. No model, no cost.
+  tewip pursue "<a goal>" [--act] [--out next.md]
+                                    Give Tewip a goal instead of a verb - "keep the checkout flow
+                                    green" - and it says what it would do next and why, from what
+                                    it can actually see. The order is fixed and written down: a
+                                    real bug first, then the environment, then flakiness, then a
+                                    coverage gap. It decides; it does not act unless you ask, and
+                                    even then only through the gates that prove a change.
   tewip trace [--only "<ticket or title>"] [--out trace.md]
                                     Is this requirement covered, and is it passing right now? Joins
                                     the plans Tewip wrote to the tests that cover them and the runs

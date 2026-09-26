@@ -8,7 +8,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 |---|---|
 | **Terminal** | `npm install -g tewip-ai`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
 | **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension ([download](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)): registers Tewip with the editor's AI assistant and adds six commands - explain a report, why CI failed on this branch, the risk review of your change, which flaky tests to quarantine, the security check, and what your corrections add up to |
-| **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp` (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
+| **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp`: fifteen tools, including *has this happened here before?*, *is this requirement covered and passing?* and *what should be done next about this goal?* (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
 | **Any model** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama (no account, nothing leaves the computer): `TEWIP_PROVIDER` |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
 

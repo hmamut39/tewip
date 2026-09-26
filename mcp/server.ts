@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { githubCiReport } from './github-report.ts';
 import { explainFailure, listDatasets, listFailedRuns, runView, windowView } from './tools.ts';
 
-const server = new McpServer({ name: 'tewip', version: '0.4.0' });
+const server = new McpServer({ name: 'tewip', version: '0.5.0' });
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
 const dataset = z.string().optional().describe('Dataset directory relative to the Tewip repo, e.g. "data/real/gutenberg-holdout". Default: data/ (what the reporter collected). See list_datasets.');
@@ -108,6 +108,71 @@ server.registerTool(
       const { planProject } = await import('../engine/quality/plan-command.ts');
       const { markdown, out } = await planProject({ feature, root: project, diffRange: diff, urls: urls ?? [] });
       return `${markdown}\n\n(Saved to ${out}. To turn it into verified tests, run \`tewip write\` in that folder.)`;
+    }),
+);
+
+/**
+ * The project's own memory, its thread from requirement to run, and its evidence bundle. All three
+ * read what Tewip already kept for a project on this machine, call no model, and change nothing -
+ * which is what makes them safe to hand an assistant that may call them on its own.
+ */
+const project = z.string().describe('Absolute path of the project folder');
+
+server.registerTool(
+  'recall',
+  {
+    title: 'Has this happened here before?',
+    description:
+      "What this project already concluded about a failure like this one: earlier failures that resemble it, what was decided, by which rule or which person, and the run each came from. Answers from records Tewip kept, never from a guess - and says plainly when nothing resembles it. Use before deciding what a failure means, and for questions like \"have we seen this error before?\".",
+    inputSchema: {
+      question: z.string().describe('An error message, or a question in plain words'),
+      project,
+      test: z.string().optional().describe('Narrow to one test id, when the question is about a particular test'),
+    },
+    annotations: readOnly,
+  },
+  ({ question, project: root, test }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { recallReport } = await import('../engine/recall/recall-command.ts');
+      return recallReport({ root, question, testId: test }).report;
+    }),
+);
+
+server.registerTool(
+  'trace_requirements',
+  {
+    title: 'Is this requirement covered, and is it passing?',
+    description:
+      'Joins the plans Tewip wrote for a project to the tests that cover them and the runs that attempted them. A scenario counts as covered only when a real test can be named, and as passing only when a real run attempted it; everything else is reported as never run or not covered. Use for "are we ready to release?" and "what is not tested?".',
+    inputSchema: { project, only: z.string().optional().describe('Only plans whose title, ticket or feature contains this') },
+    annotations: readOnly,
+  },
+  ({ project: root, only }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { traceReport } = await import('../engine/trace/trace-command.ts');
+      return traceReport({ root, only }).report;
+    }),
+);
+
+server.registerTool(
+  'next_action',
+  {
+    title: 'What should be done next about a goal?',
+    description:
+      'Given a goal in plain words - "keep the checkout flow green" - says what Tewip would do next and why, from what it can actually see in the project. The order is fixed and published: a real bug first, then the environment, then flakiness, then anything failing it cannot explain, then a coverage gap. It decides only; it never changes a file.',
+    inputSchema: { goal: z.string().describe('The goal, in plain words'), project },
+    annotations: readOnly,
+  },
+  ({ goal, project: root }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // observe/decide/render are pure; runPursue prints, which would corrupt the protocol.
+      const { observe, renderPursuit } = await import('../engine/pursue/pursue-command.ts');
+      const { decide } = await import('../engine/pursue/policy.ts');
+      const observed = observe(root, goal);
+      return renderPursuit(goal, observed, decide(goal, observed), false);
     }),
 );
 

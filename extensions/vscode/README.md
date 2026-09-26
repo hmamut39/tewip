@@ -11,6 +11,10 @@ This extension brings Tewip into the editor:
 - **Tewip: Which flaky tests to quarantine.** The dossier, with what each flaky test costs in CI time and the evidence behind the verdict.
 - **Tewip: Check secrets and dependencies.** Credentials committed by accident and vulnerable packages, each judged for whether it can actually be reached - and it always says what was *not* checked.
 - **Tewip: What our corrections add up to.** Where Tewip has been wrong in the same way more than once, so the rule gets fixed instead of the correction being re-entered.
+- **Tewip: Has this happened here before?** Paste an error, or ask in plain words, and get the earlier failures that resemble it - what was decided, by which rule or which person, and the run each came from. No model is called.
+- **Tewip: Is this requirement covered, and passing?** The thread from the plan someone asked for to the test that covers it and the run that attempted it. A scenario counts as covered only when a real test can be named.
+- **Tewip: What should be done next about…?** Give it a goal - "keep the checkout flow green" - and it says what it would do next and why, in a fixed published order. It decides; it never changes a file.
+- **Tewip: What did Tewip check for this build?** One artifact with the claims and their evidence, what it refused to decide, and what it did not check at all.
 
 ## Requirements
 

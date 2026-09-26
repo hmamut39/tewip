@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
   "description": "Finds why each failing test failed - real bug, flaky, environment, test data or changed selector - for any stack. Reviews the risk of your change, weighs flaky tests, checks secrets and dependencies, and connects Tewip to your editor AI assistant.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -70,6 +70,26 @@
       {
         "command": "tewip.learn",
         "title": "What our corrections add up to",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.recall",
+        "title": "Has this happened here before?",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.trace",
+        "title": "Is this requirement covered, and passing?",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.pursue",
+        "title": "What should be done next about…?",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.attest",
+        "title": "What did Tewip check for this build?",
         "category": "Tewip"
       }
     ],

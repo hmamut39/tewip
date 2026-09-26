@@ -90,8 +90,43 @@ const reviewChange = projectCommand({
   needs: 'It reads a git checkout with a `main` branch to compare against.',
 });
 const flakyDossier = projectCommand({ verb: 'flaky', args: ['--days', '30'], busy: 'Tewip is weighing the flaky tests…' });
+const traceRequirements = projectCommand({ verb: 'trace', busy: 'Tewip is following the thread from plan to run…' });
+const evidenceBundle = projectCommand({ verb: 'attest', busy: 'Tewip is gathering what it checked…' });
 const securityCheck = projectCommand({ verb: 'secure', busy: 'Tewip is checking secrets and dependencies…' });
 const whatWeLearned = projectCommand({ verb: 'learn', busy: 'Tewip is reading your corrections…' });
+
+/** Asks for a line of text, then runs a verb with it in the open folder. */
+function askThenRun({ verb, prompt, placeHolder, busy }) {
+  return async () => {
+    const cwd = workspaceDir();
+    if (!cwd) {
+      vscode.window.showWarningMessage('Tewip: open the project folder first - this reads the project you are working in.');
+      return;
+    }
+    const typed = await vscode.window.showInputBox({ title: prompt, placeHolder, ignoreFocusOut: true });
+    if (!typed?.trim()) return;
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: busy }, async () => {
+      try {
+        await show(await runTewip([verb, typed.trim()], cwd));
+      } catch (error) {
+        vscode.window.showErrorMessage(`Tewip: ${error.message}. Is it installed? \`npm i -g tewip-ai\`, or see the "tewip.path" setting.`);
+      }
+    });
+  };
+}
+
+const recallMemory = askThenRun({
+  verb: 'recall',
+  prompt: 'Tewip: has this happened here before?',
+  placeHolder: 'Paste an error, or ask in plain words',
+  busy: 'Tewip is searching what this project already decided…',
+});
+const pursueGoal = askThenRun({
+  verb: 'pursue',
+  prompt: 'Tewip: what should be done next about…?',
+  placeHolder: 'e.g. keep the checkout flow green',
+  busy: 'Tewip is deciding what to do next…',
+});
 
 async function explainReport() {
   const picked = await vscode.window.showOpenDialog({
@@ -149,6 +184,10 @@ function activate(context) {
     vscode.commands.registerCommand('tewip.flaky', flakyDossier),
     vscode.commands.registerCommand('tewip.secure', securityCheck),
     vscode.commands.registerCommand('tewip.learn', whatWeLearned),
+    vscode.commands.registerCommand('tewip.trace', traceRequirements),
+    vscode.commands.registerCommand('tewip.attest', evidenceBundle),
+    vscode.commands.registerCommand('tewip.recall', recallMemory),
+    vscode.commands.registerCommand('tewip.pursue', pursueGoal),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

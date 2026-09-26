@@ -52,15 +52,18 @@ function history(root: string, only?: string): { runs: RunSummary[]; records: Tr
   return { runs, records };
 }
 
-export function runTrace(cmd: TraceCommand): TracedRequirement[] {
+/** The thread and its report, without printing: an MCP tool must return, never write to stdout. */
+export function traceReport(cmd: TraceCommand): { traced: TracedRequirement[]; report: string; plans: number; runs: number } {
   const found = plans(cmd.root, cmd.only);
   const { runs, records } = history(cmd.root, cmd.name);
   const traced = found.map((plan) => tracePlan(plan, runs, records));
-  const report = renderTrace(traced);
+  return { traced, report: renderTrace(traced), plans: found.length, runs: runs.length };
+}
+
+export function runTrace(cmd: TraceCommand): TracedRequirement[] {
+  const { traced, report, plans: found, runs } = traceReport(cmd);
   console.log(report);
-  if (found.length > 0) {
-    console.error(`\nTraced ${found.length} plan(s) against ${runs.length} kept run(s). No model was called.`);
-  }
+  if (found > 0) console.error(`\nTraced ${found} plan(s) against ${runs} kept run(s). No model was called.`);
   if (cmd.out) {
     mkdirSync(dirname(resolve(cmd.out)), { recursive: true });
     writeFileSync(resolve(cmd.out), `${report}\n`, 'utf8');

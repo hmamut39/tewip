@@ -31,17 +31,24 @@ function kept(root: string, only?: string): { records: TriageRecord[]; correctio
   return { records, corrections };
 }
 
-export function runRecall(cmd: RecallCommand): string {
+/**
+ * The report, without printing it. An MCP server speaks JSON-RPC over stdout, so anything one of
+ * its tools calls has to return its answer: a stray console.log corrupts every response the
+ * assistant receives, and the corruption looks like the tool being broken rather than noisy.
+ */
+export function recallReport(cmd: RecallCommand): { report: string; searched: number; corrections: number } {
   const { records, corrections } = kept(cmd.root, cmd.name);
   if (records.length === 0) {
-    const empty = 'Nothing has been kept here yet, so there is no history to search. Run `tewip explain <report>` first.';
-    console.log(empty);
-    return empty;
+    return { report: 'Nothing has been kept here yet, so there is no history to search. Run `tewip explain <report>` first.', searched: 0, corrections: 0 };
   }
   const found = recall(cmd.question, memories(records, corrections), { testId: cmd.testId, limit: cmd.limit ?? 5 });
-  const report = renderRecall(cmd.question, found);
+  return { report: renderRecall(cmd.question, found), searched: records.length, corrections: corrections.length };
+}
+
+export function runRecall(cmd: RecallCommand): string {
+  const { report, searched, corrections } = recallReport(cmd);
   console.log(report);
-  console.error(`\nSearched ${records.length} kept failure(s) and ${corrections.length} correction(s). No model was called.`);
+  if (searched > 0) console.error(`\nSearched ${searched} kept failure(s) and ${corrections} correction(s). No model was called.`);
   if (cmd.out) {
     mkdirSync(dirname(resolve(cmd.out)), { recursive: true });
     writeFileSync(resolve(cmd.out), `${report}\n`, 'utf8');

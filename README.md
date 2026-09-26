@@ -444,6 +444,80 @@ Every change is small (1 to 16 lines, median 4) and most are what the developers
 **No wrong fix was offered**: anything that could not be proved was thrown away and the file put
 back byte for byte.
 
+## One bundle a release manager can read (Phase 15)
+
+```bash
+tewip attest --out attestation.md
+```
+
+Everything Tewip knows about a build, in one file: which tests ran, what each failure was, which
+rule or which model decided it, **what it refused to decide**, and what it never looked at. The
+refusals are the point - a tool that never says "I could not tell" has nothing worth attesting,
+because every line it writes might be a guess.
+
+The bundle carries a digest, and an Ed25519 signature when you give it a key:
+
+```bash
+TEWIP_ATTEST_KEY=./private.pem tewip attest            # sign it
+tewip attest --verify attestation.json --key public.pem  # check it
+```
+
+A digest is not a signature and Tewip says so: without a key it tells you the bundle is undamaged,
+not that nobody edited it. Editing a claim out of a signed bundle makes verification fail and exit
+non-zero. Every CI run writes one of these automatically.
+
+## Is this incident covered by a test? (Phase 16)
+
+```bash
+tewip incident sentry-issue.json
+```
+
+Reads a Sentry payload, an OpenTelemetry span or a plain stack trace, finds the test that should
+have caught it, and answers with one of four verdicts: **reproduced**, **passed** (the test ran and
+did not catch it, which is worse news), **failed differently**, or **never ran**. It does not say
+"probably covered".
+
+## What did we decide about this last time? (Phase 17)
+
+```bash
+tewip recall "the login test that keeps flaking"
+```
+
+Every correction your team ever gave Tewip is kept. Ask, and it answers with your own decision from
+then, and says it was yours - not its. It never acts on a correction by itself.
+
+## From the ticket to the run (Phase 18)
+
+```bash
+tewip trace --only "SHOP-12"
+```
+
+Joins the test plans Tewip wrote to the tests that cover them and the runs that attempted them. A
+scenario counts as covered only when a real test can be named, and passing only when a real run
+attempted it; everything else says what is missing. No model, no cost.
+
+## A goal instead of a verb (Phases 19 and 21)
+
+```bash
+tewip pursue "keep the checkout flow green"
+tewip pursue "keep the checkout flow green" --act
+```
+
+Give Tewip a goal and it says what it would do next, and why, from what it can actually see. The
+order is fixed, published and testable - **not chosen by a model**: a real bug first, then the
+environment, then flakiness, then anything failing it cannot explain, then a coverage gap, and only
+then is the goal worth attesting. Deciding the same state twice gives the same answer.
+
+With `--act` it carries the decision out, and this is where the refusals matter most:
+
+- It **never does the work itself.** Each action is an existing command that already proves what it
+  changes - `write` keeps a test only when it passes *and* fails when broken.
+- **Two actions are on the allowlist**: write a missing test, and attest a green goal. Everything
+  else is refused by name. It will not work around a real bug.
+- **One action, then stop.** There is no unattended loop.
+- Everything it did or refused goes to `.tewip/actions.jsonl`, with the run that justified it.
+- It **will not repeat itself**: the same attempt is refused until a new run gives it new evidence.
+
 ## Where it has been tried
 
 | Project | How | Result |

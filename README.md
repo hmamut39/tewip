@@ -71,6 +71,10 @@ On every run, the action:
 - **Developers:** posts one diagnosis comment on the pull request and keeps it updated. For each failure it says whether the change likely caused it, why, and what to do next.
 - **SDETs:** writes the triage board into the job summary.
 - **DevOps:** collects environment failures (server errors, connection resets, outages) in **one** GitHub issue, and each new run adds a single grouped comment to it.
+- **Evidence, every run:** the Action writes an attestation into its artifact - the claims with
+  their evidence and which layer decided each, what Tewip **refused** to decide, and what it did
+  not check at all. Nothing enters it that Tewip did not verify itself, so a release decision can
+  be taken from it without opening CI.
 - **Fixes (`autofix: true`):** for drifted locators that the deterministic rule matched to a renamed element, it rewrites the locator, re-runs that test, and opens a separate pull request with the changes that passed. It never merges and never edits application code.
 - **Every role:** uploads all role views as the `tewip-report` artifact.
 - **When the job dies before any test runs** (an image that would not pull, a runner out of disk, a service container that never came up): it reads the failed job's log and names the cause, instead of leaving a red X with no explanation.

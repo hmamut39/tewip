@@ -70,6 +70,15 @@ describe('the attestation', () => {
     assert.match(report, /This is a statement/);
   });
 
+  it('counts a rule that could not decide as a refusal, not as a decision', () => {
+    // In CI the bundle read "2 decided by deterministic rules" while listing one of them under
+    // Refused. A rule that looked and could not say has not decided anything.
+    const records = [decided('a > one', 'ENV'), undecided('a > two')];
+    const a = bundle(records);
+    assert.equal(a.claims.length + a.refusals.length, 2);
+    assert.equal(a.claims.length, 1, 'only the one it actually settled');
+  });
+
   it('says plainly when a run had nothing to explain', () => {
     const report = renderAttestation(bundle([]));
     assert.match(report, /None: nothing failed/);

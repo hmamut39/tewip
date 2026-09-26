@@ -15,6 +15,8 @@ import { prCommentView } from '../outlets/views/developer.ts';
 import { infraView } from '../outlets/views/infra.ts';
 import { releaseView } from '../outlets/views/release.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
+import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
+import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 import type { FixResult } from '../engine/autofix/autofix.ts';
 import { loadCorrections, saveCorrections } from '../engine/corrections.ts';
@@ -126,8 +128,39 @@ async function main(): Promise<void> {
   const bundle = { repo: ctx.repo, runId: ctx.runId, runUrl: ctx.runUrl, sha: ctx.sha, branch: ctx.branch, pr: ctx.pr?.number ?? null, generatedAt: new Date().toISOString(), items, fixes, fixPr: fixPr?.html_url ?? null };
   writeFileSync(join(ctx.outDir, 'triage.json'), JSON.stringify(bundle, null, 2), 'utf8');
 
+  // The evidence bundle, written beside the role views so it rides along with the artifact that is
+  // already uploaded: no new step to add, no input to set, and it appears for every run rather than
+  // only when somebody remembers to ask for it. A release decision should not depend on a person
+  // knowing that `tewip attest` exists.
+  const diagnosedNow = imported.records.map((r) => ({ ...r, diagnosis: items.find((i) => i.runId === r.runId && i.testId === r.testId)?.diagnosis }));
+  // Decided means decided. A rule that looked and could not say is a refusal, and counting it here
+  // would have the bundle claim "2 decided by rules" while listing one of them under Refused.
+  const decidedBy = (source: string) =>
+    diagnosedNow.filter((r) => {
+      const d = r.diagnosis as { source?: string; category?: string } | undefined;
+      return d?.source === source && d.category && d.category !== 'UNKNOWN';
+    }).length;
+  const byRules = decidedBy('rules');
+  const byModel = decidedBy('llm');
+  const checked: string[] = [
+    'every failing test in this run was read, and each was given a cause or left undecided',
+    `${byRules} decided by deterministic rules (${ENGINE_VERSION}), which call no model`,
+  ];
+  if (llm) checked.push(`${byModel} sent to the model, because no rule could settle them`);
+  const notChecked: string[] = [
+    'the application itself: this bundle says nothing about secrets, dependencies or a running app',
+    'tests that passed: a passing test is counted, not examined',
+    'anything no test covers, which no test report can show',
+  ];
+  if (!llm) notChecked.unshift('the AI layer: no OPENAI_API_KEY was set, so only the deterministic rules ran and anything they could not settle is undecided');
+  const attestation = attestRun(ctx.repo, imported.summary, diagnosedNow, { checked, notChecked, tool: 'tewip', engine: ENGINE_VERSION });
+  writeFileSync(join(ctx.outDir, 'attestation.md'), `${renderAttestation(attestation)}
+`, 'utf8');
+  writeFileSync(join(ctx.outDir, 'attestation.json'), `${JSON.stringify(attestation, null, 2)}
+`, 'utf8');
+
   // LEARN: store this run (with its diagnoses) so the next run sees it as history.
-  const diagnosed = imported.records.map((r) => ({ ...r, diagnosis: items.find((i) => i.runId === r.runId && i.testId === r.testId)?.diagnosis }));
+  const diagnosed = diagnosedNow;
   const runs = [...pastRuns, imported.summary].sort((a, b) => a.startedAt.localeCompare(b.startedAt)).slice(-MAX_HISTORY_RUNS);
   const kept = new Set(runs.map((s) => s.runId));
   writeFileSync(history.runs, runs.map((s) => JSON.stringify(s)).join('\n') + '\n', 'utf8');

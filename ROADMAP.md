@@ -1159,8 +1159,18 @@ bundle reads "744 test(s) attempted, 15 failed", lists the 15 as ENV with the fi
 the rule that decided them, and states plainly that no security scan, no passing test and nothing
 uncovered by any test is included.
 
+**In CI from 2026-09-26.** Every run of the Action now writes `attestation.md` and
+`attestation.json` beside the role views, into the artifact it already uploads: no new step, no
+input to set, and it appears whether or not anyone knows the command exists. A release decision
+should not depend on somebody remembering `tewip attest`.
+
+Running the CI path for real found the bundle claiming "2 decided by deterministic rules" while
+listing one of the two under **Refused**. A rule that looked and could not say has not decided
+anything; only settled diagnoses are counted now, and a test holds it.
+
 Not yet measured: the phase metric itself, which needs a real release decision made from a bundle
-by someone who did not open CI. That needs users, not code.
+by someone who did not open CI. The bundle now reaches them without being asked for, which is the
+part that was in Tewip's hands.
 
 ### Phase 16: The Production Loop (incident to proved test)
 

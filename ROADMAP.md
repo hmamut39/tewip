@@ -1141,6 +1141,27 @@ Phase metric: a release decision taken from the bundle alone, with nobody openin
 every claim in a bundle traceable to the run that produced it. Nothing may appear in a bundle that
 Tewip did not verify itself.
 
+Status (2026-09-26): **built** as `tewip attest`. It gathers one run into a single artifact - the
+claims with their evidence and the layer that decided each, what Tewip **refused** to decide and
+why, and what it did not check at all - in Markdown for a person and JSON for a build to carry.
+
+Three rules are enforced by tests, and they are the ones that make a bundle mean anything:
+
+- An undecided failure is recorded as a **refusal**, never quietly dropped. The refusals are not a
+  footnote; the report says why they are there: a tool that never admits it could not tell cannot
+  be trusted about the rest of the page.
+- A diagnosis with **no deciding layer** produces no claim, however high its confidence looks.
+- When nothing is recorded as unchecked, the bundle says that is **itself worth doubting**, because
+  a check that never ran cannot report itself.
+
+Proved on a real third-party project rather than a fixture: humanize's own pytest run, where the
+bundle reads "744 test(s) attempted, 15 failed", lists the 15 as ENV with the fixture evidence and
+the rule that decided them, and states plainly that no security scan, no passing test and nothing
+uncovered by any test is included.
+
+Not yet measured: the phase metric itself, which needs a real release decision made from a bundle
+by someone who did not open CI. That needs users, not code.
+
 ### Phase 16: The Production Loop (incident to proved test)
 
 Tewip stops at CI, which is half a lifecycle. The pattern now standard in agent observability is

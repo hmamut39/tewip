@@ -175,6 +175,11 @@ async function main(): Promise<void> {
       runLearn({ root: process.cwd(), name: flag(args, 'name'), labels: flag(args, 'labels'), out: flag(args, 'out') });
       return;
     }
+    case 'attest': {
+      const { runAttest } = await import('../engine/attest/attest-command.ts');
+      runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });
+      return;
+    }
     case 'mcp':
       // An editor starts this from any folder, and an installed tool's own folder may be read-only:
       // the AI answer cache goes to the user's home folder, which is always writable.

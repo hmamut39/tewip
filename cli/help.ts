@@ -100,6 +100,11 @@ Usage:
                                     same way more than once, which rule decided it, and the failures
                                     it came from. Says "not yet" rather than inventing a pattern
                                     from two cases. No model, no cost.
+  tewip attest [--run <id>] [--out attestation.md] [--json bundle.json]
+                                    What Tewip checked for a build, as one artifact: the claims with
+                                    their evidence and which layer decided each, what it refused to
+                                    decide and why, and what it did not check at all. Nothing enters
+                                    it that Tewip did not verify itself. No model, no cost.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip --version                   Print the version.
 

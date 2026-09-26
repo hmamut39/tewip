@@ -85,6 +85,16 @@ describe('the attestation', () => {
     assert.match(report, /Nothing was left undecided/);
   });
 
+  it('reads like a green run when nothing failed', () => {
+    // The first live CI bundle said "0 decided by deterministic rules, 0 sent to the model" about a
+    // run where every test passed: true, and it tells a reader nothing.
+    const a = attestRun('shop', run(), [], { checked: ['every test in the run passed: 3 attempted, none failed'], notChecked: ['tests that passed'], tool: 'tewip', engine: 'rules-9' });
+    const report = renderAttestation(a);
+    assert.match(report, /every test in the run passed/);
+    assert.doesNotMatch(report, /0 decided/);
+    assert.match(report, /None: nothing failed/);
+  });
+
   it('doubts its own silence when nothing is recorded as unchecked', () => {
     const empty = attestRun('shop', run(), [], { checked: [], notChecked: [], tool: 'tewip', engine: 'rules-9' });
     const report = renderAttestation(empty).split(NL);

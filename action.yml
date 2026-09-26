@@ -48,6 +48,12 @@ inputs:
       AI-only verdicts still block. Put continue-on-error: true on the test step so the gate decides.
       Empty (the default) never fails the workflow.
     default: ''
+  attest-key:
+    description: >-
+      Optional. An ed25519 private key (PEM) used to sign the evidence bundle the run writes into
+      its artifact. Put it in a secret. Without it the bundle still carries a digest, which shows
+      it is undamaged but not that nobody edited it - only a signature says who produced it.
+    default: ''
   suite:
     description: >-
       A short name for this test suite, when one workflow triages more than one (e.g. "unit" and
@@ -99,6 +105,7 @@ runs:
         TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
         TRIAGE_SUITE: ${{ inputs.suite }}
         TRIAGE_GATE: ${{ inputs.gate }}
+        TEWIP_ATTEST_KEY: ${{ inputs.attest-key }}
 
     - name: Save triage history
       if: always() && inputs.mode != 'report'

@@ -1182,6 +1182,21 @@ this bundle: it has been changed since it was written", exit code 1. The first a
 was a no-op, because the bundle had no refusals to delete and the "tampering" changed nothing; that
 is recorded because a test that cannot fail is worse than no test.
 
+**Proved in live CI, not only locally** (2026-09-26). The Action was re-run in the private
+practice repository and the artifact it uploaded contains `attestation.md` and `attestation.json`
+beside the role views: a real repository, a real commit (`1b7863b9`), a real run id, and a digest.
+Nothing in the sandbox was changed to get it - the workflow already tracks `hmamut39/tewip@main`,
+so re-running an existing run was enough.
+
+Reading that live bundle found two things worth fixing, both of the same kind: true statements that
+tell a reader nothing. On a run where every test passed it said "0 decided by deterministic rules,
+0 sent to the model", and it carried the caveat "anything the rules could not settle is undecided"
+about a run where nothing needed settling. A green run now reads as a green run.
+
+The Action also gained an `attest-key` input, because signing existed and CI had no way to use it.
+With a key in a secret the bundle a run uploads is signed, and `tewip attest --verify` confirms it -
+checked here end to end on a bundle produced by the CI path itself.
+
 **In CI from 2026-09-26.** Every run of the Action now writes `attestation.md` and
 `attestation.json` beside the role views, into the artifact it already uploads: no new step, no
 input to set, and it appears whether or not anyone knows the command exists. A release decision

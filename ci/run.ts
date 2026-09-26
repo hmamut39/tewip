@@ -142,17 +142,26 @@ async function main(): Promise<void> {
     }).length;
   const byRules = decidedBy('rules');
   const byModel = decidedBy('llm');
-  const checked: string[] = [
-    'every failing test in this run was read, and each was given a cause or left undecided',
-    `${byRules} decided by deterministic rules (${ENGINE_VERSION}), which call no model`,
-  ];
-  if (llm) checked.push(`${byModel} sent to the model, because no rule could settle them`);
+  // A green run should read like a green run. Saying "0 decided by rules, 0 sent to the model" is
+  // true and tells a reader nothing, and it appeared that way in the first live CI bundle.
+  const checked: string[] =
+    diagnosedNow.length === 0
+      ? [`every test in this run passed: ${Object.keys(imported.summary.attempts ?? {}).length} attempted, none failed, so there was nothing to diagnose`]
+      : [
+          'every failing test in this run was read, and each was given a cause or left undecided',
+          `${byRules} decided by deterministic rules (${ENGINE_VERSION}), which call no model`,
+          ...(llm && byModel > 0 ? [`${byModel} sent to the model, because no rule could settle them`] : []),
+        ];
   const notChecked: string[] = [
     'the application itself: this bundle says nothing about secrets, dependencies or a running app',
     'tests that passed: a passing test is counted, not examined',
     'anything no test covers, which no test report can show',
   ];
-  if (!llm) notChecked.unshift('the AI layer: no OPENAI_API_KEY was set, so only the deterministic rules ran and anything they could not settle is undecided');
+  // Only worth saying when something actually needed settling: on a green run "anything the rules
+  // could not settle is undecided" describes nothing, and reads as a caveat about a clean result.
+  if (!llm && diagnosedNow.length > 0) {
+    notChecked.unshift('the AI layer: no OPENAI_API_KEY was set, so only the deterministic rules ran and anything they could not settle is undecided');
+  }
   const attestation = attestRun(ctx.repo, imported.summary, diagnosedNow, { checked, notChecked, tool: 'tewip', engine: ENGINE_VERSION });
   writeFileSync(join(ctx.outDir, 'attestation.md'), `${renderAttestation(attestation)}
 `, 'utf8');

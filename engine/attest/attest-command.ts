@@ -60,9 +60,17 @@ function history(root: string, only?: string): { project: string; runs: RunSumma
 function whatWasChecked(records: TriageRecord[]): { checked: string[]; notChecked: string[] } {
   const checked: string[] = [];
   const notChecked: string[] = [];
-  checked.push('every failing test in the run was read, and each was given a cause or left undecided');
-  const byRules = records.filter((r) => (r.diagnosis as { source?: string } | undefined)?.source === 'rules').length;
-  const byModel = records.filter((r) => (r.diagnosis as { source?: string } | undefined)?.source === 'llm').length;
+  // Decided means settled: a rule that looked and could not say is a refusal, and counting it here
+  // would have a bundle claim more decisions than it lists claims.
+  const settledBy = (source: string) =>
+    records.filter((r) => {
+      const d = r.diagnosis as { source?: string; category?: string } | undefined;
+      return d?.source === source && d.category && d.category !== 'UNKNOWN';
+    }).length;
+  if (records.length === 0) checked.push('every test in the run passed, so there was nothing to diagnose');
+  else checked.push('every failing test in the run was read, and each was given a cause or left undecided');
+  const byRules = settledBy('rules');
+  const byModel = settledBy('llm');
   if (byRules > 0) checked.push(`${byRules} decided by deterministic rules (${ENGINE_VERSION}), which call no model and give the same answer every time`);
   if (byModel > 0) checked.push(`${byModel} sent to the model, because no rule could settle them`);
 

@@ -175,6 +175,15 @@ async function main(): Promise<void> {
       runLearn({ root: process.cwd(), name: flag(args, 'name'), labels: flag(args, 'labels'), out: flag(args, 'out') });
       return;
     }
+    case 'incident': {
+      const file = args.find((a, i) => !a.startsWith('--') && !['--framework', '--out'].includes(args[i - 1] ?? ''));
+      if (!file) throw new Error('usage: tewip incident <sentry.json | otel.json | stack.txt> [--framework pytest] [--keep] [--out incident.md]');
+      const { runIncident } = await import('../engine/incident/incident-command.ts');
+      const result = await runIncident({ root: process.cwd(), file, framework: flag(args, 'framework'), keep: args.includes('--keep'), out: flag(args, 'out') });
+      // A reproduction that was not reproduced is not a success, and a script should be able to tell.
+      if (!result.kept) process.exitCode = 1;
+      return;
+    }
     case 'attest': {
       const { runAttest } = await import('../engine/attest/attest-command.ts');
       runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });

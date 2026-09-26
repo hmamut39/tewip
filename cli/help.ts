@@ -100,6 +100,12 @@ Usage:
                                     same way more than once, which rule decided it, and the failures
                                     it came from. Says "not yet" rather than inventing a pattern
                                     from two cases. No model, no cost.
+  tewip incident <sentry.json | otel.json | stack.txt> [--framework <id>] [--out incident.md]
+                                    Turn a production incident into a test that proves it: reads
+                                    Sentry, OpenTelemetry or a pasted stack trace, writes a test
+                                    against the code the trace names, runs it, and keeps it ONLY if
+                                    it fails for the incident's own reason. A test that passes, or
+                                    fails its own way, is reported and thrown away.
   tewip attest [--run <id>] [--out attestation.md] [--json bundle.json]
                                     What Tewip checked for a build, as one artifact: the claims with
                                     their evidence and which layer decided each, what it refused to

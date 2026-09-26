@@ -1174,6 +1174,33 @@ Phase metric: on real incidents, the share for which Tewip produces a test that 
 and passes after it - with a false-reproduction rate near zero, since a test that passes on the
 broken code is worse than none.
 
+Status (2026-09-26): **built** as `tewip incident <file>`. It reads a Sentry event, an
+OpenTelemetry span or a stack trace someone pasted - deterministically, no model, because reading a
+stack trace is parsing - finds the frames belonging to this project, writes a test against that
+code, **runs it**, and keeps it only if the judgement is *reproduced*.
+
+The judgement is the phase. Red is not proof:
+
+| What the run did | Verdict | What Tewip does |
+| --- | --- | --- |
+| fails with the incident's error type and words | reproduced | keeps it |
+| fails with the same type, different message | reproduced | keeps it |
+| fails its own way (a typo, a wrong expectation) | failed-differently | deletes it, says what each side reported |
+| passes | passed | deletes it - "weakening it until it fails would prove nothing" |
+| never ran (missing module, syntax error, missing fixture) | never-ran | deletes it, nothing shown either way |
+
+Proved end to end on a real project with a real latent bug - code that assumed an optional field,
+with the project's own test green because it only covered the happy path. From a Sentry-shaped
+event: Tewip wrote the test, ran it, and it failed with `TypeError: Cannot read properties of
+undefined (reading 'amount')`, the same error production reported. One model call, 745 in / 741 out
+tokens, **$0.026**. After the one-line fix a developer would make, **both** tests pass - so the
+loop closes and the incident is guarded against for good. Given an unrelated incident (a database
+that refused connections, in code this project does not contain) it wrote a test, ran it, and
+**refused**: "the test fails, but not with the incident's error".
+
+Not measured: the phase metric across many real incidents. That needs a stream of real production
+failures from a real service, which is the same thing Phase 13 and the Definition of Success need.
+
 ### Phase 17: Retrieval Before Generation (narrow RAG)
 
 The rule that made the diagnosis layer cheap and trustworthy - rules before models - becomes

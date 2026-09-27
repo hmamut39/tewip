@@ -1428,6 +1428,83 @@ Not measured: the phase metric, which needs a sprint of somebody's real use. Wha
 is that no action outside the allowlist has ever run, and that every action and refusal is on disk
 to be checked.
 
+### Phase 22: Does This Test Prove Anything? (`tewip vouch`)
+
+By 2026 most tests in a pull request were written by an agent, and nobody checks the one thing that
+decides whether they are worth anything: **a test that cannot fail is a lie.** Coverage counts it.
+CI goes green on it. A reviewer skims a plausible-looking test and approves. This is the verification
+gap in its purest form, and it is the gap Tewip exists to stand in.
+
+`tewip vouch <paths>` reads tests somebody else wrote - an agent, a contractor, last year's team -
+and says, per test, whether it could ever fail. Not a style score: a verdict with the line that
+justifies it.
+
+What it looks for, in order of how badly it matters:
+
+1. **No assertion at all.** The body exercises code and checks nothing.
+2. **An expectation that was never finished** - `expect(value);` with no matcher. It reads as a
+   check, runs clean, and asserts nothing. A real and common shape.
+3. **A tautology** - `expect(true).toBe(true)`, or a value compared with itself.
+4. **A body that swallows its own failure** - everything inside a `try` whose `catch` logs or passes.
+   An assertion failure is an exception, so the test reports success no matter what happens.
+5. **A test that only checks the mock it just configured**, which proves the mocking library works.
+6. **A test that never runs** - skipped, disabled, or excluded by a `.only` somewhere else.
+
+The discipline is the same one that makes the rest of Tewip worth installing: **where it cannot tell,
+it says so rather than guessing.** A body whose checking happens inside a helper it cannot follow is
+reported as undecided, not as vacuous. A wrong accusation about somebody's test costs more than a
+missed one, because it is the reviewer's time and their trust.
+
+Phase metric: precision first - of the tests it calls unable to fail, the share that really cannot,
+read one by one on real public code; and recall against real commits in which a developer fixed a
+test that was not testing anything. A false accusation rate near zero is the requirement, as with
+every other gate here.
+
+Status (2026-09-27): **built** as `tewip vouch <paths>`, and the precision half is measured on real
+public code. No model, no cost: every verdict quotes the line it rests on.
+
+Measured on **5,448 tests in 8 public projects across 5 languages** - express, axios, chalk (AVA),
+psf/requests, pallets/click, gorilla/mux, spf13/cobra, google/gson:
+
+| | count | verified |
+| --- | --- | --- |
+| Tests that **cannot fail at all** | 19 | **19 of 19 correct (100%)** |
+| Tests that **compare no value** (only a crash fails them) | 65 | 6 read at random, all correct |
+| Not judged, by refusal | 49 | - |
+
+The 19 were read one by one against the files: one unconditional `@pytest.mark.skip` in psf/requests
+and eighteen `@Ignore` methods in gson, including a whole `PerformanceTest` class disabled behind a
+`testDummy` written "to prevent JUnit from complaining when we disable all tests".
+
+**The result that matters is a wording change, not a count.** The first version called these tests
+"cannot fail, so it passes whatever the code does" - and that is false. A test with no assertion
+still fails when the code throws, and in axios a test that compiles a TypeScript fixture and runs it
+asserts nothing *on purpose*: the crash is the check. On this corpus that claim would have been made
+about 143 tests in seven projects, every one of them wrong. The verdict is now `crash-only`, worded
+for what it is, reported apart from what really cannot fail, and kept out of the `--strict` gate.
+Overclaiming about somebody else's tests is the precise failure this project exists not to commit.
+
+Seven false-positive classes were found by pointing it at real code, each now covered by a test:
+
+- **Test code inside a string.** Fixtures quote fake tests; Tewip's own suite produced 27 confident
+  false accusations before offsets inside strings, template literals and comments were masked out.
+- **AVA and tap put assertions on the test's context** (`t.is`, `t.same`). All 59 tests in chalk were
+  condemned. This is the third time a narrow assertion vocabulary has produced wrong refusals in this
+  project, after Cypress's `.should(` and `assert.equal` in Phase 8.
+- **Mocha's `done` is the assertion.** `it('...', function(done){ app.on('foo', done) })` fails by
+  timeout if the event never fires. express has dozens; they are checks, not gaps.
+- **A Go benchmark is not a test that forgot to assert**, nor is an Example or a Fuzz target.
+- **A `def test(...)` nested in another def is not a test**: in Click's suite it is a CLI command.
+- **A conditional skip runs somewhere.** `@pytest.mark.skipif` on Windows-registry tests, and cobra's
+  `t.Skip()` inside `if runtime.GOOS == "windows"`, both run elsewhere.
+- **A `def` whose parameters span several lines.** The parameter list was read as the body and the
+  real body discarded, so tests in psf/requests that assert plenty looked like they compared nothing.
+
+Not measured: **recall**. Nothing here says what share of vacuous tests it finds, only that what it
+reports is right. That needs a corpus of real commits where a developer fixed a test which was not
+testing anything, harvested the way the Phase 8 wait fixes were, and it is the next thing to do on
+this phase rather than a footnote to skip.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

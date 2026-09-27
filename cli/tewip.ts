@@ -182,6 +182,12 @@ async function main(): Promise<void> {
       runPursue({ root: process.cwd(), goal, act: args.includes('--act'), name: flag(args, 'name'), out: flag(args, 'out') });
       return;
     }
+    case 'vouch': {
+      const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--json'].includes(args[i - 1] ?? ''));
+      const { runVouch } = await import('../engine/vouch/run-vouch.ts');
+      runVouch({ root: process.cwd(), paths: paths.length > 0 ? paths : ['.'], out: flag(args, 'out'), json: flag(args, 'json'), strict: args.includes('--strict') });
+      return;
+    }
     case 'trace': {
       const { runTrace } = await import('../engine/trace/trace-command.ts');
       runTrace({ root: process.cwd(), only: flag(args, 'only'), name: flag(args, 'name'), out: flag(args, 'out') });

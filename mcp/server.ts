@@ -176,4 +176,24 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'vouch_tests',
+  {
+    title: 'Could these tests ever fail?',
+    description:
+      "Reads test files and says, per test, whether a change to the code could break them: which compare no value, which leave an expectation unfinished, which compare something with itself, which catch and discard their own failure, and which never run. Where the checking happens in a helper it cannot follow it says so instead of accusing. Costs nothing and uses no model. Use it on tests that were just written - including tests you wrote yourself - before claiming a change is covered.",
+    inputSchema: {
+      project,
+      paths: z.array(z.string()).optional().describe('Paths inside the project to read, relative to it. Defaults to the whole project.'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, paths }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { vouchReport } = await import('../engine/vouch/run-vouch.ts');
+      return vouchReport(root, paths && paths.length > 0 ? paths : ['.']).report;
+    }),
+);
+
 await server.connect(new StdioServerTransport());

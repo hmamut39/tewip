@@ -110,6 +110,14 @@ Usage:
                                     or attesting a green goal - by running the command that already
                                     proves them. It will not touch a real bug, and it writes what it
                                     did or refused to .tewip/actions.jsonl.
+  tewip vouch [<paths>] [--strict] [--out vouch.md] [--json vouch.json]
+                                    Could these tests ever fail? Reads tests somebody else wrote -
+                                    an agent, a contractor, last year's team - and names the ones
+                                    that check nothing, compare a value with itself, leave an
+                                    expectation unfinished, swallow their own failure, or never run.
+                                    Where the checking is in a helper it cannot follow it says so
+                                    instead of accusing. --strict exits non-zero on a finding, for a
+                                    gate. No model, no cost.
   tewip trace [--only "<ticket or title>"] [--out trace.md]
                                     Is this requirement covered, and is it passing right now? Joins
                                     the plans Tewip wrote to the tests that cover them and the runs

@@ -1500,6 +1500,21 @@ Seven false-positive classes were found by pointing it at real code, each now co
 - **A `def` whose parameters span several lines.** The parameter list was read as the body and the
   real body discarded, so tests in psf/requests that assert plenty looked like they compared nothing.
 
+Wired in where it pays off (2026-09-27), because a verb nobody runs checks nothing:
+
+- **`tewip review`** ends with the tests in the diff that cannot fail, and stays silent when they are
+  all sound. Verified on a real express commit, where the changed test file is sound and the section
+  correctly did not appear.
+- **The GitHub Action**, on a pull request, reads the test files the change touched and puts the
+  finding in the comment - including on a **green** run, which is the case it exists for and the case
+  the first version of the wiring dropped, because the comment returned early with "all tests passed".
+- **The attestation** carries any such test as a **refusal**, so a release decision taken from the
+  bundle cannot rest on a test that proves nothing. The line "a passing test is counted, not examined"
+  is reworded when they really were examined, rather than left to contradict the claim beside it.
+
+Where the diff cannot be read - a checkout with `fetch-depth: 1` has no base - nothing is reported
+rather than a guess at which files changed.
+
 Not measured: **recall.** Nothing here says what share of vacuous tests it finds, only that what it
 reports is right. This was attempted the way the Phase 8 wait fixes were measured, and the attempt
 failed, which is worth writing down so nobody repeats it:

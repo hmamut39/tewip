@@ -73,10 +73,19 @@ export function attestRun(
   project: string,
   run: RunSummary,
   records: TriageRecord[],
-  { checked, notChecked, tool, engine }: { checked: string[]; notChecked: string[]; tool: string; engine: string },
+  {
+    checked,
+    notChecked,
+    tool,
+    engine,
+    refusals: given = [],
+  }: { checked: string[]; notChecked: string[]; tool: string; engine: string; refusals?: Refusal[] },
 ): Attestation {
   const claims: AttestedClaim[] = [];
-  const refusals: Refusal[] = [];
+  // Refusals the caller already established - a test in this change that cannot fail, for instance -
+  // belong here beside the ones the records produce. They are the same kind of statement: something
+  // this bundle will not vouch for.
+  const refusals: Refusal[] = [...given];
 
   for (const record of records) {
     const diagnosis = record.diagnosis as { category?: string; confidence?: number } | undefined;

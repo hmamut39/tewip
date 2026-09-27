@@ -71,6 +71,13 @@ On every run, the action:
 - **Developers:** posts one diagnosis comment on the pull request and keeps it updated. For each failure it says whether the change likely caused it, why, and what to do next.
 - **SDETs:** writes the triage board into the job summary.
 - **DevOps:** collects environment failures (server errors, connection resets, outages) in **one** GitHub issue, and each new run adds a single grouped comment to it.
+- **The tests in the pull request:** on a PR it reads the test files the change touched and says which
+  of them could never fail - an unfinished expectation, a value compared with itself, a test that
+  discards its own failure, one that never runs. It says nothing when they are all sound, and it says
+  it **even on a green run**, because "all tests passed" is the exact sentence that needs qualifying
+  when one of them cannot fail. Needs `fetch-depth: 0` on `actions/checkout` so the diff can be read;
+  without it the section is skipped rather than guessed at. Any such test also enters the attestation
+  as a refusal, so a release decision taken from the bundle cannot rest on a test that proves nothing.
 - **Evidence, every run:** the Action writes an attestation into its artifact - the claims with
   their evidence and which layer decided each, what Tewip **refused** to decide, and what it did
   not check at all. Nothing enters it that Tewip did not verify itself, so a release decision can

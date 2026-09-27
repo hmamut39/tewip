@@ -9,6 +9,7 @@ import { coverageFor, uncovered } from './coverage.ts';
 import { renderReview, reviewChange, type Review } from './review.ts';
 import { changedExpectations } from './expectations.ts';
 import { changedAgreements } from './agreements.ts';
+import { changedTestLines, vouchChanged } from '../vouch/changed.ts';
 
 export interface ReviewCommand {
   root: string;
@@ -46,7 +47,10 @@ export async function runReview(cmd: ReviewCommand): Promise<Review | null> {
   const ownsThem = framework ? review.runFirst.some((f) => resolve(cmd.root, f).startsWith(resolve(framework.testDir))) : false;
   const runCommand = framework && ownsThem ? (chosen: string[]) => chosen.map((f) => framework.command(resolve(cmd.root, f))).join(' && ') : undefined;
 
-  const report = renderReview(review, runCommand);
+  // Whether the tests in this change could ever fail. Costs nothing, calls no model, and is the one
+  // question an agent-written diff most needs asked of it.
+  const vouched = changedTestLines(vouchChanged(cmd.root, files));
+  const report = [renderReview(review, runCommand), ...(vouched.length > 0 ? ['', ...vouched] : [])].join(String.fromCharCode(10));
   console.log(report);
   if (past.length === 0) {
     console.log('\nNo failure history yet, so the "what has gone wrong here before" part is empty. It fills itself: run `tewip explain` or `tewip report` on your CI reports and every later review knows more.');

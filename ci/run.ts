@@ -16,6 +16,8 @@ import { infraView } from '../outlets/views/infra.ts';
 import { releaseView } from '../outlets/views/release.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
+import { changedTestLines, vouchChanged, type ChangedTests } from '../engine/vouch/changed.ts';
+import { changeSummary } from '../engine/quality/grounding.ts';
 import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 import type { FixResult } from '../engine/autofix/autofix.ts';
@@ -62,6 +64,22 @@ async function reportJobDeath(ctx: CiContext, hint: string): Promise<void> {
   }
   // A gate cannot pass a run whose tests never ran, whatever the cause.
   if (ctx.gate) process.exitCode = 1;
+}
+
+/**
+ * The tests the pull request changed, vouched for. Tries the base branch as the runner has it, then
+ * the plain ref; if neither range resolves - a checkout with `fetch-depth: 1` has no base - it
+ * returns nothing rather than guessing at a file list.
+ */
+function aboutChangedTests(ctx: CiContext): ChangedTests | null {
+  const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
+  for (const range of [`origin/${base}...HEAD`, `${base}...HEAD`]) {
+    const change = changeSummary(ctx.workspace, range);
+    if (!change || change.files.length === 0) continue;
+    return vouchChanged(ctx.workspace, change.files.map((f) => f.split(String.fromCharCode(92)).join('/')));
+  }
+  log('could not read the range of this pull request, so the tests in it were not read (set fetch-depth: 0 on actions/checkout to enable it)');
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -114,12 +132,19 @@ async function main(): Promise<void> {
     fixPr = result?.pr ?? null;
     if (fixPr) log(`opened fix PR ${fixPr.html_url}`);
   }
+  // Could the tests this pull request touches ever fail? Asked only about the diff, and only when
+  // the diff can really be read: a shallow checkout cannot produce the range, and reporting on the
+  // wrong set of files would be worse than reporting on none.
+  const changedTests = ctx.pr ? aboutChangedTests(ctx) : null;
+  const testLines = changedTests ? changedTestLines(changedTests) : [];
+  if (changedTests) log(`tests in this change: ${changedTests.read} read, ${changedTests.cannotFail.length} cannot fail`);
+
   // Written after auto-fix: checking suggestions can revise an item's action and evidence.
   const views = [prCommentView, sdetBoardView, infraView, releaseView].map((view) => view(items, ctx.runId, ctx.repo));
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt)));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, testLines)));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);
@@ -154,15 +179,36 @@ async function main(): Promise<void> {
         ];
   const notChecked: string[] = [
     'the application itself: this bundle says nothing about secrets, dependencies or a running app',
-    'tests that passed: a passing test is counted, not examined',
+    // Reworded when the tests in the change really were examined: leaving "a passing test is counted,
+    // not examined" beside a claim that they were read would make the bundle disagree with itself.
+    changedTests ? 'tests that passed and are not part of this change: those were counted, not read' : 'tests that passed: a passing test is counted, not examined',
     'anything no test covers, which no test report can show',
   ];
+  // What the tests in this change are worth. A bundle that says "all green" over a test which cannot
+  // fail is the overclaim this whole phase exists to prevent, so it goes in as a claim when they are
+  // sound and as a refusal when they are not.
+  if (changedTests && changedTests.read > 0) {
+    checked.push(`${changedTests.read} test(s) in this change were read for whether they can fail at all, and ${changedTests.read - changedTests.cannotFail.length} can`);
+    if (changedTests.crashOnly.length > 0) {
+      notChecked.push(`${changedTests.crashOnly.length} test(s) in this change compare no value: they fail if the code throws and pass whatever it returns`);
+    }
+  }
   // Only worth saying when something actually needed settling: on a green run "anything the rules
   // could not settle is undecided" describes nothing, and reads as a caveat about a clean result.
   if (!llm && diagnosedNow.length > 0) {
     notChecked.unshift('the AI layer: no OPENAI_API_KEY was set, so only the deterministic rules ran and anything they could not settle is undecided');
   }
-  const attestation = attestRun(ctx.repo, imported.summary, diagnosedNow, { checked, notChecked, tool: 'tewip', engine: ENGINE_VERSION });
+  const attestation = attestRun(ctx.repo, imported.summary, diagnosedNow, {
+    checked,
+    notChecked,
+    tool: 'tewip',
+    engine: ENGINE_VERSION,
+    refusals: (changedTests?.cannotFail ?? []).map((j) => ({
+      what: `${j.name} (${j.file}:${j.line}) is in this change and cannot fail`,
+      why: j.why,
+      runId: imported.summary.runId,
+    })),
+  });
   writeFileSync(join(ctx.outDir, 'attestation.md'), `${renderAttestation(attestation)}
 `, 'utf8');
   writeFileSync(join(ctx.outDir, 'attestation.json'), `${JSON.stringify(attestation, null, 2)}

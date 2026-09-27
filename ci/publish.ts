@@ -25,9 +25,12 @@ const fit = (body: string, runUrl: string, limit = MAX_BODY) =>
  * `readAt` is when this run read people's replies; the hidden map records it so a reply is only
  * ever matched against the numbering its author saw.
  */
-export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[], records: TriageRecord[] = [], readAt?: string): string {
+export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueRef | null, fixes: FixResult[], records: TriageRecord[] = [], readAt?: string, aboutTests: string[] = []): string {
   const footer = `<sub>[CI run](${ctx.runUrl}) · every role's view is in the \`tewip-report\` artifact · Tewip never merges and never edits application code</sub>`;
-  if (items.length === 0) return `## Tewip: all tests passed on \`${ctx.sha.slice(0, 8)}\`\n\n${footer}`;
+  // A green run containing a test that cannot fail is the case this section exists for, so it goes
+  // above the early return: "all tests passed" is the exact sentence that needs qualifying.
+  const tests = aboutTests.length > 0 ? `\n\n${aboutTests.join('\n')}` : '';
+  if (items.length === 0) return `## Tewip: all tests passed on \`${ctx.sha.slice(0, 8)}\`${tests}\n\n${footer}`;
   const accepted = fixes.filter((f) => f.applied).length;
   const fixLine = fixPr
     ? `\n\n**Verified locator fixes: ${fixPr.html_url}** (${accepted} test(s) re-run and passing with the new locator). Review before merging: an intended UI change and a regression can look alike.`
@@ -37,7 +40,7 @@ export function prCommentBody(ctx: CiContext, items: TriageItem[], fixPr: IssueR
   // every correction, or leave a hidden comment that never closes.
   const learn = `\n\n${correctionHint(ctx.suite)}\n${renderBoardMap(commentOrder(items), records, readAt)}`;
   const tail = `${learn}\n\n${footer}`;
-  return `${fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}`, ctx.runUrl, MAX_BODY - tail.length)}${tail}`;
+  return `${fit(`${prCommentView(items, ctx.runId, ctx.repo).markdown}${fixLine}${tests}`, ctx.runUrl, MAX_BODY - tail.length)}${tail}`;
 }
 
 export async function postPrComment(ctx: CiContext, github: GitHub, body: string): Promise<string | null> {

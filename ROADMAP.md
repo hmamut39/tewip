@@ -1621,6 +1621,44 @@ proved, and the files it did not reach are named rather than left to look clean.
 
 Not measured: whether teams act on what it finds, which needs real users.
 
+### Phase 24: Is This Work Done? (`tewip done`)
+
+Tewip can answer six questions about a change. A reviewer has to run six commands and assemble the
+answer, which in practice means running none and merging on a green tick. This is the assembled answer,
+and it is built to be unimpressive: every check can come back "not checked", and "cannot say" is a real
+verdict that is never rounded up to ready.
+
+The order is fixed and published, like the pursue policy: what is failing, whether anything tests the
+changed code, whether the tests in the change can fail at all, whether they would catch a bug, whether
+what was asked for is covered. Nothing new is judged - each answer comes from a layer that has its own
+measured accuracy, and this file only orders them and names which layer decided.
+
+Phase metric: on real changes, verdicts a reviewer agrees with, and zero cases of "ready" over a change
+that a later failure proves was not.
+
+Status (2026-09-27): **built** as `tewip done`, also an MCP tool, with a sealed verdict under `--json`.
+
+Verified end to end on a realistic agent-written change: a new `refunds.js`, two new tests, and a green
+suite - three tests passing. The verdict is **not ready**, for two reasons a reviewer can act on: one
+test is `assert.ok(true)` and cannot fail, and three deliberate changes to the new code went unnoticed
+by the only test that covers it. That is the product in one screen: CI green, work not done.
+
+Two things came out of building it:
+
+- **It said "Ready, with 3 not checked" on a project with no history at all** - an approval assembled
+  out of shrugs. A verdict now requires the two questions nothing substitutes for (is anything failing,
+  does anything test this code) to have been answered, or it says "cannot say" and explains which one
+  it could not answer.
+- **`vouch` did not recognise `assert.ok(true)`** as a check that cannot fail, which is the commonest
+  placeholder in Node's own test style. Found only because the fixture for this phase was written to
+  look like real agent output rather than to exercise the code. It is in the vocabulary now, with a test.
+
+The verdict under `--json` is sealed with the same machinery as the attestation: editing `not-ready` to
+`ready` makes verification fail, so a verdict that travels into a ticket or a release note can be
+checked rather than trusted.
+
+Not measured: whether reviewers agree with the verdicts, which needs reviewers.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

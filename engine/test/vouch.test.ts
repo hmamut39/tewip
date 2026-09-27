@@ -31,6 +31,15 @@ describe('a test that cannot fail', () => {
     assert.equal(verdictOf('cart.test.js', `it('is defined', () => {\n  expect(cart.total).toBeDefined;\n});`), 'unfinished-expectation');
   });
 
+  it('catches a check whose subject is its own answer', () => {
+    // The commonest placeholder in Node's own test style, and the vocabulary did not have it until a
+    // realistic fixture for `tewip done` was written and quietly passed.
+    assert.equal(verdictOf('refunds.test.js', `test('a refund is calculated', () => {
+  refundFor({ total: 100 }, 10);
+  assert.ok(true);
+});`), 'tautology');
+  });
+
   it('catches a check that compares something with itself', () => {
     assert.equal(verdictOf('cart.test.js', `it('works', () => {\n  expect(true).toBe(true);\n});`), 'tautology');
     assert.equal(verdictOf('test_cart.py', `def test_works():\n    total = compute()\n    assert True\n`), 'tautology');

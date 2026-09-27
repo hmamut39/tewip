@@ -182,6 +182,20 @@ async function main(): Promise<void> {
       runPursue({ root: process.cwd(), goal, act: args.includes('--act'), name: flag(args, 'name'), out: flag(args, 'out') });
       return;
     }
+    case 'done': {
+      const { runDone } = await import('../engine/verdict/verdict-command.ts');
+      runDone({
+        root: process.cwd(),
+        diff: flag(args, 'diff') ?? 'main...HEAD',
+        prove: args.includes('--prove'),
+        proveBudgetSeconds: Number(flag(args, 'budget') ?? '300'),
+        out: flag(args, 'out'),
+        json: flag(args, 'json'),
+        name: flag(args, 'name'),
+        strict: args.includes('--strict'),
+      });
+      return;
+    }
     case 'prove': {
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--diff', '--limit', '--budget'].includes(args[i - 1] ?? ''));
       const { runProve } = await import('../engine/prove/prove-command.ts');

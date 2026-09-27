@@ -510,6 +510,48 @@ Joins the test plans Tewip wrote to the tests that cover them and the runs that 
 scenario counts as covered only when a real test can be named, and passing only when a real run
 attempted it; everything else says what is missing. No model, no cost.
 
+## Is this work actually done? (Phase 24)
+
+```bash
+tewip done --diff main...HEAD            # one verdict
+tewip done --prove --strict              # also break the code, and fail the build unless ready
+tewip done --json done.json              # a sealed verdict that can be checked later
+```
+
+Tewip can answer six questions about a change. A team reviewing an agent's pull request has to run six
+commands and assemble the answer themselves - which in practice means they run none and merge on a
+green tick. `done` is the assembled answer:
+
+```
+# Is this work done? Not ready
+
+| Question                                   | Answer      |
+| Is anything failing?                       | not checked |
+| Is the changed code tested?                | yes         |
+| Can the tests in this change fail?         | no          |
+| Would the tests catch a bug in this code?  | no          |
+| Is what was asked for covered?             | not checked |
+```
+
+That is a real run on a change where **all three tests passed**. One of them was `assert.ok(true)`, and
+three deliberate changes to the new code went unnoticed by the suite. CI was green; the work was not
+done.
+
+Nothing is judged here. Every answer comes from a layer with its own measured accuracy — the triage
+rules, `vouch`, `prove`, `trace` — and this only puts them in a fixed, published order: what is broken,
+then what cannot be believed, then what is missing. The same change always gets the same verdict.
+
+**"Cannot say" is a real answer, and it is never rounded up to ready.** A verdict needs the two questions
+nothing can substitute for — is anything failing, and does anything actually test this code — to have
+been answered. If Tewip has never seen a test result for the project, it says so and refuses to approve;
+the first version of this answered "Ready, with 3 not checked", which is an approval assembled out of
+shrugs. Every verdict also ends with what it says nothing about, including the one thing no tool here
+can know: whether the change does what was intended.
+
+With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the file makes verification
+fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
+also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
+
 ## Would your tests catch a bug? (Phase 23)
 
 ```bash

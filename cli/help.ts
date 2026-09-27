@@ -111,6 +111,13 @@ Usage:
                                     or attesting a green goal - by running the command that already
                                     proves them. It will not touch a real bug, and it writes what it
                                     did or refused to .tewip/actions.jsonl.
+  tewip done [--diff main...HEAD] [--prove] [--strict] [--out done.md] [--json done.json]
+                                    Is this work actually done? One verdict, from the layers that each
+                                    have a measured accuracy: is anything failing, is the changed code
+                                    tested, can those tests fail, would they catch a bug (--prove), and
+                                    is what was asked for covered. Answers ready, not ready, or cannot
+                                    say - and cannot say is never rounded up to ready. --json writes a
+                                    sealed verdict that can be checked later. No model, no cost.
   tewip prove <file> [--diff main...HEAD] [--limit 6] [--budget 600] [--strict]
                                     What would your tests NOT catch? Breaks your code in small,
                                     deliberate ways - a boundary moved by one, a condition inverted,

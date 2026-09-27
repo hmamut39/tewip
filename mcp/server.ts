@@ -220,4 +220,30 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'is_the_work_done',
+  {
+    title: 'Is this work actually done?',
+    description:
+      "One verdict on a change, from the layers that each have their own measured accuracy: is anything failing, is the changed code tested by something that really reaches it, can the tests in the change fail at all, would they catch a bug (only when prove is asked for, because that costs minutes), and is what was asked for covered. Answers ready, not ready, or cannot say - and cannot say is never rounded up to ready. Use it before claiming a piece of work is finished, including your own: a green test run is not the same as work that is done.",
+    inputSchema: {
+      project,
+      diff: z.string().optional().describe('A git range, e.g. main...HEAD (the default)'),
+      prove: z.boolean().optional().describe('Also break the changed code and run the tests against it. Costs minutes.'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, diff, prove }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // gather/decide/render are pure; runDone prints, which would corrupt the protocol.
+      const { gather } = await import('../engine/verdict/verdict-command.ts');
+      const { decide, renderDecision } = await import('../engine/verdict/verdict.ts');
+      const range = diff ?? 'main...HEAD';
+      const gathered = gather({ root, diff: range, prove });
+      if (!gathered) return `Nothing changed in ${range}, or that range could not be read here.`;
+      return renderDecision(range, decide(gathered.evidence));
+    }),
+);
+
 await server.connect(new StdioServerTransport());

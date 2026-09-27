@@ -118,6 +118,10 @@ export function tautologies(body: string): string[] {
       const [left, right] = [self[1] ?? self[3], self[2] ?? self[4]];
       if (left && right && left === right && !/^(true|false|null|undefined|None)$/.test(left)) found.push(line.trim());
     }
+    // `assert.ok(true)`, `assert(true)`, `assertTrue(true)`: a check whose subject is the answer. Found
+    // while writing a realistic fixture for the verdict - the commonest placeholder in Node's own test
+    // style, and the vocabulary did not have it.
+    if (/\b(assert(?:\.(?:ok|isTrue|isOk))?|assertTrue|expect)\s*\(\s*(?:true|1|!0)\s*[,)]/.test(line)) found.push(line.trim());
     // `assert True` / `assert 1`: a constant truth written as a statement.
     if (/^\s*assert\s+(True|true|1)\s*(,|$)/.test(line)) found.push(line.trim());
   }

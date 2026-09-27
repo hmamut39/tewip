@@ -137,6 +137,19 @@ describe('what it must not accuse', () => {
     assert.match(vouched.unread, /rather than clearing it/);
   });
 
+  it('does not read a quoted check as the test own check', () => {
+    // A test *about* tautologies quotes one. Before strings were blanked in the verdicts - not only in
+    // the extractor - Tewip accused its own suite of comparing a value with itself, and the eight-project
+    // precision run could not see it, because ordinary projects do not quote test code inside tests.
+    const text = ['it("catches a tautology", () => {', '  assert.equal(judge("expect(true).toBe(true);"), "tautology");', '});'].join(String.fromCharCode(10));
+    assert.equal(verdictOf('vouch.test.js', text), 'checks');
+  });
+
+  it('does not read a quoted expectation as an unfinished one', () => {
+    const text = ['it("catches an unfinished expectation", () => {', '  assert.equal(judge("expect(cart.total);"), "unfinished");', '});'].join(String.fromCharCode(10));
+    assert.equal(verdictOf('vouch.test.js', text), 'checks');
+  });
+
   it('is not fooled by a brace inside a string or a comment', () => {
     const text = `it('handles json', () => {\n  const raw = '{"a": 1}';\n  // } not the end\n  expect(JSON.parse(raw).a).toBe(1);\n});`;
     assert.equal(verdictOf('json.test.js', text), 'checks');

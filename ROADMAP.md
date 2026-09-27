@@ -1540,13 +1540,46 @@ failed, which is worth writing down so nobody repeats it:
 - **Seeding vacuity is circular** if the seeding deletes what the detector looks for, which guarantees
   a meaningless 100%.
 
-So the number is not published. Two routes would give a sound one, neither cheap enough to do beside
-the precision run: an independently labelled corpus of assertion-free tests, from the test-smell
-research datasets, where somebody else decided what counts; or mutants proved by execution - break
-the code a test covers, run it, and see whether it notices - which is real mutation testing and needs
-each project's suite installed and runnable. Until one of those is done, `vouch` is a tool with
-measured precision and unknown recall, and the report says as much rather than implying it found
-everything.
+**Measured (2026-09-27), by the second route: execution.** Phase 23 built the instrument, so `prove`
+now judges `vouch`. The method is in `eval/vouch-recall.ts`, and its labels cannot come from vouch's
+own patterns:
+
+1. Mutate a source file and record **which tests failed for each mutant**, by name.
+2. Remove the last statement of the tests that provably caught something - a rule that knows nothing
+   about assertions, and sometimes removes something else entirely.
+3. Run the mutants again. A test that caught mutant M before and catches nothing now has **provably**
+   lost its check. That is the label: execution, by difference, with no assumption about coverage.
+4. Only then ask `vouch`, by reading, and compare.
+
+On six source/test pairs in this repository (Node's own runner) and express's `lib/utils.js` (Mocha),
+**17 tests provably lost their check, and vouch named 12 of them (70.6%)** - each as "compares no
+value", which is the correct category: a test whose assertion is gone still fails if the code throws.
+No test that still caught a mutation was wrongly accused.
+
+The five it did not name were read one by one, and **vouch is right about all five**: each still holds
+a real assertion after the deletion, because the tests had two or three and lost one. They are tests
+that lost a check, not tests that cannot fail. So on this corpus there is no case where a test lost
+*every* check and vouch missed it, and 70.6% is a floor set by the coarseness of the label rather than
+by blindness in the tool.
+
+Three false measurements had to be fixed before the number meant anything, each one a reminder that a
+measurement can report whatever it is asked to:
+
+- **Counting any test that never failed as hollow.** A test for one function does not fail when another
+  is mutated; this scored vouch 0 of 12 on twelve perfectly sound tests. The label became a difference
+  between two runs instead of an absence in one.
+- **Keying tests by title.** express's file has 20 tests and 16 distinct titles, so four were silently
+  merged. Identity is the full title.
+- **A deletion that broke the file.** An off-by-one blanked each test's closing bracket, nothing parsed,
+  no test ran, and every test looked as though it had lost its check. The seeded file must now parse and
+  must run the same number of tests, or nothing is reported.
+
+**And the measurement paid for itself by finding a real defect in `vouch`.** Its verdicts never masked
+strings - only its extractor did - so a test that quotes `expect(true).toBe(true)` in a fixture was
+accused of being a tautology. Tewip accused its own test suite. The eight-project precision run could
+not see it, because ordinary projects do not quote test code inside tests, while any checker's,
+linter's or code generator's tests do. Strings are now blanked before any verdict is reached, with two
+regression tests.
 
 ### Phase 23: Would the Tests Catch a Bug? (`tewip prove`)
 

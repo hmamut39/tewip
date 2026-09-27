@@ -95,7 +95,12 @@ function judge(file: string, test: FoundTest, helpers: Set<string>): Judgement {
   const at = { file, name: test.name, line: test.line };
   if (test.skipped) return { ...at, verdict: 'never-runs', evidence: test.name, why: MEANS['never-runs'] };
 
-  const body = withoutComments(test.body);
+  // Strings are blanked as well as comments. A fixture that quotes `expect(true).toBe(true)` is not a
+  // tautology, it is a test *about* tautologies - and before this, Tewip accused its own suite of
+  // exactly that. The extractor learned this lesson in Phase 22; the verdicts had not, and it took a
+  // recall measurement judging by execution to notice, because no ordinary project quotes test code in
+  // its tests. Any checker's own tests do, and so does any test asserting on generated code.
+  const body = withoutText(withoutComments(test.body));
   const tautology = tautologies(body);
   const unfinished = unfinishedExpectations(body);
   const checks = checksSomething(body);
@@ -129,6 +134,21 @@ function judge(file: string, test: FoundTest, helpers: Set<string>): Judgement {
   if (tautology.length > 0) return { ...at, verdict: 'tautology', evidence: tautology[0], why: MEANS.tautology };
   if (body.trim() === '') return { ...at, verdict: 'crash-only', evidence: '(the body is empty)', why: 'the test has no body at all, so nothing can fail it' };
   return { ...at, verdict: 'crash-only', evidence: firstRealLine(body), why: MEANS['crash-only'] };
+}
+
+/**
+ * The body with the *contents* of strings and template literals blanked, keeping the quotes and
+ * everything around them. `expect(x).toBe(1)` still reads as a call; `"expect(true).toBe(true)"` reads
+ * as an empty string.
+ */
+function withoutText(body: string): string {
+  let out = body;
+  for (const [from, to] of textRanges(body).slice().reverse()) {
+    const span = out.slice(from, to + 1);
+    if (span.length < 3) continue;
+    out = out.slice(0, from + 1) + ' '.repeat(span.length - 2) + out.slice(to);
+  }
+  return out;
 }
 
 /**

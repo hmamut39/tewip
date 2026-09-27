@@ -1500,10 +1500,26 @@ Seven false-positive classes were found by pointing it at real code, each now co
 - **A `def` whose parameters span several lines.** The parameter list was read as the body and the
   real body discarded, so tests in psf/requests that assert plenty looked like they compared nothing.
 
-Not measured: **recall**. Nothing here says what share of vacuous tests it finds, only that what it
-reports is right. That needs a corpus of real commits where a developer fixed a test which was not
-testing anything, harvested the way the Phase 8 wait fixes were, and it is the next thing to do on
-this phase rather than a footnote to skip.
+Not measured: **recall.** Nothing here says what share of vacuous tests it finds, only that what it
+reports is right. This was attempted the way the Phase 8 wait fixes were measured, and the attempt
+failed, which is worth writing down so nobody repeats it:
+
+- **Mining commit messages does not work for this.** 506 commits were searched across eight phrasings
+  a developer might use ("test was not asserting anything", "test never fails", "forgot to assert").
+  80 looked like candidates. Exactly **1** had a message that really said it - and reading that one
+  showed the test already had `assert data["surfaces"] == {}` before the commit, so the developer was
+  adding a second check and Tewip was right to say nothing. The label was wrong, not the tool.
+- **"A developer added an assertion" is not a label**, because that describes most test commits.
+- **Seeding vacuity is circular** if the seeding deletes what the detector looks for, which guarantees
+  a meaningless 100%.
+
+So the number is not published. Two routes would give a sound one, neither cheap enough to do beside
+the precision run: an independently labelled corpus of assertion-free tests, from the test-smell
+research datasets, where somebody else decided what counts; or mutants proved by execution - break
+the code a test covers, run it, and see whether it notices - which is real mutation testing and needs
+each project's suite installed and runnable. Until one of those is done, `vouch` is a tool with
+measured precision and unknown recall, and the report says as much rather than implying it found
+everything.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

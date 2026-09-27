@@ -135,6 +135,10 @@ export function renderVouch(files: FileVouch[]): string {
     'Every verdict above quotes the line it is based on, and nothing was inferred by a model: this',
     'costs nothing to run. Where the checking happens in a helper Tewip cannot follow it says so',
     'rather than guessing, which is why the list above is worth reading.',
+    '',
+    'What this does not tell you is how many it missed. Everything it reports here has been measured',
+    'for correctness on real projects; its recall has not been measured at all, so a clean report is',
+    'not proof that every test in these files is worth something.',
   );
   return lines.join(String.fromCharCode(10));
 }

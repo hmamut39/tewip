@@ -496,6 +496,41 @@ Joins the test plans Tewip wrote to the tests that cover them and the runs that 
 scenario counts as covered only when a real test can be named, and passing only when a real run
 attempted it; everything else says what is missing. No model, no cost.
 
+## Could these tests ever fail? (Phase 22)
+
+```bash
+tewip vouch tests/            # or a file, or the whole project
+tewip vouch tests/ --strict   # exits non-zero, for a merge gate
+```
+
+Most tests in a pull request are now written by an agent, and the question that decides whether they
+are worth anything goes unasked: **could this test ever fail?** Coverage counts a test that checks
+nothing. CI goes green on it. A reviewer skims something plausible and approves it.
+
+`vouch` reads tests somebody else wrote and answers per test, quoting the line it rests on. It finds
+tests that leave an expectation unfinished (`expect(value);` with no matcher - it reads exactly like a
+check), tests that compare a value with itself, tests that catch and discard their own failure, tests
+that never run, and tests that compare no value at all. No model, no cost.
+
+It is also an MCP tool, so a coding agent can ask about the tests it just wrote before claiming a
+change is covered.
+
+**Measured on 5,448 tests in 8 public projects across 5 languages** (express, axios, chalk, requests,
+click, gorilla/mux, cobra, gson): 19 tests were called unable to fail, and **all 19 were correct** when
+read against the files - one unconditional skip in psf/requests, eighteen `@Ignore` methods in gson.
+
+Two things it refuses to do, which is why the list is worth reading:
+
+- **It will not guess.** A test whose checking happens inside a helper it cannot follow is reported as
+  undecided, by name, never as worthless. A wrong accusation about somebody's test costs more than a
+  missed one.
+- **It will not overclaim.** A test with no assertion still fails when the code throws - in axios, a
+  test that compiles a TypeScript fixture and runs it asserts nothing *on purpose*. Those are reported
+  separately as "compares no value", not as broken, and they do not trip `--strict`.
+
+Honest limit, also printed at the bottom of every report: its **recall is unmeasured**. A clean report
+means nothing it found was wrong, not that every test in the file is worth something.
+
 ## A goal instead of a verb (Phases 19 and 21)
 
 ```bash

@@ -111,6 +111,14 @@ Usage:
                                     or attesting a green goal - by running the command that already
                                     proves them. It will not touch a real bug, and it writes what it
                                     did or refused to .tewip/actions.jsonl.
+  tewip prove <file> [--diff main...HEAD] [--limit 6] [--budget 600] [--strict]
+                                    What would your tests NOT catch? Breaks your code in small,
+                                    deliberate ways - a boundary moved by one, a condition inverted,
+                                    an and that became an or - runs the tests that import that file,
+                                    and reports every change nobody noticed. The line was covered; it
+                                    was not checked, and no coverage number can tell you that. Every
+                                    file is put back exactly as it was. Slow by nature, and it needs
+                                    a unit test framework. No model, no cost.
   tewip vouch [<paths>] [--strict] [--out vouch.md] [--json vouch.json]
                                     Could these tests ever fail? Reads tests somebody else wrote -
                                     an agent, a contractor, last year's team - and names the ones

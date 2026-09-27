@@ -182,6 +182,20 @@ async function main(): Promise<void> {
       runPursue({ root: process.cwd(), goal, act: args.includes('--act'), name: flag(args, 'name'), out: flag(args, 'out') });
       return;
     }
+    case 'prove': {
+      const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--diff', '--limit', '--budget'].includes(args[i - 1] ?? ''));
+      const { runProve } = await import('../engine/prove/prove-command.ts');
+      runProve({
+        root: process.cwd(),
+        files: paths,
+        diff: flag(args, 'diff'),
+        limit: Number(flag(args, 'limit') ?? '6'),
+        budgetSeconds: Number(flag(args, 'budget') ?? '600'),
+        out: flag(args, 'out'),
+        strict: args.includes('--strict'),
+      });
+      return;
+    }
     case 'vouch': {
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--json'].includes(args[i - 1] ?? ''));
       const { runVouch } = await import('../engine/vouch/run-vouch.ts');

@@ -23,13 +23,19 @@ describe('MCP server', { skip: hasLocalData ? false : 'no local data/triage.json
     return { text: result.content.map((c) => c.text).join('\n'), isError: Boolean(result.isError) };
   };
 
-  it('lists every tool as read-only, except the plan it saves in the project, and none destructive', async () => {
+  it('lists every tool as read-only, except the two that write, and none destructive', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     for (const expected of ['github_ci_report', 'triage_board', 'pr_impact', 'environment_report', 'release_readiness', 'quality_report', 'architecture_report', 'risk_digest', 'explain_failure', 'list_datasets', 'list_failed_runs', 'test_plan']) {
       assert.ok(names.includes(expected), `missing tool ${expected}`);
     }
-    assert.ok(tools.filter((t) => t.name !== 'test_plan').every((t) => t.annotations?.readOnlyHint === true), 'every other tool must be read-only');
+    // Two tools write, and each says so rather than claiming to be read-only: `test_plan` saves a plan
+    // in the project, and `prove_tests_catch_bugs` edits a source file to break it on purpose and puts
+    // it back. Both are honest about it, and neither is destructive - the file is restored byte for
+    // byte, and a restore that does not verify is treated as an error rather than ignored.
+    const writes = ['test_plan', 'prove_tests_catch_bugs'];
+    assert.ok(tools.filter((t) => !writes.includes(t.name)).every((t) => t.annotations?.readOnlyHint === true), 'every other tool must be read-only');
+    assert.ok(tools.filter((t) => writes.includes(t.name)).every((t) => t.annotations?.readOnlyHint === false), 'a tool that writes must not claim to be read-only');
     assert.ok(tools.every((t) => t.annotations?.destructiveHint === false), 'no tool may be destructive');
   });
 

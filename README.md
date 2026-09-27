@@ -503,6 +503,54 @@ Joins the test plans Tewip wrote to the tests that cover them and the runs that 
 scenario counts as covered only when a real test can be named, and passing only when a real run
 attempted it; everything else says what is missing. No model, no cost.
 
+## Would your tests catch a bug? (Phase 23)
+
+```bash
+tewip prove src/pricing.js              # or --diff main...HEAD for what a change touched
+tewip prove src/pricing.js --strict     # exits non-zero when something goes unnoticed
+```
+
+Coverage says a line ran. It does not say anybody checked it. `prove` settles that by **execution**:
+it breaks your code in small, deliberate ways - a boundary moved by one, a condition inverted, an
+`and` that became an `or`, a returned flag flipped, a pattern loosened - runs the tests that reach
+that file, and reports every change **none of them noticed**.
+
+```
+4 change(s) were made to your code and the covering tests were run against each. 3 went unnoticed.
+
+- line 2: a boundary moved by one
+  - was:    if (total >= 100 && isMember) return 0.2;
+  - became: if (total > 100 && isMember) return 0.2;
+- line 9: a sign reversed
+  - was:    return total - total * off;
+  - became: return total + total * off;
+```
+
+Both of those are real: the tests used 150 and 10 and never the boundary itself, and the test calling
+`finalPrice` asserted nothing at all. Neither gap is visible in a coverage report, because both lines
+were covered.
+
+It refuses more often than it reports, and the refusals are the reason the reports are worth reading:
+
+- **Your file is put back exactly as it was**, byte for byte, line endings included, in a `finally` -
+  and the restore is verified, not assumed. A restore that did not work is an error, not a shrug.
+- **Nothing that can hang is touched.** Loop headers are never changed: a flipped comparison in a
+  `while` does not fail a test, it runs forever.
+- **A red suite proves nothing.** Every covering test is run untouched first. Ones that do not pass are
+  set aside by name, and if none pass, it says so and stops - a test that was already failing would
+  otherwise appear to "catch" every change.
+- **It checks that your tests actually load the file.** If breaking the file outright does not fail a
+  single test, they are reading an installed copy or a build output, and it says that instead of
+  reporting a page of holes that do not exist. This caught a real case on the first Python project it
+  met, where `import humanize` resolved to a different checkout entirely.
+- **Strings and comments are never changed**, because changing a message is not a bug a test should be
+  expected to catch.
+
+It follows imports, so a file reached *through* another module is still proved - in a layered codebase
+that is most of them. It needs a unit test framework (jest, vitest, mocha, `node --test`, pytest, go
+test, maven, gradle, dotnet), calls no model, and costs nothing but time. It is also an MCP tool, so a
+coding agent can ask whether the tests it is relying on would have stopped its own mistake.
+
 ## Could these tests ever fail? (Phase 22)
 
 ```bash

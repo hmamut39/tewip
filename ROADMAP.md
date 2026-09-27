@@ -1548,6 +1548,68 @@ each project's suite installed and runnable. Until one of those is done, `vouch`
 measured precision and unknown recall, and the report says as much rather than implying it found
 everything.
 
+### Phase 23: Would the Tests Catch a Bug? (`tewip prove`)
+
+`vouch` reads a test and says whether it *could* fail. This answers the harder question, and answers
+it by execution rather than by reading: break the code, run the tests that reach it, and see. A
+coverage report says a line ran. It never says anybody checked it.
+
+`tewip prove <file>` makes small, deliberate changes - a boundary moved by one, a condition inverted,
+an `and` that became an `or`, a returned flag flipped, a pattern loosened - runs the covering tests
+against each, and reports every change nobody noticed. It follows imports, so a file reached *through*
+another module is still proved.
+
+Phase metric: on real projects, changes that went unnoticed, with every reported hole confirmed by
+reading the test that should have caught it; and zero files left modified.
+
+Status (2026-09-27): **built**, and measured on real projects.
+
+| Project | Runner | Covering tests | Changes | Unnoticed | Time |
+| --- | --- | --- | --- | --- | --- |
+| expressjs/express `lib/utils.js` | Mocha | 13 files | 4 | **2** | 102s |
+| Tewip `engine/vouch/assertions.ts` | node --test, reached through 2 imports | 1 file | 3 | **1** | 1s |
+
+Both express findings were read and are real: nothing checks the sign in
+`str.slice(splitIndex + 1, endIndex)` when parsing content-type parameters, and nothing checks what
+`compileTrust(true)` returns. Neither is visible in a coverage report, because both lines are covered.
+
+**Four false answers were found and fixed by running it on strangers' code**, and each is the same
+mistake in a different disguise - a confident claim that the evidence did not support:
+
+- **It read the test output to decide whether a mutant compiled.** express's static-file tests print
+  ENOENT messages when they *pass*, so four valid mutants were discarded as "did not compile" and the
+  report said nothing could be shown. Guessing at a run's meaning from words in its log is the habit
+  this project exists to replace; there is now an exact check (`node --check`), and a failing test is
+  simply a test that noticed, whatever it printed.
+- **A test that was already failing was credited with catching everything.** It fails before the change
+  and after it, so it "noticed" all five mutants in python-humanize while also being listed as set
+  aside - the report contradicted itself on the page. Only tests that pass untouched may judge.
+- **It reported five holes in a suite that is thorough.** In a src-layout Python project `import
+  humanize` resolved to a *different checkout*, so editing the file changed nothing the tests ran and
+  every mutant survived. There is now a **control**: the file is broken outright and a covering test
+  must notice, or nothing is claimed and the reason is named. This is the same discipline as the write
+  gate - a check that cannot fail proves nothing, and neither does a test that cannot see the code.
+- **One unrunnable test file blocked the whole answer.** Six files cover `filesize.py` and one needs a
+  plugin that is not installed. Refusing the question told the developer nothing, so unusable files are
+  now set aside by name and the rest answer.
+
+Two gaps in how Tewip reads projects were also closed, and both were larger than they looked:
+
+- **Mocha and `node --test` were not detected at all.** Most of the JavaScript world runs on Mocha -
+  express included - and `node --test` is what this project's own suite uses, so Tewip could not write,
+  fix or prove a test in its own repository.
+- **A test file was only recognised by its name.** Mocha's convention is `test/utils.js` with no suffix,
+  so express looked like a project with no tests and Tewip reported that nothing covered any file in it.
+  Files in a test folder are now read to see whether they declare tests.
+
+Safety, since this is the only command that writes to source the developer did not ask it to touch:
+the original bytes are held before anything is written, the file is restored in a `finally`, and the
+restore is **verified** - a mismatch is an error, not a shrug. Loop headers are never touched, because a
+flipped comparison in a `while` does not fail a test, it hangs the machine. Proved by test: after six
+mutations a CRLF file came back with an identical SHA-256.
+
+Not measured: whether teams act on what it finds, which needs real users.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

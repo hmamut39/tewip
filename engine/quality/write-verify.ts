@@ -46,6 +46,18 @@ function pageAtFailure(output: string, cwd: string): string {
  */
 const RUNNER_BROKE = /has not captured in \d+ ?ms|failed \d+ times \(timeout\)\. Giving up|Disconnected[, ].{0,40}because no message|No captured browser|EADDRINUSE|Timed out waiting \d+ms from config\.webServer|webServer.{0,60}(?:exited|timed out)|ENOSPC|spawnSync .* ETIMEDOUT/i;
 
+/**
+ * The environment for a test run. NODE_TEST_CONTEXT is removed: a `node --test` child that inherits
+ * it reports as a subtest of whatever spawned it instead of by its own exit code, so a failing run
+ * looks like a passing one. That has already cost this project once, in the auto-fix gate, and it
+ * matters wherever Tewip runs a test runner from inside one.
+ */
+function childEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...extra };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
+}
+
 export function runTest(framework: Framework, file: string, timeoutMs = 180_000): RunResult {
   let result = runOnce(framework, file, timeoutMs);
   for (let retry = 0; retry < 2 && !result.passed && RUNNER_BROKE.test(result.output); retry++) result = runOnce(framework, file, timeoutMs);
@@ -54,7 +66,7 @@ export function runTest(framework: Framework, file: string, timeoutMs = 180_000)
 }
 
 function runOnce(framework: Framework, file: string, timeoutMs: number): RunResult {
-  const r = spawnSync(framework.command(file), { cwd: framework.cwd, env: { ...process.env, ...framework.env }, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
+  const r = spawnSync(framework.command(file), { cwd: framework.cwd, env: childEnv(framework.env), shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 });
   // Colour codes are noise to a reader and would stop a quoted line from matching.
   const output = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`.replace(/\u001b\[[0-9;]*[A-Za-z]/g, '').trim();
   if (r.status === 0 && onlySkipped(output)) return { passed: false, skipped: true, output: `The test was skipped, so nothing was checked. Make it run here.\n${output.slice(-3000)}` };

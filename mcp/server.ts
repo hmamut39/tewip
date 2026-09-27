@@ -196,4 +196,28 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'prove_tests_catch_bugs',
+  {
+    title: 'Would the tests catch a bug here?',
+    description:
+      "Breaks one source file in small, deliberate ways - a boundary moved by one, a condition inverted, an and that became an or, a returned flag flipped - runs the tests that reach that file, and reports every change none of them noticed. This is execution, not opinion: the line was covered, it just was not checked. Slow by nature (each change means a real test run, so expect minutes) and it needs a unit test framework. The file is always put back exactly as it was, and if the tests turn out not to load the file at all it says so instead of reporting false holes. Use it after writing or changing code, to find out whether the tests you are relying on would have stopped a mistake.",
+    inputSchema: {
+      project,
+      file: z.string().describe('One source file, relative to the project, e.g. src/pricing.js'),
+      limit: z.number().optional().describe('How many changes to try (default 6). More is a better answer and a longer wait.'),
+      budgetSeconds: z.number().optional().describe('Total seconds to spend before stopping and saying how many were left (default 600)'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  ({ project: root, file, limit, budgetSeconds }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // runProve prints its report; over MCP the report is the return value and printing would corrupt
+      // the protocol, so the pieces are called directly.
+      const { proveOne } = await import('../engine/prove/prove-command.ts');
+      return proveOne(root, file, { limit, budgetSeconds });
+    }),
+);
+
 await server.connect(new StdioServerTransport());

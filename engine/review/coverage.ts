@@ -21,6 +21,26 @@ export interface TestCoverage {
 const TEST_FILE = /(?:\.|_)(?:spec|test)\.[cm]?[jt]sx?$|(?:^|[\\/])test_[^\\/]+\.py$|_test\.py$|_test\.go$|Test(?:s)?\.(?:java|kt|cs)$|\.cy\.[jt]sx?$|\.feature$|\.robot$/i;
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next']);
 
+/**
+ * A test file that does not say so in its name.
+ *
+ * Mocha's convention - and most of the JavaScript world before ~2018 - is `test/utils.js`, with no
+ * suffix at all. Requiring `.test.js` meant every Mocha project looked like a project with no tests:
+ * express has 88 of them, and Tewip reported that nothing covered any file in it. The name is checked
+ * first because it is free; only a file already sitting in a test folder is opened to be sure.
+ */
+function declaresTests(dir: string, path: string): boolean {
+  const where = dir.split(String.fromCharCode(92)).join('/');
+  if (!/(?:^|\/)(?:tests?|spec|specs|__tests__)(?:\/|$)/i.test(where)) return false;
+  if (/(?:^|\/)(?:fixtures?|support|helpers?|mocks?|__mocks__|data|snapshots?)(?:\/|$)/i.test(where)) return false;
+  if (!/\.(?:[cm]?[jt]sx?|py)$/i.test(path)) return false;
+  try {
+    return /\b(?:describe|it|test|context|suite)\s*\(|^\s*def\s+test_/m.test(readFileSync(path, 'utf8').slice(0, 8000));
+  } catch {
+    return false;
+  }
+}
+
 /** Every test file in the project. */
 export function testFiles(root: string, limit = 4000): string[] {
   const out: string[] = [];
@@ -42,7 +62,7 @@ export function testFiles(root: string, limit = 4000): string[] {
       }
       if (info.isDirectory()) {
         if (!SKIP_DIR.has(entry)) walk(path);
-      } else if (TEST_FILE.test(entry)) out.push(path);
+      } else if (TEST_FILE.test(entry) || declaresTests(dir, path)) out.push(path);
     }
   };
   walk(root);
@@ -57,7 +77,7 @@ export const isCode = (file: string): boolean =>
   /\.(?:[cm]?[jt]sx?|py|rb|go|java|kt|cs|php|rs|vue|svelte|scala|swift|sql)$/i.test(file) && !/(?:^|[\/])(?:package-lock\.json|yarn\.lock)$/i.test(file);
 
 /** The module names a file can be imported by: its path, its name, and its folder's front door. */
-function importNames(root: string, changed: string): string[] {
+export function importNames(root: string, changed: string): string[] {
   const full = resolve(root, changed);
   const noExt = full.slice(0, full.length - extname(full).length);
   const names = new Set<string>([basename(noExt), relative(root, noExt).split(sep).join('/')]);
@@ -102,8 +122,8 @@ function packageNames(root: string, changed: string): string[] {
   return [...new Set(out)].filter(Boolean);
 }
 
-/** Does this test's source import that changed file? */
-function importsIt(source: string, names: string[]): boolean {
+/** Does this source import that file? Exported so the prover can follow imports further. */
+export function importsIt(source: string, names: string[]): boolean {
   for (const name of names) {
     const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const patterns = [

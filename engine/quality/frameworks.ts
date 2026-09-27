@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
-export type FrameworkId = 'playwright' | 'cypress' | 'webdriverio' | 'angular' | 'jest' | 'vitest' | 'pytest' | 'maven' | 'gradle' | 'dotnet' | 'go';
+export type FrameworkId = 'playwright' | 'cypress' | 'webdriverio' | 'angular' | 'jest' | 'vitest' | 'mocha' | 'node' | 'pytest' | 'maven' | 'gradle' | 'dotnet' | 'go';
 
 export interface Framework {
   id: FrameworkId;
@@ -134,7 +134,40 @@ function jsFrameworks(dir: string, deps: string): Framework[] {
     out.push({ id, label, browser, cwd: dir, testDir: example ? dirname(example) : join(dir, 'test'), example, fileFor: sameSuffix(example, '.test.ts', /\.(spec|test)\.[mc]?[jt]sx?$/), command: (f) => `${run} ${q(relative(dir, f).replaceAll('\\', '/'))}`, suite: run });
     break;
   }
+  // Mocha, and Node's own test runner. Both were missing, and their absence was not a small gap:
+  // express and a great deal of the JavaScript world run on Mocha, `node --test` needs no dependency
+  // at all and is what this project's own suite uses - so Tewip could not write, fix or prove a test
+  // in its own repository. A runner is only "supported" if it is detected.
+  if (out.length === 0) {
+    const anyTest = testFiles(dir, /\.(spec|test)\.[mc]?[jt]sx?$|[\/]test[\/].*\.[mc]?js$/)[0] ?? null;
+    const mocha = /"mocha"\s*:/.test(deps);
+    const nodeTest = !mocha && (/node\s+--test/.test(deps) || (anyTest !== null && /require\(['"]node:test['"]\)|from\s+['"]node:test['"]/.test(readIfThere(anyTest))));
+    if (mocha || nodeTest) {
+      const id = mocha ? ('mocha' as const) : ('node' as const);
+      const run = mocha ? 'npx mocha' : 'node --test';
+      out.push({
+        id,
+        label: mocha ? 'Mocha (JavaScript/TypeScript)' : "Node's own test runner (JavaScript/TypeScript)",
+        browser: false,
+        cwd: dir,
+        testDir: anyTest ? dirname(anyTest) : join(dir, 'test'),
+        example: anyTest,
+        fileFor: sameSuffix(anyTest, '.test.js', /\.(spec|test)\.[mc]?[jt]sx?$/),
+        command: (f) => `${run} ${q(relative(dir, f).split(String.fromCharCode(92)).join('/'))}`,
+        suite: run,
+      });
+    }
+  }
   return out;
+}
+
+/** A file's text, or nothing: used only to recognise a runner from how a test imports it. */
+function readIfThere(file: string): string {
+  try {
+    return readFileSync(file, 'utf8').slice(0, 4000);
+  } catch {
+    return '';
+  }
 }
 
 /** The project's own Python (its virtual environment) when it has one, else the one on the PATH. */

@@ -547,8 +547,9 @@ tewip pursue "keep the checkout flow green" --act
 
 Give Tewip a goal and it says what it would do next, and why, from what it can actually see. The
 order is fixed, published and testable - **not chosen by a model**: a real bug first, then the
-environment, then flakiness, then anything failing it cannot explain, then a coverage gap, and only
-then is the goal worth attesting. Deciding the same state twice gives the same answer.
+environment, then flakiness, then anything failing it cannot explain, then a test that cannot fail,
+then a coverage gap, and only then is the goal worth attesting. Deciding the same state twice gives
+the same answer.
 
 With `--act` it carries the decision out, and this is where the refusals matter most:
 

@@ -1515,6 +1515,18 @@ Wired in where it pays off (2026-09-27), because a verb nobody runs checks nothi
 Where the diff cannot be read - a checkout with `fetch-depth: 1` has no base - nothing is reported
 rather than a guess at which files changed.
 
+One more join, the same day (2026-09-27): **`pursue` can now tell real green from fake green.** The
+policy had six ordered branches and none of them could see a test that does not check anything, so a
+goal whose tests could never fail went straight to `attest` - Tewip putting a seal on a suite that
+cannot say no. There is now a branch for it between the failures and the coverage gap, and the
+ordering is deliberate: a missing test is honest about being missing, while a test that cannot fail
+reads as coverage and is counted as coverage, so it is the more misleading of the two. Acting on it is
+refused by name, because making a test check something changes what the test means.
+
+Verified on the live lab project: a goal with three passing tests, one of which held an unfinished
+expectation, produced "put 1 test(s) that cannot fail in front of a person" with the file and line,
+and `--act` declined it in those words.
+
 Not measured: **recall.** Nothing here says what share of vacuous tests it finds, only that what it
 reports is right. This was attempted the way the Phase 8 wait fixes were measured, and the attempt
 failed, which is worth writing down so nobody repeats it:

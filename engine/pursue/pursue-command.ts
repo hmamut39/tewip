@@ -11,6 +11,8 @@ import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/stor
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { alreadyTried, cannotAct, planFor, type ActionRecord } from './act.ts';
 import { decide, type Decision, type Observed } from './policy.ts';
+import { CANNOT_FAIL } from '../vouch/vouch.ts';
+import { vouchAll } from '../vouch/vouch-command.ts';
 
 export interface PursueCommand {
   root: string;
@@ -68,7 +70,27 @@ export function observe(root: string, goal: string, only?: string): Observed {
     passing: attempted.length - failing.length,
     noHistory: runs.length === 0,
     runId: newest?.runId ?? '',
+    vacuous: vacuousTests(root, wanted),
   };
+}
+
+/**
+ * Tests covering this goal that could never fail, read from the files themselves.
+ *
+ * Only the verdicts that mean a test truly cannot fail are collected. A test that compares no value
+ * is left out here on purpose: it fails when the code throws, it is often meant to, and stopping an
+ * agent's whole goal over one would make this branch something people route around.
+ */
+function vacuousTests(root: string, goal: string[]): Observed['vacuous'] {
+  try {
+    const found = vouchAll(root, ['.']);
+    return found
+      .flatMap((file) => file.judgements)
+      .filter((j) => CANNOT_FAIL.includes(j.verdict) && about(goal, `${j.file} ${j.name}`))
+      .map((j) => ({ name: j.name, file: j.file, line: j.line, why: j.why }));
+  } catch {
+    return []; // an unreadable tree is not a tree full of worthless tests
+  }
 }
 
 /** Scenarios of a kept plan that no attempted test can be matched to, worst priority first. */
@@ -120,7 +142,8 @@ export function renderPursuit(goal: string, seen: Observed, decision: Decision, 
       : 'Tewip has not done anything: this is a decision, and the action is yours.',
     '',
     'The order of these decisions is fixed and written down, not chosen by a model: a real bug first,',
-    'then the environment, then flakiness, then a coverage gap, and only then is a goal worth attesting.',
+    'then the environment, then flakiness, then anything failing it cannot explain, then a test that',
+    'cannot fail, then a coverage gap, and only then is a goal worth attesting.',
   );
   return lines.join('\n');
 }

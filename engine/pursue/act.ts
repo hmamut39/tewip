@@ -50,6 +50,7 @@ export const cannotAct: Record<Act, string> = {
   'rerun-environment': 'a re-run belongs to whatever runs the tests, not to Tewip',
   'settle-flaky': 'settling a flaky test changes a test file, which Tewip does only when asked directly with `tewip fix`',
   'triage-undecided': 'Tewip cannot say why these failed, so it has nothing it could safely do about them',
+  'triage-vacuous-test': 'a test that cannot fail is for a person to decide about: making it check something changes what the test means, and guessing at what it was meant to check is how a suite quietly stops testing anything',
   'cover-gap': '',
   attest: '',
   'stand-down': 'there is nothing here that matches the goal',

@@ -105,7 +105,8 @@ Usage:
                                     green" - and it says what it would do next and why, from what
                                     it can actually see. The order is fixed and written down: a
                                     real bug first, then the environment, then flakiness, then a
-                                    coverage gap. It decides; it does not act unless you ask. With
+                                    test that cannot fail, then a coverage gap. It decides; it does
+                                    not act unless you ask. With
                                     --act it carries out the two safe ones - writing a missing test,
                                     or attesting a green goal - by running the command that already
                                     proves them. It will not touch a real bug, and it writes what it

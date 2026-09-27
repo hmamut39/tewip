@@ -24,6 +24,12 @@ export interface Observed {
   noHistory: boolean;
   /** The run this describes. An action is not attempted twice against the same evidence. */
   runId?: string;
+  /**
+   * Tests covering this goal that could never fail. Without this the policy cannot tell a green goal
+   * from a goal whose tests do not check anything, and it would attest to the second as readily as
+   * the first.
+   */
+  vacuous?: Array<{ name: string; file: string; line: number; why: string }>;
 }
 
 export type Act =
@@ -32,6 +38,7 @@ export type Act =
   | 'rerun-environment' // the failures are the machine, not the code
   | 'settle-flaky' // the failures come and go, and the test is the problem
   | 'triage-undecided' // something the goal depends on is failing and Tewip cannot say why
+  | 'triage-vacuous-test' // nothing is failing, but a test that is meant to watch the goal cannot fail
   | 'cover-gap' // nothing is failing, but something important is unchecked
   | 'attest' // the goal is met, as far as anything here can show
   | 'stand-down'; // the goal names nothing this project knows about
@@ -114,6 +121,21 @@ export function decide(goal: string, seen: Observed): Decision {
       next: `put ${seen.failing.length} failing test(s) in front of a person: ${list(seen.failing.map((f) => f.testId))}`,
       why: `the goal is failing and Tewip cannot say why: ${list([...new Set(seen.failing.map((f) => f.category))], 4)}. It will not move on to anything else while something it is watching is red`,
       evidence: seen.failing.map((f) => `${f.testId}: ${f.category}${f.confidence ? ` at ${f.confidence.toFixed(2)}` : ' (undiagnosed)'}`),
+      changesFiles: false,
+    };
+  }
+
+  // Nothing is failing, so the goal looks met. Before believing that, ask whether the tests that
+  // say so could ever have said otherwise. This comes before the coverage gap on purpose: a missing
+  // test is honest about being missing, while a test that cannot fail reads as coverage and is
+  // counted as coverage, so it is the more misleading of the two.
+  const vacuous = seen.vacuous ?? [];
+  if (vacuous.length > 0) {
+    return {
+      act: 'triage-vacuous-test',
+      next: `put ${vacuous.length} test(s) that cannot fail in front of a person: ${list(vacuous.map((v) => v.name))}`,
+      why: `nothing the goal depends on is failing, but ${vacuous.length === 1 ? 'one of the tests saying so could never have said otherwise' : `${vacuous.length} of the tests saying so could never have said otherwise`}, so the green result does not mean what it looks like`,
+      evidence: vacuous.slice(0, 5).map((v) => `${v.name} (${v.file}:${v.line}): ${v.why}`),
       changesFiles: false,
     };
   }

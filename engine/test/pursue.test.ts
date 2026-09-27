@@ -9,6 +9,37 @@ import { renderPursuit } from '../pursue/pursue-command.ts';
 const nothing: Observed = { failing: [], flaky: [], uncovered: [], passing: 0, noHistory: false };
 const seen = (over: Partial<Observed> = {}): Observed => ({ ...nothing, ...over });
 
+const cannotFail = [{ name: 'rejects an expired code', file: 'tests/cart.test.js', line: 12, why: 'an expectation was written but no matcher was called on it' }];
+
+describe('a goal that only looks green', () => {
+  it('will not attest to a goal whose tests could never fail', () => {
+    // The state that makes this matter: nothing failing, nothing uncovered, tests passing. Before
+    // this branch existed the policy went straight to attest, which would have put a green seal on a
+    // suite that cannot say no.
+    const d = decide('cart', seen({ passing: 4, vacuous: cannotFail }));
+    assert.equal(d.act, 'triage-vacuous-test');
+    assert.match(d.why, /could never have said otherwise/);
+    assert.equal(d.changesFiles, false, 'making a test check something changes what it means, so a person decides');
+    assert.match(d.evidence[0], /tests\/cart\.test\.js:12/);
+  });
+
+  it('puts a test that cannot fail before a missing test', () => {
+    // A missing test is honest about being missing. A test that cannot fail reads as coverage and is
+    // counted as coverage, so it is the more misleading of the two.
+    const d = decide('cart', seen({ passing: 4, vacuous: cannotFail, uncovered: [{ id: 'CT-9', title: 'refunds', priority: 'P0' }] }));
+    assert.equal(d.act, 'triage-vacuous-test');
+  });
+
+  it('still deals with a failure first', () => {
+    const d = decide('cart', seen({ passing: 2, vacuous: cannotFail, failing: [{ testId: 'cart > totals', category: 'REAL_BUG', confidence: 0.9 }] }));
+    assert.equal(d.act, 'triage-real-bug', 'something red beats something hollow');
+  });
+
+  it('attests as before when the tests can fail', () => {
+    assert.equal(decide('cart', seen({ passing: 4, vacuous: [] })).act, 'attest');
+  });
+});
+
 describe('deciding what to do about a goal', () => {
   it('will not reason at all before it has looked', () => {
     const d = decide('keep checkout green', seen({ noHistory: true }));

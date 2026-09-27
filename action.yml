@@ -48,6 +48,16 @@ inputs:
       AI-only verdicts still block. Put continue-on-error: true on the test step so the gate decides.
       Empty (the default) never fails the workflow.
     default: ''
+  prove:
+    description: >-
+      'true' asks Tewip, on a pull request, to break the source files the change touched in small
+      deliberate ways - a boundary moved by one, a condition inverted - run the tests that cover them,
+      and report every change none of them noticed. Off by default because it is slow: each change
+      means a real test run. Every file is put back exactly as it was.
+    default: 'false'
+  prove-budget:
+    description: Seconds Tewip may spend proving a change, across every file. It stops there and says what it did not reach.
+    default: '300'
   attest-key:
     description: >-
       Optional. An ed25519 private key (PEM) used to sign the evidence bundle the run writes into
@@ -105,6 +115,8 @@ runs:
         TRIAGE_TESTS_DIR: ${{ inputs.tests-dir }}
         TRIAGE_SUITE: ${{ inputs.suite }}
         TRIAGE_GATE: ${{ inputs.gate }}
+        TEWIP_PROVE: ${{ inputs.prove }}
+        TEWIP_PROVE_BUDGET: ${{ inputs.prove-budget }}
         TEWIP_ATTEST_KEY: ${{ inputs.attest-key }}
 
     - name: Save triage history

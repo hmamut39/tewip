@@ -78,6 +78,13 @@ On every run, the action:
   when one of them cannot fail. Needs `fetch-depth: 0` on `actions/checkout` so the diff can be read;
   without it the section is skipped rather than guessed at. Any such test also enters the attestation
   as a refusal, so a release decision taken from the bundle cannot rest on a test that proves nothing.
+- **What the change would slip past (`prove: true`):** breaks the source files the pull request touched
+  in small deliberate ways, runs the tests that cover them, and reports every change none of them
+  noticed - "these 2 changes to your code would have slipped past your tests", with the lines. Off by
+  default because each change costs a real test run; `prove-budget` (default 300s) caps the whole
+  thing, and it says which files it did not reach rather than implying they were clean. Every file is
+  put back exactly as it was. Each unnoticed change also enters the attestation as a refusal: a line
+  nothing checks is not a line this bundle can claim was verified.
 - **Evidence, every run:** the Action writes an attestation into its artifact - the claims with
   their evidence and which layer decided each, what Tewip **refused** to decide, and what it did
   not check at all. Nothing enters it that Tewip did not verify itself, so a release decision can

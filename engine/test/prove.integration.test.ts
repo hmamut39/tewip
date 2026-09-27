@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { Framework } from '../quality/frameworks.ts';
 import { proveFile } from '../prove/prove.ts';
+import { proveChanged, provedChangeLines } from '../prove/changed.ts';
 
 const NL = String.fromCharCode(10);
 const file = (...lines: string[]) => lines.join(NL) + NL;
@@ -154,5 +155,39 @@ describe('proving what the tests would not catch', () => {
     const root = project();
     const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), { limit: 6, budgetSeconds: 0, runSeconds: 60 });
     assert.ok(proof.notTried > 0, 'a spent budget has to be reported, not hidden');
+  });
+});
+
+describe('proving what a pull request changed, inside CI', () => {
+  it('reports the changes that slipped past, and stays silent when none did', () => {
+    const root = project();
+    const proved = proveChanged(root, ['src/shop.js', 'tests/shop.test.js', 'README.md'], { limit: 4, budgetSeconds: 120 });
+    assert.equal(proved.skipped, '');
+    assert.equal(proved.proofs.length, 1, 'the test file and the readme are not source to prove');
+    const lines = provedChangeLines(proved).join(NL);
+    assert.match(lines, /would have slipped past the tests/);
+    assert.match(lines, /src\/shop\.js:/);
+    assert.match(lines, /put back exactly as it was/);
+
+    // A file whose every change is caught produces no section at all.
+    const quiet = { proofs: [{ file: 'src/shop.js', covering: [], tried: [], blocked: '', setAside: [], notTried: 0, seconds: 1 }], unnoticed: 0, notReached: [], skipped: '' };
+    assert.deepEqual(provedChangeLines(quiet), [], 'a section that always appears is a section nobody reads');
+  });
+
+  it('says what it did not reach rather than implying those files were clean', () => {
+    const root = project();
+    const proved = proveChanged(root, ['src/shop.js', 'src/other.js'], { maxFiles: 1, limit: 2, budgetSeconds: 120 });
+    // src/other.js does not exist here, so the real check is the cap itself.
+    assert.ok(proved.proofs.length <= 1);
+    const capped = proveChanged(root, ['src/shop.js'], { maxFiles: 0, limit: 2, budgetSeconds: 120 });
+    assert.deepEqual(capped.notReached, ['src/shop.js']);
+    assert.deepEqual(capped.proofs, []);
+  });
+
+  it('says so plainly when a change touches nothing it could prove', () => {
+    const root = project();
+    const proved = proveChanged(root, ['README.md', 'tests/shop.test.js'], {});
+    assert.match(proved.skipped, /no source file that could be proved/);
+    assert.deepEqual(provedChangeLines(proved), []);
   });
 });

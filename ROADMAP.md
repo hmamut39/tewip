@@ -1608,6 +1608,17 @@ restore is **verified** - a mismatch is an error, not a shrug. Loop headers are 
 flipped comparison in a `while` does not fail a test, it hangs the machine. Proved by test: after six
 mutations a CRLF file came back with an identical SHA-256.
 
+Wired into CI the same day, opt-in (`prove: 'true'` on the Action): on a pull request it proves the
+source files the change touched and puts what slipped past into the comment - "these 2 changes to your
+code would have slipped past your tests", with the lines and the exact before and after. Each one also
+enters the attestation as a **refusal**, because a line nothing checks is not a line the bundle can
+claim was verified.
+
+It is off by default, and that is a judgement rather than timidity: every change costs a real test run,
+and a tool that silently adds minutes to every pull request gets deleted from the workflow, after which
+it checks nothing at all. `prove-budget` caps the whole thing (300s by default), at most two files are
+proved, and the files it did not reach are named rather than left to look clean.
+
 Not measured: whether teams act on what it finds, which needs real users.
 
 ## Definition of Success

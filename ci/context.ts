@@ -38,6 +38,9 @@ export interface CiContext {
   postPrComment: boolean;
   envIssue: boolean;
   autofix: boolean;
+  /** Break the changed code on purpose and report what the tests would not notice. Opt-in: it is slow. */
+  prove: boolean;
+  proveBudgetSeconds: number;
   verifyCommand: string;
   testsDir: string;
   stepSummary: string | null;
@@ -76,6 +79,8 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     postPrComment: flag(env.TRIAGE_POST_PR_COMMENT, true),
     envIssue: flag(env.TRIAGE_ENV_ISSUE, true),
     autofix: flag(env.TRIAGE_AUTOFIX, false),
+    prove: flag(env.TEWIP_PROVE, false),
+    proveBudgetSeconds: Number(env.TEWIP_PROVE_BUDGET ?? '300') || 300,
     verifyCommand: env.TRIAGE_VERIFY_COMMAND || 'npx playwright test',
     testsDir: env.TRIAGE_TESTS_DIR || 'tests',
     stepSummary: env.GITHUB_STEP_SUMMARY || null,

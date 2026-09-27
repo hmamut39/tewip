@@ -16,7 +16,8 @@ import { infraView } from '../outlets/views/infra.ts';
 import { releaseView } from '../outlets/views/release.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
-import { changedTestLines, vouchChanged, type ChangedTests } from '../engine/vouch/changed.ts';
+import { changedTestLines, vouchChanged } from '../engine/vouch/changed.ts';
+import { proveChanged, provedChangeLines } from '../engine/prove/changed.ts';
 import { changeSummary } from '../engine/quality/grounding.ts';
 import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
@@ -67,18 +68,17 @@ async function reportJobDeath(ctx: CiContext, hint: string): Promise<void> {
 }
 
 /**
- * The tests the pull request changed, vouched for. Tries the base branch as the runner has it, then
- * the plain ref; if neither range resolves - a checkout with `fetch-depth: 1` has no base - it
- * returns nothing rather than guessing at a file list.
+ * What this pull request changed. Tries the base branch as the runner has it, then the plain ref; if
+ * neither range resolves - a checkout with `fetch-depth: 1` has no base - it returns nothing rather
+ * than guessing at a file list and reporting about the wrong files.
  */
-function aboutChangedTests(ctx: CiContext): ChangedTests | null {
+function changedFiles(ctx: CiContext): string[] | null {
   const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
   for (const range of [`origin/${base}...HEAD`, `${base}...HEAD`]) {
     const change = changeSummary(ctx.workspace, range);
-    if (!change || change.files.length === 0) continue;
-    return vouchChanged(ctx.workspace, change.files.map((f) => f.split(String.fromCharCode(92)).join('/')));
+    if (change && change.files.length > 0) return change.files.map((f) => f.split(String.fromCharCode(92)).join('/'));
   }
-  log('could not read the range of this pull request, so the tests in it were not read (set fetch-depth: 0 on actions/checkout to enable it)');
+  log('could not read the range of this pull request, so its own changes were not examined (set fetch-depth: 0 on actions/checkout to enable it)');
   return null;
 }
 
@@ -135,16 +135,23 @@ async function main(): Promise<void> {
   // Could the tests this pull request touches ever fail? Asked only about the diff, and only when
   // the diff can really be read: a shallow checkout cannot produce the range, and reporting on the
   // wrong set of files would be worse than reporting on none.
-  const changedTests = ctx.pr ? aboutChangedTests(ctx) : null;
+  const changed = ctx.pr ? changedFiles(ctx) : null;
+  const changedTests = changed ? vouchChanged(ctx.workspace, changed) : null;
   const testLines = changedTests ? changedTestLines(changedTests) : [];
   if (changedTests) log(`tests in this change: ${changedTests.read} read, ${changedTests.cannotFail.length} cannot fail`);
+
+  // And the stronger question, when the repository asked for it: break the changed code and see
+  // whether anything notices. Off by default because every change costs a real test run.
+  const proved = changed && ctx.prove ? proveChanged(ctx.workspace, changed, { budgetSeconds: ctx.proveBudgetSeconds, onStep: (m) => log(m) }) : null;
+  const proveLines = proved ? provedChangeLines(proved) : [];
+  if (proved) log(proved.skipped || `proved ${proved.proofs.length} file(s): ${proved.unnoticed} change(s) went unnoticed`);
 
   // Written after auto-fix: checking suggestions can revise an item's action and evidence.
   const views = [prCommentView, sdetBoardView, infraView, releaseView].map((view) => view(items, ctx.runId, ctx.repo));
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, testLines)));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, [...testLines, ...proveLines])));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);
@@ -177,6 +184,7 @@ async function main(): Promise<void> {
           `${byRules} decided by deterministic rules (${ENGINE_VERSION}), which call no model`,
           ...(llm && byModel > 0 ? [`${byModel} sent to the model, because no rule could settle them`] : []),
         ];
+  const proveRefusals: Array<{ what: string; why: string; runId: string }> = [];
   const notChecked: string[] = [
     'the application itself: this bundle says nothing about secrets, dependencies or a running app',
     // Reworded when the tests in the change really were examined: leaving "a passing test is counted,
@@ -187,6 +195,18 @@ async function main(): Promise<void> {
   // What the tests in this change are worth. A bundle that says "all green" over a test which cannot
   // fail is the overclaim this whole phase exists to prevent, so it goes in as a claim when they are
   // sound and as a refusal when they are not.
+  if (proved && proved.proofs.length > 0) {
+    const tried = proved.proofs.flatMap((p) => p.tried);
+    checked.push(`${tried.length} deliberate change(s) were made to the code this pull request touched, and the covering tests were run against each`);
+    for (const gap of tried.filter((t) => t.fate === 'unnoticed')) {
+      const where = proved.proofs.find((p) => p.tried.includes(gap))?.file ?? '';
+      proveRefusals.push({
+        what: `${where}:${gap.mutant.line} can be changed (${gap.mutant.kind}) without any test noticing`,
+        why: 'the line is covered by a test that does not check it, so this bundle cannot claim that behaviour is verified',
+        runId: imported.summary.runId,
+      });
+    }
+  }
   if (changedTests && changedTests.read > 0) {
     checked.push(`${changedTests.read} test(s) in this change were read for whether they can fail at all, and ${changedTests.read - changedTests.cannotFail.length} can`);
     if (changedTests.crashOnly.length > 0) {
@@ -203,11 +223,14 @@ async function main(): Promise<void> {
     notChecked,
     tool: 'tewip',
     engine: ENGINE_VERSION,
-    refusals: (changedTests?.cannotFail ?? []).map((j) => ({
-      what: `${j.name} (${j.file}:${j.line}) is in this change and cannot fail`,
-      why: j.why,
-      runId: imported.summary.runId,
-    })),
+    refusals: [
+      ...(changedTests?.cannotFail ?? []).map((j) => ({
+        what: `${j.name} (${j.file}:${j.line}) is in this change and cannot fail`,
+        why: j.why,
+        runId: imported.summary.runId,
+      })),
+      ...proveRefusals,
+    ],
   });
   writeFileSync(join(ctx.outDir, 'attestation.md'), `${renderAttestation(attestation)}
 `, 'utf8');

@@ -1,8 +1,8 @@
 {
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
-  "description": "Finds why each failing test failed - real bug, flaky, environment, test data or changed selector - for any stack. Reviews the risk of your change, weighs flaky tests, checks secrets and dependencies, and connects Tewip to your editor AI assistant.",
-  "version": "0.6.0",
+  "description": "Proves the work: is this change done, could these tests ever fail, would they catch a bug, what will this migration do to a live database, and why did CI fail.",
+  "version": "0.7.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -19,16 +19,23 @@
     "Other"
   ],
   "keywords": [
-    "test failures",
+    "ci",
+    "code review",
     "flaky tests",
-    "triage",
-    "playwright",
-    "pytest",
     "jest",
     "junit",
-    "ci",
+    "mcp",
+    "migrations",
+    "mutation testing",
+    "playwright",
+    "pytest",
+    "qa",
     "root cause",
-    "sdet"
+    "sdet",
+    "test failures",
+    "test triage",
+    "testing",
+    "triage"
   ],
   "main": "./extension.js",
   "activationEvents": [
@@ -44,7 +51,7 @@
     "commands": [
       {
         "command": "tewip.explainReport",
-        "title": "Explain a test report…",
+        "title": "Explain a test report\u2026",
         "category": "Tewip"
       },
       {
@@ -84,13 +91,37 @@
       },
       {
         "command": "tewip.pursue",
-        "title": "What should be done next about…?",
+        "title": "What should be done next about\u2026?",
         "category": "Tewip"
       },
       {
         "command": "tewip.attest",
         "title": "What did Tewip check for this build?",
         "category": "Tewip"
+      },
+      {
+        "command": "tewip.done",
+        "title": "Tewip: Is this work done?"
+      },
+      {
+        "command": "tewip.vouch",
+        "title": "Tewip: Could these tests ever fail?"
+      },
+      {
+        "command": "tewip.prove",
+        "title": "Tewip: Would the tests catch a bug in this file?"
+      },
+      {
+        "command": "tewip.pick",
+        "title": "Tewip: Which tests could notice this change?"
+      },
+      {
+        "command": "tewip.schema",
+        "title": "Tewip: What will this migration do to a live database?"
+      },
+      {
+        "command": "tewip.standards",
+        "title": "Tewip: This project's own standards"
       }
     ],
     "configuration": {

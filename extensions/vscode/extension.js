@@ -176,6 +176,78 @@ async function ciReport() {
   });
 }
 
+/**
+ * The branch a change is measured against: what origin calls its default, else main, else master.
+ * Asking the person for a git range every time is the kind of friction that stops a command being used.
+ */
+async function baseBranch(cwd) {
+  const git = (args) => new Promise((resolve) => execFile('git', args, { cwd }, (e, out) => resolve(e ? '' : out.trim())));
+  const head = await git(['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']);
+  const named = head.split('/').pop();
+  if (named) return named;
+  for (const candidate of ['main', 'master', 'develop']) {
+    if (await git(['rev-parse', '--verify', '--quiet', candidate])) return candidate;
+  }
+  return 'main';
+}
+
+/** The file in the active editor, when there is one and it is a real file on disk. */
+function openFile() {
+  const document = vscode.window.activeTextEditor?.document;
+  return document && document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
+}
+
+/** Runs a verb over the current change, against the branch this one came from. */
+function changeCommand({ verb, busy, extra = [] }) {
+  return async () => {
+    const cwd = workspaceDir();
+    if (!cwd) {
+      vscode.window.showWarningMessage('Tewip: open the project folder first - this reads the change in the project you are working in.');
+      return;
+    }
+    const base = await baseBranch(cwd);
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: busy }, async () => {
+      try {
+        await show(await runTewip([verb, '--diff', `${base}...HEAD`, ...extra], cwd));
+      } catch (error) {
+        vscode.window.showErrorMessage(`Tewip: ${error.message}. Is it installed? \`npm i -g tewip-ai\`, or see the "tewip.path" setting.`);
+      }
+    });
+  };
+}
+
+/** Runs a verb over the file in the editor, which is what "check this" means while reading code. */
+function fileCommand({ verb, busy, needsFile, extra = [] }) {
+  return async () => {
+    const cwd = workspaceDir();
+    const file = openFile();
+    if (!cwd) {
+      vscode.window.showWarningMessage('Tewip: open the project folder first.');
+      return;
+    }
+    if (needsFile && !file) {
+      vscode.window.showWarningMessage(`Tewip: open the file you want to ${verb} first.`);
+      return;
+    }
+    const relative = file ? require('node:path').relative(cwd, file).split(require('node:path').sep).join('/') : '';
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: busy }, async () => {
+      try {
+        await show(await runTewip([verb, ...(relative ? [relative] : []), ...extra], cwd));
+      } catch (error) {
+        vscode.window.showErrorMessage(`Tewip: ${error.message}. Is it installed? \`npm i -g tewip-ai\`, or see the "tewip.path" setting.`);
+      }
+    });
+  };
+}
+
+const isThisDone = changeCommand({ verb: 'done', busy: 'Tewip is deciding whether this work is done…' });
+const whichTests = changeCommand({ verb: 'pick', busy: 'Tewip is working out which tests could notice this change…' });
+const readMigrations = changeCommand({ verb: 'schema', busy: 'Tewip is reading what the migration does to a live database…' });
+const houseRules = fileCommand({ verb: 'standards', busy: "Tewip is reading this project's own standards…", needsFile: false });
+const couldItFail = fileCommand({ verb: 'vouch', busy: 'Tewip is checking whether these tests could ever fail…', needsFile: true });
+// Proving breaks the file and runs the tests that cover it, once per change, so it is slow by nature.
+const wouldTestsCatch = fileCommand({ verb: 'prove', busy: 'Tewip is breaking this file to see whether the tests notice (this takes minutes)…', needsFile: true, extra: ['--limit', '4'] });
+
 function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand('tewip.explainReport', explainReport),
@@ -188,6 +260,12 @@ function activate(context) {
     vscode.commands.registerCommand('tewip.attest', evidenceBundle),
     vscode.commands.registerCommand('tewip.recall', recallMemory),
     vscode.commands.registerCommand('tewip.pursue', pursueGoal),
+    vscode.commands.registerCommand('tewip.done', isThisDone),
+    vscode.commands.registerCommand('tewip.vouch', couldItFail),
+    vscode.commands.registerCommand('tewip.prove', wouldTestsCatch),
+    vscode.commands.registerCommand('tewip.pick', whichTests),
+    vscode.commands.registerCommand('tewip.schema', readMigrations),
+    vscode.commands.registerCommand('tewip.standards', houseRules),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

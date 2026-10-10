@@ -1,0 +1,81 @@
+# Publishes the editor extension to Open VSX, which is what Cursor, Windsurf, VSCodium, Gitpod and
+# Theia search. It is **not** the Visual Studio Marketplace: VS Code itself reads only Microsoft's
+# registry, and that one needs an Azure DevOps organisation.
+#
+# The only thing a person has to do, once:
+#   1. Create an account at https://accounts.eclipse.org/user/register (free).
+#   2. Sign in at https://open-vsx.org with GitHub, open your profile, "Log in with Eclipse",
+#      then read and agree to the Publisher Agreement. It is a signature, so it has to be yours.
+#   3. Avatar -> Settings -> Access Tokens -> Generate New Token. Copy it once.
+#   4. Put it in this repository as the secret OVSX_PAT:
+#      Settings -> Secrets and variables -> Actions -> New repository secret.
+#
+# After that this runs on every `v*` tag and nobody touches it again. Without the secret it stops and
+# says so rather than failing in a way that looks like a broken build.
+name: Publish the editor extension to Open VSX
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Check there is a token to publish with
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "No OVSX_PAT secret is set, so there is nothing to publish with."
+            echo "See the comment at the top of .github/workflows/publish-extension.yml for the four steps."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+        id: token
+
+      - name: Keep the extension's version with the release
+        if: steps.token.outputs.skip == 'false'
+        working-directory: extensions/vscode
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          # The extension has its own version line; a release tag sets it so the published build and
+          # the tag can never disagree about what is in it.
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = process.argv[1];
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+            console.log('extension version set to', p.version);
+          " "$tag"
+
+      - name: Package
+        if: steps.token.outputs.skip == 'false'
+        working-directory: extensions/vscode
+        run: npx -y @vscode/vsce@latest package --allow-missing-repository --skip-license
+
+      - name: Publish to Open VSX
+        if: steps.token.outputs.skip == 'false'
+        working-directory: extensions/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          # The namespace has to exist before the first publish; after that this is a no-op.
+          npx -y ovsx create-namespace hmamut39 -p "$OVSX_PAT" || true
+          npx -y ovsx publish *.vsix -p "$OVSX_PAT"
+
+      - name: Keep the built extension on the release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tewip-vsix
+          path: extensions/vscode/*.vsix
+          if-no-files-found: warn

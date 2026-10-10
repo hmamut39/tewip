@@ -4,6 +4,21 @@
 
 This extension brings Tewip into the editor:
 
+- **Tewip: Is this work done?** One verdict over your current change - is anything failing, is the
+  changed code tested by something that really reaches it, can the tests in it fail at all, and does
+  it keep this project's own standards. Answers ready, not ready, or cannot say, and never rounds
+  "cannot say" up to ready.
+- **Tewip: Could these tests ever fail?** Reads the open test file and names the tests that check
+  nothing, compare a value with itself, or leave an expectation unfinished.
+- **Tewip: Would the tests catch a bug in this file?** Breaks the open file in small deliberate ways,
+  runs the tests that cover it, and reports every change none of them noticed. Slow by nature, and
+  your file is put back exactly as it was.
+- **Tewip: Which tests could notice this change?** Narrows a test run from facts in the source, and
+  refuses to narrow when it cannot show the rest are unaffected.
+- **Tewip: What will this migration do to a live database?** Names what breaks the version still
+  running, destroys data, blocks writes, or cannot be undone - and finds code that still uses a
+  column being dropped.
+
 - **Your AI assistant can ask Tewip.** Tewip registers itself as an MCP server, so Copilot's agent mode (or your editor's assistant) can answer *"why did CI fail on my PR?"* with nothing to configure.
 - **Tewip: Explain a test report…** Pick a JUnit XML or `.trx` report, or a Playwright blob-report folder, and read each failure's cause, confidence, evidence and next step.
 - **Tewip: Why did CI fail on this branch?** Shows the latest report Tewip's GitHub Action posted for the branch you have checked out.

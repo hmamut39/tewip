@@ -1,0 +1,20 @@
+{
+  "name": "tewip",
+  "displayName": "Tewip",
+  "version": "0.32.0",
+  "description": "Proves the work: triages failing tests, says whether a test could ever fail, breaks your code to see whether the tests notice, reads what a migration does to a live database, and gives one verdict on whether a change is done.",
+  "author": {
+    "name": "hmamut39",
+    "url": "https://github.com/hmamut39/tewip"
+  },
+  "homepage": "https://github.com/hmamut39/tewip#readme",
+  "repository": "https://github.com/hmamut39/tewip",
+  "license": "MIT",
+  "keywords": ["testing", "qa", "test-triage", "mutation-testing", "code-review", "migrations", "ci"],
+  "mcpServers": {
+    "tewip": {
+      "command": "npx",
+      "args": ["-y", "tewip-ai@latest", "mcp"]
+    }
+  }
+}

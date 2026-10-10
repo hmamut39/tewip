@@ -8,12 +8,26 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { existsSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import { githubCiReport } from './github-report.ts';
 import { explainFailure, listDatasets, listFailedRuns, runView, windowView } from './tools.ts';
 
-const server = new McpServer({ name: 'tewip', version: '0.5.0' });
+/**
+ * The version a client is told, read from the package rather than written here. It had drifted to 0.5.0
+ * while the package was at 0.32.0 - a small lie, but this server's whole job is to be the thing that
+ * does not say unverified numbers.
+ */
+const version = ((): string => {
+  try {
+    return (JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
+
+const server = new McpServer({ name: 'tewip', version });
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
 const dataset = z.string().optional().describe('Dataset directory relative to the Tewip repo, e.g. "data/real/gutenberg-holdout". Default: data/ (what the reporter collected). See list_datasets.');

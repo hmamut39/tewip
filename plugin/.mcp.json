@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tewip": {
+      "command": "npx",
+      "args": ["-y", "tewip-ai@latest", "mcp"]
+    }
+  }
+}

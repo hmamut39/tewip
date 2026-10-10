@@ -114,6 +114,22 @@ The report reads the history cache of the branch it runs on, usually the default
 
 The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. Pull requests opened by the workflow token don't trigger CI themselves; the agent verified each change by re-running the test before opening the PR. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
 
+### As a Claude Code plugin (no account, no marketplace approval)
+
+```bash
+claude plugin marketplace add hmamut39/tewip
+claude plugin install tewip@tewip
+```
+
+That is the whole publication process. A marketplace is a `.claude-plugin/marketplace.json` file in a git
+repository, so Tewip ships one in its own repo - nobody has to approve it, and there is nothing to pay
+for. The plugin brings Tewip's MCP server and three skills that tell Claude Code *when* to use it:
+before claiming a change is done, when a test fails, and when a change touches a migration. It costs
+about 410 tokens per session until a skill is actually needed.
+
+The MCP server runs from the published package (`npx -y tewip-ai@latest mcp`), so the plugin stays small
+and you always get the current version.
+
 ### The editor extension (VS Code, Cursor, Windsurf, VSCodium)
 
 Download **[tewip-0.5.0.vsix](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)**, then in the

@@ -19,7 +19,7 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
         name: flag(args, 'name'),
         strict: args.includes('--strict'),
       });
-      return;
+      return true;
     }
     case 'standards': {
       const { runStandards } = await import('../engine/standards/standards-command.ts');
@@ -30,7 +30,7 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
         out: flag(args, 'out'),
         strict: args.includes('--strict'),
       });
-      return;
+      return true;
     }
     case 'schema': {
       const { runSchema } = await import('../engine/schema/schema-command.ts');
@@ -41,7 +41,7 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
         out: flag(args, 'out'),
         strict: args.includes('--strict'),
       });
-      return;
+      return true;
     }
     case 'pick': {
       const { runPick } = await import('../engine/pick/pick-command.ts');
@@ -54,7 +54,7 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
         recentRuns: Number(flag(args, 'recent') ?? '5'),
         name: flag(args, 'name'),
       });
-      return;
+      return true;
     }
     case 'prove': {
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--diff', '--limit', '--budget'].includes(args[i - 1] ?? ''));
@@ -68,13 +68,13 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
         out: flag(args, 'out'),
         strict: args.includes('--strict'),
       });
-      return;
+      return true;
     }
     case 'vouch': {
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--json'].includes(args[i - 1] ?? ''));
       const { runVouch } = await import('../engine/vouch/run-vouch.ts');
       runVouch({ root: process.cwd(), paths: paths.length > 0 ? paths : ['.'], out: flag(args, 'out'), json: flag(args, 'json'), strict: args.includes('--strict') });
-      return;
+      return true;
     }
     default:
       return false;

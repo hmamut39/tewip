@@ -9,7 +9,22 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["tests", "reporters", "engine", "outlets", "ci", "mcp", "eval", "scripts", "fixtures", "lab", "playwright.config.ts"]
+  "include": [
+    "cli",
+    "tests",
+    "reporters",
+    "engine",
+    "outlets",
+    "ci",
+    "mcp",
+    "eval",
+    "scripts",
+    "fixtures",
+    "lab",
+    "playwright.config.ts"
+  ]
 }

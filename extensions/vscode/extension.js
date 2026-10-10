@@ -216,11 +216,17 @@ function changeCommand({ verb, busy, extra = [] }) {
   };
 }
 
-/** Runs a verb over the file in the editor, which is what "check this" means while reading code. */
-function fileCommand({ verb, busy, needsFile, extra = [] }) {
+/**
+ * Runs a verb over the file in the editor, which is what "check this" means while reading code.
+ *
+ * `wholeProject` is for the verbs that only make sense across everything: passing whichever file
+ * happens to be open would narrow an accessibility check to a .ts file with no markup in it and
+ * report, truthfully but uselessly, that nothing was found.
+ */
+function fileCommand({ verb, busy, needsFile, extra = [], wholeProject = false }) {
   return async () => {
     const cwd = workspaceDir();
-    const file = openFile();
+    const file = wholeProject ? null : openFile();
     if (!cwd) {
       vscode.window.showWarningMessage('Tewip: open the project folder first.');
       return;
@@ -245,6 +251,7 @@ const whichTests = changeCommand({ verb: 'pick', busy: 'Tewip is working out whi
 const readMigrations = changeCommand({ verb: 'schema', busy: 'Tewip is reading what the migration does to a live database…' });
 const houseRules = fileCommand({ verb: 'standards', busy: "Tewip is reading this project's own standards…", needsFile: false });
 const couldItFail = fileCommand({ verb: 'vouch', busy: 'Tewip is checking whether these tests could ever fail…', needsFile: true });
+const whoCannotUseIt = fileCommand({ verb: 'access', busy: 'Tewip is checking who cannot use this interface…', needsFile: false, wholeProject: true });
 // Proving breaks the file and runs the tests that cover it, once per change, so it is slow by nature.
 const wouldTestsCatch = fileCommand({ verb: 'prove', busy: 'Tewip is breaking this file to see whether the tests notice (this takes minutes)…', needsFile: true, extra: ['--limit', '4'] });
 
@@ -266,6 +273,7 @@ function activate(context) {
     vscode.commands.registerCommand('tewip.pick', whichTests),
     vscode.commands.registerCommand('tewip.schema', readMigrations),
     vscode.commands.registerCommand('tewip.standards', houseRules),
+    vscode.commands.registerCommand('tewip.access', whoCannotUseIt),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

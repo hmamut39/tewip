@@ -574,6 +574,61 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## Can everybody use it? (Phase 28, new)
+
+```bash
+tewip access                           # every markup file in the project
+tewip access src/components/Nav.tsx    # or just one
+tewip access --strict                  # fails the build on a barrier that stops somebody outright
+```
+
+Accessibility is the one quality question that is also a legal one. The European Accessibility Act has
+been enforceable since June 2025, and it lands on the people who already own testing.
+
+The reason teams do not trust the tools they have is the reason they switch off every scanner: axe,
+Lighthouse and pa11y hand back several hundred undifferentiated violations, a large share of which are
+not barriers at all, and nobody has the afternoon it takes to sort them.
+
+Tewip makes **two kinds of statement and no third**:
+
+- **a barrier** — the element as written stops somebody, and reading it is enough to know that;
+- **a question** — something here is missing or unreadable, and only you can settle it.
+
+There is no "warning", because a warning is the category people learn to scroll past.
+
+```
+**6 barriers (5 that stop somebody outright), 18 for a person to settle.**
+
+### button-name - 3 places
+
+WCAG 2.2 4.1.2 Name, Role, Value (A), blocker.
+
+Who it stops: a screen reader announces "button" and nothing else, so it cannot be used or spoken to.
+
+- `components/VPNavBarAskAiButton.vue:2`  <button type="button" class="VPNavBarAskAiButton">
+  - it contains no text and carries no aria-label, so it is announced with its role and nothing else
+  - do this: put text inside it, or add aria-label="..." saying what it does
+```
+
+Every finding names its **WCAG 2.2 success criterion and level**, which is what turns it into something
+you can put in front of a regulator instead of a note saying "bad contrast".
+
+**What it refuses to decide is the reason it is worth running.** `alt={caption}` is not a missing alt.
+A button whose text comes from a child component cannot be called empty. `:aria-label="label"` is a
+label. `<slot />` is content this file cannot see. Each of those becomes a question, never an accusation
+— because a tool that accuses `<img alt={alt} />` of having no alt text gets switched off in a day.
+
+**And every report prints what it did not check** — contrast, focus order, meaningful sequence, whether
+the alt text is any good — because those need a rendered page. A clean result means these checks found
+nothing. It never means the product is accessible.
+
+No browser, no server, no network, no model, no cost. 416 real files in 1.65 seconds.
+
+Measured on four public projects, never on fixtures — excalidraw, bootstrap, vitepress and svelte:
+**50 barriers, 29 of them the kind that stop somebody outright, and 90 questions.** Seven false-positive
+classes were found and fixed along the way, every one of them a defect in Tewip rather than in the
+projects, and none of them reachable from a fixture. They are listed in [ROADMAP.md](ROADMAP.md).
+
 ## Teach it your house rules (Phase 27)
 
 ```bash

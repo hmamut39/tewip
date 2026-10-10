@@ -1801,7 +1801,7 @@ Not measured: whether a team's outage rate changes, which needs a team and a yea
 Checked against the nine capabilities the agent world now takes as standard - harness, memory and state,
 RAG, MCP, skills, guardrails, evals, agent-to-agent, multi-agent - Tewip already had seven. Its harness is
 `pursue`, its memory is the kept history and `recall`, its RAG is the narrow one in Phase 17, it speaks
-MCP with 18 tools, its guardrails are the allowlist and `.tewip/actions.jsonl`, and its evals are the six
+MCP with 22 tools, its guardrails are the allowlist and `.tewip/actions.jsonl`, and its evals are the six
 real labelled datasets. The two it did not have were **skills** and **A2A**.
 
 Skills is the one that matters for a company: reusable know-how, loaded on demand. Tewip knew a great deal
@@ -1834,6 +1834,67 @@ Still missing from the nine: **A2A**, the agent-to-agent protocol. Tewip can be 
 MCP but cannot yet be addressed as a peer with an agent card. It is the right direction for a tool whose
 whole thesis is verifying other agents' work, and it is not built yet, because an agent card with no
 caller is a claim with nothing behind it.
+
+### Phase 28: Can Everybody Use It? (`tewip access`)
+
+Chosen because it is the one quality question that is also a legal one. The European Accessibility Act has
+been enforceable since June 2025, Section 508 and the ADA point at the same standard, and the obligation
+lands on the people who already own testing. Every department now has this on its list and almost none of
+them have a tool they trust for it.
+
+The reason they do not trust the ones they have is the same reason teams switch off every scanner: axe,
+Lighthouse and pa11y hand back several hundred undifferentiated violations, a large share of which are not
+barriers, and nobody has the afternoon it takes to sort them. That is precisely the problem Tewip was built
+to answer, in exactly the shape it already answers it for security findings in Phase 9.
+
+So `tewip access` makes two kinds of statement and no third:
+
+- **a barrier** - the element as written stops somebody, and reading it is enough to know that;
+- **a question** - something is missing or unreadable here and only a person can settle it.
+
+There is deliberately no "warning", because a warning is the category teams learn to scroll past. Every
+finding names its WCAG 2.2 success criterion and level, which is what makes it something a team can put in
+front of a regulator rather than a note that says "bad contrast". And every report prints the criteria the
+check **cannot** reach - contrast, focus order, meaningful sequence, whether the alt text is any good -
+because roughly a third of WCAG is machine-checkable at all and reading source rather than a rendered page
+reaches less than that. It never says a page is accessible. It says what was checked.
+
+No browser, no server, no network, no model, no cost. 416 real files in 1.65 seconds.
+
+Status (2026-10-10): **built** as `tewip access`, with the MCP tool `accessibility_barriers`.
+
+Measured on four public projects, never on fixtures - excalidraw, bootstrap, vitepress and svelte, 416
+markup files: **50 barriers, 29 of them the kind that stop somebody outright, and 90 questions.** The
+honest part of that number is how it got there. The first run reported 35 barriers on excalidraw alone;
+seven false-positive classes were traced back to defects in Tewip, not in the projects:
+
+1. HTML inside a **template literal** read as the component's own markup (excalidraw `AI.tsx`).
+2. A **regex literal**, `/<!doctype html|<html[\s>]/i`, parsed as an `<html>` element (`App.tsx`).
+3. **Duplicate ids** counted across fifty separate SVG icons in one file, which are never one document
+   (`icons.tsx`). That check now runs only on real documents.
+4. **Greedy attribute matching** swallowing the `/` of `<button ... />`, so every self-closing JSX element
+   stayed open and the next control looked nested inside it (`ViewportStatusFrame.tsx`).
+5. A dialog **backdrop** that closes on click, inside a dialog that closes on Escape, called a keyboard
+   trap (`Modal.tsx`). WCAG 2.1.1 asks that the function be reachable, not that the div be focusable.
+6. **Vue bindings**: `:aria-label="label"` and `:title="t(...)"` read as attributes literally named
+   `:aria-label`, so eight properly labelled vitepress buttons were reported as unnamed.
+7. **`<slot />`** - content injected by whoever uses the component - treated as emptiness rather than as
+   something this file cannot see (`VPSwitch.vue`).
+
+Not one of those was reachable from a fixture. Each has a test named after the project that produced it.
+
+What it found that is real, and worth the phase on its own: `VPNavBarAskAiButton.vue` in vitepress is a
+button whose only child is an `aria-hidden` icon and which carries no label, so a screen reader announces
+"button" and stops. Bootstrap's example pages skip heading levels. Excalidraw has four form fields whose
+only label is a placeholder, which is not a label.
+
+The gate is narrower than the report on purpose: `--strict` fails a build only on the barriers that stop
+somebody outright, never on a question and never on a heading-level skip. A gate that breaks the build
+over something needing a human decision teaches a team to stop asking.
+
+Still not reached, and said so in every report: anything needing a rendered page. A later phase could read
+an axe or Lighthouse run and triage its findings the way Phase 9 triages a scanner's, which would close
+contrast and focus order without Tewip ever shipping a browser.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

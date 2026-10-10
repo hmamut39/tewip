@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
   "description": "Proves the work: is this change done, could these tests ever fail, would they catch a bug, what will this migration do to a live database, and why did CI fail.",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -51,7 +51,7 @@
     "commands": [
       {
         "command": "tewip.explainReport",
-        "title": "Explain a test report\u2026",
+        "title": "Explain a test report…",
         "category": "Tewip"
       },
       {
@@ -91,7 +91,7 @@
       },
       {
         "command": "tewip.pursue",
-        "title": "What should be done next about\u2026?",
+        "title": "What should be done next about…?",
         "category": "Tewip"
       },
       {
@@ -122,6 +122,10 @@
       {
         "command": "tewip.standards",
         "title": "Tewip: This project's own standards"
+      },
+      {
+        "command": "tewip.access",
+        "title": "Tewip: Can everybody use this?"
       }
     ],
     "configuration": {

@@ -118,6 +118,16 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
+  tewip access [<file or directory>] [--strict] [--out access.md]
+                                    Can everybody use this? Reads your markup and names the barriers
+                                    that reading alone can prove - a picture with no alt text, a field
+                                    with no label, a div only a mouse can use - each against its WCAG
+                                    2.2 criterion, which is what a regulator asks for. What only a
+                                    person can settle is kept apart from what is proved, and every
+                                    criterion it cannot reach without rendering the page (contrast,
+                                    focus order, whether the alt text is any good) is printed every
+                                    time. It never says a page is accessible, only what was checked.
+                                    No browser, no network, no model, no cost.
   tewip standards [--diff main...HEAD] [--strict] [--out standards.md]
                                     Teach Tewip your house rules. Markdown files in
                                     .tewip/standards/ - a forbid or require line is checked and

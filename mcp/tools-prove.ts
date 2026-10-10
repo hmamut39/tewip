@@ -143,6 +143,38 @@ server.registerTool(
 );
 
 server.registerTool(
+  'accessibility_barriers',
+  {
+    title: 'Can everybody use this interface?',
+    description:
+      "Accessibility barriers in a project's markup, each named against the WCAG 2.2 criterion a regulator would cite, with the evidence to check it. Two kinds of answer, kept apart on purpose: barriers that reading the markup proves (no alt attribute at all, a field with no label anywhere, a div that only a mouse can activate), and the ones only a person can settle, where something is written as an expression or a component and the markup cannot say. It also returns every criterion it did NOT check - contrast, focus order, whether alt text is any good - because those need a rendered page. Use it before shipping an interface, or when asked whether something is accessible; a clean result means these checks found nothing, never that the product is accessible. No browser, no network, no model.",
+    inputSchema: {
+      project,
+      path: z.string().optional().describe('A file or directory inside the project to check instead of all of it'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, path }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // The pure functions, not runAccess: that one prints, and anything on stdout breaks JSON-RPC.
+      const { findBarriers, keyOf, readAccepted, renderAccess } = await import('../engine/access/access-command.ts');
+      const { findings, filesRead } = findBarriers(root, path);
+      const judged = readAccepted(root);
+      const open = findings.filter((f) => !judged.has(keyOf(f)));
+      return renderAccess(
+        {
+          barriers: open.filter((f) => f.confidence === 'barrier'),
+          questions: open.filter((f) => f.confidence === 'ask-a-person'),
+          accepted: findings.filter((f) => judged.has(keyOf(f))),
+          filesRead,
+        },
+        path ?? root,
+      );
+    }),
+);
+
+server.registerTool(
   'project_standards',
   {
     title: "What are this project's own rules?",

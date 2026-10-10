@@ -21,6 +21,17 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
       });
       return true;
     }
+    case 'access': {
+      const { runAccess } = await import('../engine/access/access-command.ts');
+      const paths = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+      runAccess({
+        root: process.cwd(),
+        only: paths[0],
+        out: flag(args, 'out'),
+        gate: args.includes('--strict'),
+      });
+      return true;
+    }
     case 'standards': {
       const { runStandards } = await import('../engine/standards/standards-command.ts');
       runStandards({

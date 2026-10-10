@@ -552,6 +552,42 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## Run only the tests that could notice this change (Phase 25)
+
+```bash
+tewip pick --diff main...HEAD     # or: tewip pick src/pricing.js
+tewip pick --list                 # just the files, for piping into your runner
+```
+
+A forty-minute suite is a suite people stop running. Vendors sell this as a prediction - a model guesses
+which tests matter - and a guess is the wrong shape for the job, because the cost of being wrong is a bug
+reaching production and nobody can audit a guess.
+
+Here, **skipping a test is a claim that it could not have noticed the change**, and a claim needs
+evidence. A test runs when it imports a changed file, reaches one through another module, is edited by the
+change itself, reads the repository at run time (a guard that scans every source file can be broken by any
+file), or has failed recently — an unknown is never a skip. Everything else is left out with the reason
+printed beside it.
+
+**It refuses to narrow at all** when the change touches dependencies, build or test configuration, shared
+setup or fixtures; when the suite drives a browser, because what a browser test exercises is not written
+in its imports; or when a changed file cannot be traced to any test, since code is reachable in ways an
+import does not show.
+
+**Measured by breaking the code** (`eval/pick-safety.ts`): make a real mutation, ask `pick` what could
+notice it, then run the **whole** suite to find out which tests really catch it. A failure is dropping a
+catching test.
+
+| Project | Judged cases | Catching test lost | Suite selected |
+| --- | --- | --- | --- |
+| This repository (node --test, 76 test files) | 8 | **0** | 7–9% |
+| expressjs/express (Mocha, 88 test files) | 2 | **0** | refused to narrow — every test reaches the change |
+
+Those two rows are the point. On a layered codebase it runs under a tenth of the suite and keeps every
+test that would have caught the bug; on a monolith where every test imports the package front door it says
+there is nothing to skip, rather than inventing a saving. It is also an MCP tool, so an agent can ask what
+to run before running anything.
+
 ## Would your tests catch a bug? (Phase 23)
 
 ```bash

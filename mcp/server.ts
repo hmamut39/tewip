@@ -246,4 +246,30 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'which_tests_to_run',
+  {
+    title: 'Which tests could notice this change?',
+    description:
+      "Narrows a test run to the tests that could notice a change, from facts in the source rather than a prediction: a test runs when it imports a changed file, reaches one through another module, is itself edited by the change, reads the repository at run time, or has failed recently. It refuses to narrow at all - and says why - when the change touches dependencies, build or test configuration, shared setup or fixtures, when the suite drives a browser, or when a changed file cannot be traced to any test. Use it to run the right tests quickly; what it leaves out, it leaves out for a stated reason.",
+    inputSchema: {
+      project,
+      diff: z.string().optional().describe('A git range, e.g. main...HEAD (the default)'),
+      files: z.array(z.string()).optional().describe('The changed files, when they do not come from a git range'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, diff, files }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // choose/renderPick are pure; runPick prints, which would corrupt the protocol.
+      const { choose } = await import('../engine/pick/pick-command.ts');
+      const { renderPick } = await import('../engine/pick/pick.ts');
+      const range = diff ?? 'main...HEAD';
+      const chosen = choose({ root, diff: range, files });
+      if (!chosen) return `Nothing changed in ${range}, or that range could not be read here.`;
+      return renderPick(chosen.picked, chosen.total, chosen.command, chosen.noHistory);
+    }),
+);
+
 await server.connect(new StdioServerTransport());

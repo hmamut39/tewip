@@ -118,6 +118,15 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
+  tewip pick [--diff main...HEAD] [--list] [--out picked.md]
+                                    Which tests could notice this change? Narrows a test run using
+                                    facts rather than a prediction: a test runs when it imports a
+                                    changed file or reaches one through another module, when the change
+                                    edits the test itself, or when it failed recently - an unknown is
+                                    never a skip. It runs the whole suite when the change touches
+                                    dependencies, build or test configuration, shared setup or
+                                    fixtures, or when a changed file cannot be traced to any test.
+                                    --list prints the files for piping. No model, no cost.
   tewip prove <file> [--diff main...HEAD] [--limit 6] [--budget 600] [--strict]
                                     What would your tests NOT catch? Breaks your code in small,
                                     deliberate ways - a boundary moved by one, a condition inverted,

@@ -9,7 +9,7 @@
 // The chain is followed outwards from the file, not inwards from the tests, because the answer needed
 // is "who would notice if this changed" and that is what a reverse import graph gives.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { importNames, importsIt } from '../review/coverage.ts';
 
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next']);
@@ -41,6 +41,107 @@ function sourceFiles(root: string, limit = 6000): string[] {
   };
   walk(root);
   return out;
+}
+
+/**
+ * The package's front door: the files a test means when it writes `require('..')`.
+ *
+ * This matters for selection and nothing else. express's tests all do `require('..')`, which resolves
+ * through `index.js` to `lib/express.js` and from there to every part of the library - so a change to
+ * `lib/response.js` really is reachable from almost every test in the project. Without this, selection
+ * followed the chain as far as `index.js`, found that no test imports *that* by name, and cheerfully
+ * declared 86 of express's 88 test files unaffected by a change to the response code.
+ */
+function frontDoor(root: string): Set<string> {
+  const files = new Set<string>();
+  try {
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { main?: string };
+    if (manifest.main) files.add(resolve(root, manifest.main));
+  } catch {
+    // No manifest: the conventional entry points below still apply.
+  }
+  for (const entry of ['index.js', 'index.ts', 'index.mjs', 'index.cjs', 'index.tsx', '__init__.py', 'src/index.js', 'src/index.ts']) {
+    if (existsSync(resolve(root, entry))) files.add(resolve(root, entry));
+  }
+  return files;
+}
+
+/** Every path this file imports, as written. */
+const importedPaths = (text: string): string[] => [...text.matchAll(/(?:from|require\s*\(|import)\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+
+/**
+ * Does this file import the package's front door?
+ *
+ * Decided by **resolving** each import against the file's own directory, not by recognising spellings.
+ * Guessing at spellings had already missed one: express's `test/res.status.js` imports `require('../.')`,
+ * which is the package root written a slightly unusual way, and the selection declared that file
+ * unaffected by a change to the very module `res.status` lives in. A false skip is the one failure this
+ * command must not have, so the question is answered by path resolution, which cannot be spelled around.
+ */
+function importsFrontDoor(root: string, file: string, text: string, doors: Set<string>): boolean {
+  const here = dirname(resolve(root, file));
+  for (const spec of importedPaths(text)) {
+    if (!spec.startsWith('.')) continue;
+    const target = resolve(here, spec);
+    if (target === resolve(root)) return true; // the package root itself
+    for (const ending of ['', '.js', '.ts', '.mjs', '.cjs', '.tsx', '/index.js', '/index.ts', '/index.mjs', '/index.cjs', '/index.tsx', '/__init__.py']) {
+      if (doors.has(resolve(`${target}${ending}`))) return true;
+    }
+  }
+  return false;
+}
+
+export function allTestsReaching(root: string, file: string, tests: string[], depth = 6): Reach[] {
+  const all = sourceFiles(root);
+  const text = new Map<string, string>();
+  const read = (path: string): string => {
+    if (!text.has(path)) {
+      try {
+        text.set(path, readFileSync(path, 'utf8'));
+      } catch {
+        text.set(path, '');
+      }
+    }
+    return text.get(path)!;
+  };
+  const rel = (path: string) => relative(root, path).split(String.fromCharCode(92)).join('/');
+  const testSet = new Set(tests.map((t) => rel(resolve(root, t))));
+  const found = new Map<string, Reach>();
+  const seen = new Set<string>([rel(resolve(root, file))]);
+  const doors = frontDoor(root);
+  let layer = [file];
+
+  for (let step = 1; step <= depth && layer.length > 0; step += 1) {
+    // Reached the package's own entry point. Everything that imports the package now reaches the change -
+    // and that includes modules, not only tests: express's acceptance tests import an example app, which
+    // imports the package, so stopping at tests here left nineteen of them looking unaffected.
+    if (layer.some((f) => doors.has(resolve(root, f)))) {
+      const throughDoor: string[] = [];
+      for (const path of all) {
+        const where = rel(path);
+        if (seen.has(where) || !importsFrontDoor(root, where, read(path), doors)) continue;
+        seen.add(where);
+        if (testSet.has(where)) found.set(where, { testFile: where, steps: step, via: 'the package itself' });
+        else throughDoor.push(where);
+      }
+      layer = [...layer, ...throughDoor];
+    }
+    const names = layer.flatMap((f) => (existsSync(resolve(root, f)) ? importNames(root, f) : []));
+    if (names.length === 0) break;
+    const next: string[] = [];
+    for (const path of all) {
+      const where = rel(path);
+      if (seen.has(where)) continue;
+      if (!importsIt(read(path), names)) continue;
+      seen.add(where);
+      if (testSet.has(where)) found.set(where, { testFile: where, steps: step, via: layer[0] });
+      // A module that imports the change is itself a way in, whether or not it is a test, so the walk
+      // continues through it. This is what reaches a test that only imports the package front door.
+      next.push(where);
+    }
+    layer = next;
+  }
+  return [...found.values()];
 }
 
 export interface Reach {

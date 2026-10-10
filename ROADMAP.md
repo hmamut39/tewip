@@ -1692,6 +1692,65 @@ checked rather than trusted.
 
 Not measured: whether reviewers agree with the verdicts, which needs reviewers.
 
+### Phase 25: Run Only What Could Notice (`tewip pick`)
+
+The first thing here that saves money rather than finding defects, and the reason a company installs a
+tool on day one: a suite that takes forty minutes is a suite people stop running. The industry sells this
+as prediction - a model guesses which tests matter. That is the wrong shape for the job, because the cost
+of being wrong is a bug in production and nobody can audit a guess.
+
+So selection is treated as a **refusal problem**: skipping a test is a claim that it could not have
+noticed the change, and a claim needs evidence from the source. A test runs when it imports a changed
+file, reaches one through another module, is edited by the change, reads the repository at run time, or has
+failed recently. It refuses to narrow at all when the change touches dependencies, build or test
+configuration, shared setup or fixtures, when the suite drives a browser, or when a changed file cannot be
+traced to any test.
+
+Phase metric: on real changes, the share of the suite selected, and - the number that actually matters -
+how often a test that would have caught the change was dropped.
+
+Status (2026-10-10): **built** as `tewip pick`, also an MCP tool.
+
+Measured by `eval/pick-safety.ts`, which breaks the code and lets execution decide: make a real mutation,
+ask `pick` what could notice it, run the whole suite to see which tests really catch it, and count a
+failure when no catching test was selected.
+
+| Project | Judged cases | Catching test lost | Suite selected |
+| --- | --- | --- | --- |
+| This repository (node --test, 76 test files, 677 tests) | 8 | **0** | 7-9% |
+| expressjs/express (Mocha, 88 test files, 1,153 tests) | 2 | **0** | refused to narrow |
+
+Six false answers were found and fixed on real projects, and every one of them was a *false skip* - the
+only failure this command must not have:
+
+- **It stopped at the first depth that found a test.** That is right for `prove`, which wants one witness,
+  and catastrophic for selection: a change to express's `lib/response.js` found one test three imports away
+  and declared the other 86 files unaffected. The walk now takes the closure.
+- **It did not understand the package front door.** express's tests all do `require('..')`, which reaches
+  every part of the library. Matching spellings was not enough either: `test/res.status.js` writes
+  `require('../.')`, and that one file - testing the very code that changed - was being skipped. Import
+  paths are now **resolved** rather than pattern-matched, which cannot be spelled around.
+- **It only followed the door to tests, not through modules.** express's acceptance tests import an example
+  app which imports the package, so nineteen of them looked unaffected.
+- **A file nothing imports forced the whole suite.** In this repository a change to the command line, which
+  tests only read as text, stopped all narrowing - correct but useless. "Nothing refers to it anywhere" is
+  now distinguished from "something refers to it in a way imports do not show".
+- **It matched a file's bare name.** For `cli/tewip.ts` the stem is "tewip", which appears in nearly every
+  file here, so 28 test files were selected because they mentioned the product's own name.
+- **A repository-scanning guard was skipped.** This project's control-character guard walks every source
+  file, so any change can break it. Found by the safety measurement, which reported a lost catch.
+
+The measurement itself had to be corrected three times before its numbers meant anything: it read only
+TAP and so saw no failures at all; it had no baseline, so a suite already red from an unrelated bug turned
+every pre-existing failure into a "catcher" and reported a lost bug that was never at risk; and it counted
+a mutant that broke the build as "caught by nothing" instead of excluding it.
+
+One safety fix came out of being killed mid-run: `prove` and `pick`'s measurement write to real source
+files, and `finally` does not run for SIGINT, so pressing Ctrl-C left a mutated file behind. It now
+restores on SIGINT, SIGTERM, SIGHUP and SIGBREAK and says that it did.
+
+Not measured: a real team's CI time before and after, which needs a team.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

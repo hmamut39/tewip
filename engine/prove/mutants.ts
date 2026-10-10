@@ -37,10 +37,14 @@ const NOT_BEHAVIOUR = /^\s*(\/\/|#|\*|\/\*|@|import\b|from\b|export\s+(type|inte
  * sign the wrong way round, a flag returned the wrong way.
  */
 const OPERATORS: Array<{ kind: string; find: RegExp; swap: (m: string) => string }> = [
-  { kind: 'a boundary moved by one', find: /(?<![<>=!])<=(?!=)/, swap: () => '<' },
-  { kind: 'a boundary moved by one', find: /(?<![<>=!])>=(?!=)/, swap: () => '>' },
-  { kind: 'a boundary moved by one', find: /(?<![<>=!+-])<(?![<=])/, swap: () => '<=' },
-  { kind: 'a boundary moved by one', find: /(?<![<>=!+-])>(?![>=])/, swap: () => '>=' },
+  // Whitespace on both sides, which is what separates a comparison from a generic type. Without it,
+  // `Array<{ id: string }>` was read as a comparison and mutated into `Array<={ … }>`: the file stopped
+  // compiling, the whole suite failed to load, and the measurement counted a mutant nothing caught.
+  // A codebase that writes `a<b` loses a few mutants; one that breaks its build loses the answer.
+  { kind: 'a boundary moved by one', find: /(?<=\s)<=(?=\s)/, swap: () => '<' },
+  { kind: 'a boundary moved by one', find: /(?<=\s)>=(?=\s)/, swap: () => '>' },
+  { kind: 'a boundary moved by one', find: /(?<=\s)<(?=\s)/, swap: () => '<=' },
+  { kind: 'a boundary moved by one', find: /(?<=\s)>(?=\s)/, swap: () => '>=' },
   { kind: 'a comparison inverted', find: /===/, swap: () => '!==' },
   { kind: 'a comparison inverted', find: /(?<![!=<>])==(?!=)/, swap: () => '!=' },
   { kind: 'a comparison inverted', find: /!==/, swap: () => '===' },

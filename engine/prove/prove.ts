@@ -124,10 +124,11 @@ export function proveFile(root: string, file: string, covering: string[], framew
   }
 
   const original = readFileSync(full, 'utf8');
+  const stopGuarding = guardAgainstBeingKilled(full, original);
   const mutants = mutantsFor(original, limit);
   if (mutants.length === 0) {
     proof.blocked = 'nothing in this file could be changed in a way a test should be expected to catch - no comparison, no condition, no returned value outside of strings and comments';
-    return finish(proof, started);
+    return finish(proof, started, stopGuarding);
   }
 
   // A test has to pass before it can be asked to notice anything, or a red suite turns into "your
@@ -146,7 +147,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
   }
   if (usable.length === 0) {
     proof.blocked = `none of the ${covering.length} test file(s) covering this pass as they are, so none can be asked whether they would notice a change. Fix the run first.`;
-    return finish(proof, started);
+    return finish(proof, started, stopGuarding);
   }
   proof.covering = usable;
 
@@ -155,7 +156,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
   say('checking the tests really load this file');
   if (!testsLoadIt(root, full, original, usable[0], framework, runMs)) {
     proof.blocked = `${usable[0]} passes even when this file is made unusable, so the tests are not loading the file that was edited - they are reading an installed copy or a build output. Nothing here can be proved until they run against this source (for a Python src layout, install it in editable mode: pip install -e .).`;
-    return finish(proof, started);
+    return finish(proof, started, stopGuarding);
   }
   // Only the tests that pass may judge a mutant. A test that is already failing fails for every
   // change too, which would have it "catch" everything - the exact false confidence this command
@@ -199,7 +200,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
     proof.tried.push({ mutant, fate, noticedBy, seconds: Math.round((Date.now() - at) / 100) / 10 });
   }
 
-  return finish(proof, started);
+  return finish(proof, started, stopGuarding);
 }
 
 /**
@@ -213,7 +214,41 @@ function restore(full: string, original: string): void {
   }
 }
 
-const finish = (proof: Proof, started: number): Proof => ({ ...proof, seconds: Math.round((Date.now() - started) / 1000) });
+/**
+ * Put the file back even when the process is killed.
+ *
+ * `finally` does not run for SIGINT or SIGTERM, so a developer pressing Ctrl-C during a run - which they
+ * will, because this is the slow command - was left with a mutated source file and no idea why their
+ * code had stopped working. Found by killing one of these runs during development and finding a flipped
+ * comparison still sitting in the repository.
+ */
+function guardAgainstBeingKilled(full: string, original: string): () => void {
+  const putBack = (signal: NodeJS.Signals) => () => {
+    try {
+      restore(full, original);
+      process.stderr.write(`${String.fromCharCode(10)}${signal}: ${full} was put back as it was.${String.fromCharCode(10)}`);
+    } catch {
+      process.stderr.write(`${String.fromCharCode(10)}${signal}: could not put ${full} back. Run: git checkout -- "${full}"${String.fromCharCode(10)}`);
+    }
+    process.exit(130);
+  };
+  const handlers: Array<[NodeJS.Signals, () => void]> = (['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as NodeJS.Signals[]).map((signal) => [signal, putBack(signal)]);
+  for (const [signal, handler] of handlers) {
+    try {
+      process.on(signal, handler);
+    } catch {
+      // Not every signal exists on every platform.
+    }
+  }
+  return () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+  };
+}
+
+const finish = (proof: Proof, started: number, stopGuarding?: () => void): Proof => {
+  stopGuarding?.();
+  return { ...proof, seconds: Math.round((Date.now() - started) / 1000) };
+};
 
 const firstLine = (output: string): string => output.split(String.fromCharCode(10)).map((l) => l.trim()).find(Boolean)?.slice(0, 160) ?? '';
 

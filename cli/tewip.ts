@@ -196,6 +196,19 @@ async function main(): Promise<void> {
       });
       return;
     }
+    case 'pick': {
+      const { runPick } = await import('../engine/pick/pick-command.ts');
+      runPick({
+        root: process.cwd(),
+        diff: flag(args, 'diff') ?? 'main...HEAD',
+        files: args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--diff' && args[i - 1] !== '--out' && args[i - 1] !== '--recent' && args[i - 1] !== '--name'),
+        out: flag(args, 'out'),
+        list: args.includes('--list'),
+        recentRuns: Number(flag(args, 'recent') ?? '5'),
+        name: flag(args, 'name'),
+      });
+      return;
+    }
     case 'prove': {
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--diff', '--limit', '--budget'].includes(args[i - 1] ?? ''));
       const { runProve } = await import('../engine/prove/prove-command.ts');

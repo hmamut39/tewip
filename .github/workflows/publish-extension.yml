@@ -2,20 +2,22 @@
 # Theia search. It is **not** the Visual Studio Marketplace: VS Code reads only Microsoft's registry,
 # and that one needs an Azure DevOps organisation with a subscription behind it.
 #
-# No token is stored anywhere. Open VSX's trusted publishing exchanges this workflow's OIDC identity
-# for a token that lives a few minutes, which is why `id-token: write` is the only permission that
-# matters here. The same idea as the MCP registry workflow beside this one.
+# Two ways in, and it takes whichever is available.
 #
-# Set up once, in the browser, by the person who owns the namespace:
-#   1. open-vsx.org -> log in with GitHub -> profile -> "Log in with Eclipse" -> agree to the
-#      Publisher Agreement. (A signature; it cannot be automated.)
-#   2. open-vsx.org/user-settings/namespaces -> create the namespace `hmamut39`. It has to match the
-#      `publisher` field in extensions/vscode/package.json.
-#   3. open-vsx.org/user-settings/trusted-publishers -> register GitHub with
-#      owner `hmamut39`, repo `tewip`, workflow `.github/workflows/publish-extension.yml`,
-#      and no environment.
+# **Trusted publishing** needs no secret: Open VSX exchanges this workflow's OIDC identity for a token
+# that lives a few minutes. It is the better route, and it is not available yet here, because the
+# registry only offers it to a namespace **owner** - and ownership is granted by a claim that requires
+# twelve months of public GitHub history. This account reaches that in December 2026.
 #
-# After that every `v*` tag publishes, and nobody touches it again.
+# **An access token** works today. A namespace contributor may publish, which is what creating a
+# namespace makes you. Put the token in the repository as the secret OVSX_PAT:
+#   open-vsx.org -> avatar -> Settings -> Access Tokens -> Generate New Token (copy it once)
+#   github.com/hmamut39/tewip/settings/secrets/actions -> New repository secret -> OVSX_PAT
+#
+# When ownership comes through, register a trusted publisher (owner `hmamut39`, repo `tewip`, workflow
+# `.github/workflows/publish-extension.yml`, no environment), delete the secret, and this keeps working
+# without any other change - `ovsx` prefers a token when one is given and falls back to OIDC when it is
+# not.
 name: Publish the editor extension to Open VSX
 
 on:
@@ -69,7 +71,16 @@ jobs:
 
       - name: Publish to Open VSX
         working-directory: extensions/vscode
-        run: npx -y ovsx@latest publish *.vsix --trusted-publishing
+        env:
+          # Empty when no secret is set, and `ovsx` then uses the workflow's OIDC identity instead.
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -n "$OVSX_PAT" ]; then
+            echo "Publishing with the access token."
+          else
+            echo "No OVSX_PAT secret: trying trusted publishing, which needs a registered trusted publisher."
+          fi
+          npx -y ovsx@latest publish *.vsix
 
       - name: Keep the built extension on the run
         if: always()

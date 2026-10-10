@@ -39,21 +39,9 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Keep the extension's version with the release
-        working-directory: extensions/vscode
-        run: |
-          tag="${GITHUB_REF#refs/tags/v}"
-          # Only when a tag triggered this. A manual run publishes whatever the file already says.
-          if [ "$tag" != "$GITHUB_REF" ]; then
-            node -e "
-              const fs = require('fs');
-              const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              p.version = process.argv[1];
-              fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
-              console.log('extension version set to', p.version);
-            " "$tag"
-          fi
-
+      # The extension keeps its own version line. Taking it from the repository tag conflated two
+      # different things - the extension was on 0.7.0 while the repository was on 0.33.0 - and would
+      # have jumped it to the repository's number on the next release. Bump it in its package.json.
       - name: Check the publisher matches the namespace
         working-directory: extensions/vscode
         run: |

@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
   "description": "Proves the work: is this change done, could these tests ever fail, would they catch a bug, what will this migration do to a live database, and why did CI fail.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {

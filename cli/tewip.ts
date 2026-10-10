@@ -196,6 +196,17 @@ async function main(): Promise<void> {
       });
       return;
     }
+    case 'schema': {
+      const { runSchema } = await import('../engine/schema/schema-command.ts');
+      runSchema({
+        root: process.cwd(),
+        diff: flag(args, 'diff') ?? 'main...HEAD',
+        files: args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--diff' && args[i - 1] !== '--out'),
+        out: flag(args, 'out'),
+        strict: args.includes('--strict'),
+      });
+      return;
+    }
     case 'pick': {
       const { runPick } = await import('../engine/pick/pick-command.ts');
       runPick({

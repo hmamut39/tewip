@@ -552,6 +552,52 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## What will this migration do to a live database? (Phase 26)
+
+```bash
+tewip schema --diff main...HEAD      # or: tewip schema migrations/0002_drop_nickname.sql
+tewip schema --strict                # fails the build on a change that breaks the running version
+```
+
+The most expensive change in a pull request is usually not a test — it is a migration. A column dropped
+while the previous deployment is still selecting it. An index built without `CONCURRENTLY`, blocking every
+write to the busiest table. A `NOT NULL` added to a populated table. These are known, documented, and a
+tool can name every one of them from the text of the migration.
+
+```
+1 of 1 migration file(s) read. 1 change(s) would break the running version or destroy data
+
+## Breaks the version that is still running (1)
+- drops the column nickname from orders — migrations/0002_drop_nickname.sql:1
+  - Instead: deploy code that no longer selects or writes the column, then drop it in a later
+    migration. During a rolling deploy the old version is still running and will fail on a column
+    that is gone
+
+## Code that still uses what this takes away (1)
+- orders.nickname is still named in 1 file(s): app/orders.py
+```
+
+That last section is the part no SQL linter does: it searches your own code for what the migration takes
+away. "This drops `users.nickname`, and four files still read it" is a different sentence from "dropping a
+column is risky", and it is the one that stops the outage.
+
+It reads **SQL, Django, Rails and Alembic** migrations, judges **only the forward path** (a rollback step
+contains the mirror image of the change, so reading it says a migration that creates a table destroys
+one), and stays quiet when the team already did the safe thing — `atomic = False`, `algorithm:
+:concurrently`, `NOT VALID`, `postgresql_concurrently=True`. When it cannot read a migration it says so
+rather than passing it, and "read and nothing found" never looks like "not read".
+
+**Tried on real projects.** 200 Zulip migrations: 199 read, 19 changes that break the running version or
+destroy data, each sampled finding correct when read against the file — including a `DROP COLUMN` buried
+in raw SQL inside a Python data migration. 60 Mastodon migrations: it caught a `change_column` that
+rewrites a table, in a migration whose *name* says it only adds one.
+
+What it does not know, and says so: your table sizes and how busy the database is, so it reports what a
+statement **does** — rewrites the table, scans every row, blocks writes — and leaves the duration to the
+person who knows the data. In CI the findings go into the pull request comment, and anything that breaks
+the running version enters the evidence bundle as a refusal: a passing test suite does not verify a
+migration.
+
 ## Run only the tests that could notice this change (Phase 25)
 
 ```bash

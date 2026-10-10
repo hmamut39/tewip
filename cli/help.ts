@@ -118,6 +118,13 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
+  tewip schema [<files>] [--diff main...HEAD] [--strict] [--out schema.md]
+                                    What will this migration do to a live database? Names the changes
+                                    that break the version still running during a deploy, destroy data,
+                                    block writes while they run, or cannot be undone - and searches your
+                                    code for what still uses the column it takes away. Reads SQL, Django,
+                                    Rails and Alembic migrations, and says so when it cannot read one.
+                                    No model, no cost.
   tewip pick [--diff main...HEAD] [--list] [--out picked.md]
                                     Which tests could notice this change? Narrows a test run using
                                     facts rather than a prediction: a test runs when it imports a

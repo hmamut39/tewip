@@ -1751,6 +1751,51 @@ restores on SIGINT, SIGTERM, SIGHUP and SIGBREAK and says that it did.
 
 Not measured: a real team's CI time before and after, which needs a team.
 
+### Phase 26: What the Migration Does to a Live Database (`tewip schema`)
+
+Mapping Tewip against the jobs an IT department actually has, the largest hole was not in testing. It was
+the change that causes the worst outages in every company with a database: a schema migration. A column
+dropped while the previous deployment still selects it, an index built without CONCURRENTLY on the busiest
+table, a NOT NULL added to a populated one. All known, all documented, and all readable from the text of
+the migration - and nobody does it in the same place as the rest of the quality work.
+
+Phase metric: on real migrations from real projects, findings that hold up when read against the file, and
+no noise about something the team already handled.
+
+Status (2026-10-10): **built** as `tewip schema`, in the pull request comment, and as an MCP tool.
+
+Reads SQL, Django, Rails and Alembic. Names what breaks the running version, destroys data, blocks writes,
+holds a long transaction, or cannot be undone - and searches the repository for the code that still uses
+what is being taken away, which is the part a SQL linter cannot do.
+
+Tried on real projects, and every precision rule below came from being wrong on one first:
+
+| Project | Migrations read | Breaks running version / destroys data | Other findings |
+| --- | --- | --- | --- |
+| zulip/zulip (Django) | 199 of 200 | 19 | 22 |
+| mastodon/mastodon (Rails) | 60 of 60 | 2 | 8 |
+
+- **It lectured a careful team.** Zulip's data migrations already set `atomic = False` - exactly what the
+  advice says - and Tewip told them to do it anyway. Rules now carry an `unless`: a guard visible in the
+  file means there is nothing to report. The same now holds for `algorithm: :concurrently`, `NOT VALID`
+  and `postgresql_concurrently=True`.
+- **It read the rollback as the change.** Mastodon's `create_fasp_capabilities` was reported as destroying
+  a table, because its `def down` drops the one it creates. Only the forward path is judged now.
+- **The code search was noise.** Dropping `fasp_providers.capabilities` matched 37 files including a
+  Dockerfile and an emoji module, because "capabilities" is an ordinary word. A file must now name the
+  table as well as the column: 37 became 6, all of them FASP code. The report still calls this evidence
+  rather than proof, because a text match can be a comment - as one of those six is.
+- **Data migrations were invisible.** Keying on Django's operation names missed every `RunPython` file, and
+  a data migration is exactly the kind that runs for an hour with a transaction open.
+- **Line numbers were wrong.** Stripping comments shifted every statement upwards, so a statement on line
+  three was reported as line one. Comments are blanked in place now.
+
+What it refuses to do: guess a duration. It cannot see table sizes or load, so it says what a statement
+does and leaves the timing to the person who knows the data. It also says when it cannot read a migration,
+and a file read with nothing found never looks like a file that was not read.
+
+Not measured: whether a team's outage rate changes, which needs a team and a year.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

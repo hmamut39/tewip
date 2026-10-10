@@ -18,6 +18,7 @@ import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
 import { changedTestLines, vouchChanged } from '../engine/vouch/changed.ts';
 import { proveChanged, provedChangeLines } from '../engine/prove/changed.ts';
+import { readMigration, renderSchema, schemaFiles, stillUsed } from '../engine/schema/schema-command.ts';
 import { changeSummary } from '../engine/quality/grounding.ts';
 import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
@@ -140,6 +141,14 @@ async function main(): Promise<void> {
   const testLines = changedTests ? changedTestLines(changedTests) : [];
   if (changedTests) log(`tests in this change: ${changedTests.read} read, ${changedTests.cannotFail.length} cannot fail`);
 
+  // A migration in the change is read before anything else is said about the run: a dropped column or an
+  // index built under a lock is the most expensive thing in a pull request, and it costs nothing to read.
+  const migrations = changed ? schemaFiles({ root: ctx.workspace, diff: '', files: changed }).map((file) => readMigration(ctx.workspace, file)) : [];
+  const schemaFindings = migrations.flatMap((m) => m.findings);
+  const schemaSerious = schemaFindings.filter((f) => f.risk === 'breaks-old-code' || f.risk === 'destroys-data');
+  const schemaLines = migrations.length > 0 && (schemaFindings.length > 0 || migrations.some((m) => m.unread)) ? renderSchema(migrations, stillUsed(ctx.workspace, schemaFindings)).split(String.fromCharCode(10)) : [];
+  if (migrations.length > 0) log(`${migrations.length} migration file(s) in this change: ${schemaSerious.length} would break the running version or destroy data`);
+
   // And the stronger question, when the repository asked for it: break the changed code and see
   // whether anything notices. Off by default because every change costs a real test run.
   const proved = changed && ctx.prove ? proveChanged(ctx.workspace, changed, { budgetSeconds: ctx.proveBudgetSeconds, onStep: (m) => log(m) }) : null;
@@ -151,7 +160,7 @@ async function main(): Promise<void> {
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, [...testLines, ...proveLines])));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, [...schemaLines, ...testLines, ...proveLines])));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);
@@ -195,6 +204,16 @@ async function main(): Promise<void> {
   // What the tests in this change are worth. A bundle that says "all green" over a test which cannot
   // fail is the overclaim this whole phase exists to prevent, so it goes in as a claim when they are
   // sound and as a refusal when they are not.
+  // A migration that breaks the running version is not something the bundle can vouch for.
+  for (const finding of schemaSerious) {
+    proveRefusals.push({
+      what: `a migration in this change ${finding.what}`,
+      why: 'this bundle says nothing about what happens to the database, and a change like this is not verified by a passing test suite',
+      runId: imported.summary.runId,
+    });
+  }
+  if (migrations.length > 0) checked.push(`${migrations.filter((m) => !m.unread).length} migration file(s) in this change were read for what they do to a live database`);
+
   if (proved && proved.proofs.length > 0) {
     const tried = proved.proofs.flatMap((p) => p.tried);
     checked.push(`${tried.length} deliberate change(s) were made to the code this pull request touched, and the covering tests were run against each`);

@@ -272,4 +272,28 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'what_will_this_migration_do',
+  {
+    title: 'What will this migration do to a live database?',
+    description:
+      "Reads the migrations in a change and names what will happen when they run against a live database: a column dropped while the version still running keeps selecting it, a table dropped, an index built under a lock that blocks writes, a NOT NULL added to a populated table, a type change that rewrites it, a foreign key validated against every row, a data migration holding a transaction open, a step that cannot be undone. It also searches the repository for code that still uses the column being taken away. Reads SQL, Django, Rails and Alembic, judges only the forward path, and says plainly when it cannot read a migration. It does not know your table sizes, so it says what a statement does rather than how long it will take.",
+    inputSchema: {
+      project,
+      diff: z.string().optional().describe('A git range, e.g. main...HEAD (the default)'),
+      files: z.array(z.string()).optional().describe('Migration files to read, when they do not come from a git range'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, diff, files }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { readMigration, renderSchema, schemaFiles, stillUsed } = await import('../engine/schema/schema-command.ts');
+      const cmd = { root, diff: diff ?? 'main...HEAD', files };
+      const migrations = schemaFiles(cmd).map((file) => readMigration(root, file));
+      if (migrations.length === 0) return 'No migration or schema file in that change.';
+      return renderSchema(migrations, stillUsed(root, migrations.flatMap((m) => m.findings)));
+    }),
+);
+
 await server.connect(new StdioServerTransport());

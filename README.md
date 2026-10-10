@@ -117,18 +117,15 @@ The repository needs "Allow GitHub Actions to create and approve pull requests" 
 ### As a Claude Code plugin (no account, no marketplace approval)
 
 ```bash
-claude plugin marketplace add hmamut39/tewip
+claude plugin marketplace add hmamut39/tewip-plugin
 claude plugin install tewip@tewip
 ```
 
-**This works today only for people who can clone the repository, which is private.** A marketplace is
-only as public as the repository holding it. To open it to everyone, either make this repository public,
-or publish the `plugin/` directory as a small public repository of its own - it contains a manifest, three
-skills and a pointer to the npm package, and nothing else.
-
 That is the whole publication process. A marketplace is a `.claude-plugin/marketplace.json` file in a git
-repository, so Tewip ships one in its own repo - nobody has to approve it, and there is nothing to pay
-for. The plugin brings Tewip's MCP server and three skills that tell Claude Code *when* to use it:
+repository, so Tewip publishes one at
+[hmamut39/tewip-plugin](https://github.com/hmamut39/tewip-plugin) - nobody has to approve it, and there
+is nothing to pay for. That repository holds the plugin only: a manifest, three skills and a pointer to
+the npm package, which is why this one can stay private. The plugin brings Tewip's MCP server and three skills that tell Claude Code *when* to use it:
 before claiming a change is done, when a test fails, and when a change touches a migration. It costs
 about 410 tokens per session until a skill is actually needed.
 

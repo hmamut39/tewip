@@ -773,7 +773,7 @@ un-quarantine anything. That was the rule for diagnoses and it is the rule for a
 Proved end to end on a real report: `tewip correct diagnosis "shop computes the total" TEST_DATA`
 turns the next run's answer into *"TEST_DATA, confidence 1.00, source: corrected by a person"*, and
 `tewip correct flaky "shop reaches the pricing service" fix-now` turns that test's verdict into
-*"Afiyat decided this on 2026-09-23: the service URL is wrong in the config, not flaky (Tewip had
+*"Dana decided this on 2026-09-23: the service URL is wrong in the config, not flaky (Tewip had
 said watch)"*.
 
 Building it found two faults in the existing path, both of which would have made a correction look

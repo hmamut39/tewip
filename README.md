@@ -112,7 +112,7 @@ jobs:
 
 The report reads the history cache of the branch it runs on, usually the default branch.
 
-The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. Pull requests opened by the workflow token don't trigger CI themselves; the agent verified each change by re-running the test before opening the PR. See [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) for a working example. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
+The repository needs "Allow GitHub Actions to create and approve pull requests" enabled for fix PRs. Pull requests opened by the workflow token don't trigger CI themselves; the agent verified each change by re-running the test before opening the PR. It was first proved end to end on a private practice repository, which is why there is no link to click here. If this repository is private, other repositories can only use the action when Settings → Actions → Access allows it.
 
 ### As a Claude Code plugin (no account, no marketplace approval)
 
@@ -819,7 +819,7 @@ With `--act` it carries the decision out, and this is where the refusals matter 
 
 | Project | How | Result |
 |---|---|---|
-| [triage-agent-sandbox](https://github.com/hmamut39/triage-agent-sandbox) (private practice repo) | Live GitHub Action on a release PR with 11 planted failures | Diagnosis comment, one environment issue, and a fix PR whose 5 locator changes pass when checked out. Traps left alone. Synthetic. |
+| A private practice repository (not linked: it is private) | Live GitHub Action on a release PR with 11 planted failures | Diagnosis comment, one environment issue, and a fix PR whose 5 locator changes pass when checked out. Traps left alone. Synthetic. |
 | WordPress Gutenberg (public) | Offline, from 5 windows of real CI blob reports, two of them harvested after the pipeline was frozen | 84–98% accuracy on 1,441 labelled real failures; the only project with enough drift cases to measure that category (see [eval/README.md](eval/README.md) for caveats) |
 | JupyterLab (public) | Offline, from its Galata UI suite | 90.2% on 41 labelled failures; the deterministic rules alone were right on 34 of 34 they decided |
 | LXD UI (public) | Offline, from its pull-request suite | 91.3% on 69 labelled failures; rules right on 63 of 63. All 6 misses are cross-branch flakes read as real bugs |

@@ -588,6 +588,22 @@ test that would have caught the bug; on a monolith where every test imports the 
 there is nothing to skip, rather than inventing a saving. It is also an MCP tool, so an agent can ask what
 to run before running anything.
 
+**In CI**, `mode: pick` runs before your tests and hands the workflow the files to run:
+
+```yaml
+- id: pick
+  uses: hmamut39/tewip@main
+  with: { mode: pick }        # needs fetch-depth: 0 on actions/checkout
+- run: npx jest ${{ steps.pick.outputs.tests }}
+  if: steps.pick.outputs.narrowed == 'true'
+- run: npx jest
+  if: steps.pick.outputs.narrowed != 'true'
+```
+
+Whatever it leaves out is written into the job summary with the reason beside it, so "why did CI not run
+that test" is answered by the run itself. When it will not narrow safely, `narrowed` is `false` and
+`tests` is empty - so a workflow that ignores the flag still runs everything, which is the safe default.
+
 ## Would your tests catch a bug? (Phase 23)
 
 ```bash

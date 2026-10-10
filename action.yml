@@ -7,7 +7,12 @@ author: hmamut39
 
 inputs:
   mode:
-    description: "triage (default): diagnose this run's failures and deliver. report: build the team report (quality, architecture, risk digest) from the stored history, for scheduled workflows."
+    description: >-
+      triage (default): diagnose this run's failures and deliver. report: build the team report (quality,
+      architecture, risk digest) from the stored history, for scheduled workflows. pick: run BEFORE your
+      tests and output the test files that could notice this change, with everything it leaves out written
+      into the job summary. In pick mode it outputs `tests` and `narrowed`; when it cannot narrow safely,
+      `narrowed` is false and `tests` is empty, so a workflow that ignores that still runs everything.
     default: triage
   github-token:
     description: Token used to comment, open issues and fix pull requests. Needs contents, pull-requests and issues write permissions.
@@ -72,6 +77,12 @@ inputs:
     default: ''
 
 outputs:
+  tests:
+    description: "pick mode only: the test files that could notice this change, space separated. Empty when it would not narrow."
+    value: ${{ steps.triage.outputs.tests }}
+  narrowed:
+    description: "pick mode only: 'true' when the run was narrowed, 'false' when the whole suite should run."
+    value: ${{ steps.triage.outputs.narrowed }}
   blocking:
     description: Failing tests that are real bugs, changed selectors, test-data problems or undecided.
     value: ${{ steps.triage.outputs.blocking }}
@@ -102,7 +113,7 @@ runs:
     - name: Diagnose failures and deliver
       id: triage
       shell: bash
-      run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || 'run' }}.ts"
+      run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || inputs.mode == 'pick' && 'pick' || 'run' }}.ts"
       env:
         TRIAGE_GITHUB_TOKEN: ${{ inputs.github-token }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
@@ -120,7 +131,7 @@ runs:
         TEWIP_ATTEST_KEY: ${{ inputs.attest-key }}
 
     - name: Save triage history
-      if: always() && inputs.mode != 'report'
+      if: always() && inputs.mode != 'report' && inputs.mode != 'pick'
       uses: actions/cache/save@v4
       with:
         path: .triage-agent/history

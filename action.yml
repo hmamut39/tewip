@@ -1,9 +1,9 @@
 name: Tewip
-description: Tewip diagnoses every failing test - real bug, flaky, environment, test data or changed selector - comments on the pull request, can gate merges on real failures, and opens verified selector-fix pull requests. Playwright, pytest, Jest, Vitest, JUnit, Go, .NET, Ruby, PHP, Rust.
+description: Proves the work: why each test failed, whether a test can fail at all, and what a migration does to a live database.
 branding:
   icon: activity
   color: green
-author: hmamut39
+author: Mamuti Aishan (Hasan)
 
 inputs:
   mode:

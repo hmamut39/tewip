@@ -138,5 +138,8 @@
   "bugs": {
     "url": "https://github.com/hmamut39/tewip/issues"
   },
-  "homepage": "https://github.com/hmamut39/tewip#readme"
+  "homepage": "https://github.com/hmamut39/tewip#readme",
+  "author": {
+    "name": "Mamuti Aishan (Hasan)"
+  }
 }

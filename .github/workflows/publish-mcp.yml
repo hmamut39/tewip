@@ -1,0 +1,68 @@
+# Lists Tewip's MCP server in the official MCP registry, so people searching for a server find it.
+#
+# The point of doing it this way: the job authenticates as this repository through GitHub's OIDC, so
+# nobody has to create an account, hold a token, or pay anything. The registry checks that the npm
+# package carries `mcpName: io.github.hmamut39/tewip`, which proves the package and the listing belong
+# to the same owner.
+#
+# It runs when a `v*` tag is pushed, after the npm release is already out - the registry validates the
+# package version it is told about, so the tag has to follow the publish, not race it.
+name: Publish to the MCP registry
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC: how the registry knows this is really hmamut39/tewip
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check server.json agrees with the release
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          server="$(node -p "require('./server.json').version")"
+          package="$(node -p "require('./server.json').packages[0].version")"
+          named="$(node -p "require('./package.json').mcpName")"
+          echo "tag=$tag server.json=$server package entry=$package mcpName=$named"
+          # A listing that points at a version nobody can install is worse than no listing.
+          if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/v}" ] && { [ "$server" != "$tag" ] || [ "$package" != "$tag" ]; }; then
+            echo "server.json says $server / $package but the tag says $tag. Update server.json before tagging."
+            exit 1
+          fi
+          if [ "$named" != "$(node -p "require('./server.json').name")" ]; then
+            echo "package.json mcpName and server.json name must match, or the registry cannot tell they are the same owner."
+            exit 1
+          fi
+
+      - name: Wait for the version to be installable from npm
+        run: |
+          version="$(node -p "require('./server.json').packages[0].version")"
+          for attempt in $(seq 1 30); do
+            if npm view "tewip-ai@$version" version >/dev/null 2>&1; then
+              echo "tewip-ai@$version is on the registry"
+              exit 0
+            fi
+            echo "waiting for tewip-ai@$version to appear (attempt $attempt)"
+            sleep 20
+          done
+          echo "tewip-ai@$version never appeared on npm; not listing a version nobody can install."
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Check server.json before sending it
+        run: ./mcp-publisher validate
+
+      - name: Authenticate as this repository
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish

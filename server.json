@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.hmamut39/tewip",
+  "description": "Proves software work: triages failing tests, checks whether a test can fail, and reads migrations.",
+  "repository": {
+    "url": "https://github.com/hmamut39/tewip",
+    "source": "github"
+  },
+  "version": "0.33.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "tewip-ai",
+      "version": "0.33.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "Optional. Turns on the AI layer for failures the deterministic rules cannot decide. Without it only the rules run, and Tewip says which layer decided each answer.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

@@ -31,6 +31,7 @@ export interface Repair extends Draft {
 
 const RULES = `Rules:
 - Write in the given framework and language, in the style of the example test: the same imports, helpers, and way of opening pages (if it uses a base URL with relative paths, do the same).
+- When houseRules is given, it is this team's own written guidance. Follow it as you would the example test; where it conflicts with your habits, the team wins.
 - Find elements only by what the accessibility snapshots show: role and accessible name, label, placeholder or visible text. Never invent ids, classes or test ids that no snapshot shows.
 - Check the scenario's expected result specifically. A check that is always true (a page merely loads, a list merely exists) is not a test.
 - Wait for conditions, never for fixed times.
@@ -67,6 +68,12 @@ export interface WriteContext {
   feature: string;
   /** The source files the feature lives in, so a failing check can be weighed against documented intent. */
   code?: Array<{ file: string; content: string }>;
+  /**
+   * The team's own guidance from `.tewip/standards/`, for the parts of house style no pattern can check.
+   * A test written in the project's own conventions is one somebody will keep; one written in Tewip's
+   * conventions is one they rewrite, and then stop asking for.
+   */
+  houseRules?: string;
 }
 
 function contextFor(ctx: WriteContext, scenario: Scenario) {
@@ -80,6 +87,7 @@ function contextFor(ctx: WriteContext, scenario: Scenario) {
     exampleTest: example,
     pages: ctx.pages.map((p) => ({ readAt: p.url, title: p.title, accessibilitySnapshot: p.aria })),
     codeUnderTest: ctx.code?.length ? ctx.code : undefined,
+    houseRules: ctx.houseRules || undefined,
   };
 }
 

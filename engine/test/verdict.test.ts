@@ -21,6 +21,7 @@ const sound: Evidence = {
   failingNow: [],
   noHistory: false,
   uncovered: [],
+  brokenRules: [],
 };
 const seen = (over: Partial<Evidence> = {}): Evidence => ({ ...sound, ...over });
 
@@ -30,7 +31,7 @@ describe('is this work done?', () => {
   it('calls sound work ready, and says how much was checked', () => {
     const decision = decide(sound);
     assert.equal(decision.verdict, 'ready');
-    assert.match(decision.headline, /Ready as far as 5 check\(s\) can show/);
+    assert.match(decision.headline, /Ready as far as 6 check\(s\) can show/);
   });
 
   it('will not say ready while a test in the change cannot fail', () => {
@@ -92,8 +93,27 @@ describe('is this work done?', () => {
   it('keeps the questions in a fixed order, so the answer can be predicted', () => {
     assert.deepEqual(
       decide(sound).checks.map((c) => c.question),
-      ['Is anything failing?', 'Is the changed code tested?', 'Can the tests in this change fail?', 'Would the tests catch a bug in this code?', 'Is what was asked for covered?'],
+      [
+        'Is anything failing?',
+        'Is the changed code tested?',
+        'Can the tests in this change fail?',
+        'Would the tests catch a bug in this code?',
+        "Does it keep this project's own standards?",
+        'Is what was asked for covered?',
+      ],
     );
+  });
+
+  it('will not say ready while the change breaks a rule this team wrote', () => {
+    const decision = decide(seen({ brokenRules: [{ standard: 'no-fixed-waits', file: 'tests/checkout.spec.ts', line: 5, why: 'a fixed wait passes by luck' }] }));
+    assert.equal(decision.verdict, 'not-ready');
+    assert.match(decision.headline, /no-fixed-waits/);
+  });
+
+  it('says a project that has written no standards has none to keep', () => {
+    const decision = decide(seen({ brokenRules: null }));
+    assert.equal(decision.verdict, 'ready', 'having no house rules is not a failure');
+    assert.ok(decision.notChecked.some((n) => n.includes('own standards')));
   });
 
   it('names which layer decided each answer, so a claim can be traced to a measurement', () => {

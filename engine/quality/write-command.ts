@@ -1,6 +1,7 @@
 // `tewip write`: turn a plan's "to automate next" scenarios into tests in the project's own
 // framework. Kept tests stay beside the project's tests for the team to review and commit; every
 // other draft is moved to .tewip/drafts with the reason, and nothing is committed or pushed.
+import { guidanceFor, loadStandards } from '../standards/standards-command.ts';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
 import { noModelHelp } from '../llm/providers.ts';
@@ -99,7 +100,7 @@ ${noModelHelp()}`);
     process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing);
     let outcome: Outcome;
     try {
-      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, mutateSource: cmd.mutateSource, log: (l) => console.error(l) }));
+      ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code, houseRules: guidanceFor(loadStandards(cmd.root), fileName) }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, mutateSource: cmd.mutateSource, log: (l) => console.error(l) }));
     } catch (error) {
       outcome = { kind: 'rejected', reason: `stopped: ${(error as Error).message}`, repairs: 0, passedReliably: false };
     } finally {

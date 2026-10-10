@@ -10,6 +10,8 @@ import { renderReview, reviewChange, type Review } from './review.ts';
 import { changedExpectations } from './expectations.ts';
 import { changedAgreements } from './agreements.ts';
 import { changedTestLines, vouchChanged } from '../vouch/changed.ts';
+import { checkChanged, loadStandards } from '../standards/standards-command.ts';
+import { renderViolations } from '../standards/standards.ts';
 
 export interface ReviewCommand {
   root: string;
@@ -50,7 +52,10 @@ export async function runReview(cmd: ReviewCommand): Promise<Review | null> {
   // Whether the tests in this change could ever fail. Costs nothing, calls no model, and is the one
   // question an agent-written diff most needs asked of it.
   const vouched = changedTestLines(vouchChanged(cmd.root, files));
-  const report = [renderReview(review, runCommand), ...(vouched.length > 0 ? ['', ...vouched] : [])].join(String.fromCharCode(10));
+  // The project's own rules, which Tewip only knows because this team wrote them down.
+  const standards = loadStandards(cmd.root);
+  const broken = renderViolations(checkChanged(cmd.root, standards, files), standards);
+  const report = [renderReview(review, runCommand), ...(vouched.length > 0 ? ['', ...vouched] : []), ...(broken.length > 0 ? ['', ...broken] : [])].join(String.fromCharCode(10));
   console.log(report);
   if (past.length === 0) {
     console.log('\nNo failure history yet, so the "what has gone wrong here before" part is empty. It fills itself: run `tewip explain` or `tewip report` on your CI reports and every later review knows more.');

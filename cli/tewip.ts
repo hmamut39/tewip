@@ -196,6 +196,17 @@ async function main(): Promise<void> {
       });
       return;
     }
+    case 'standards': {
+      const { runStandards } = await import('../engine/standards/standards-command.ts');
+      runStandards({
+        root: process.cwd(),
+        diff: flag(args, 'diff'),
+        files: args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--diff' && args[i - 1] !== '--out'),
+        out: flag(args, 'out'),
+        strict: args.includes('--strict'),
+      });
+      return;
+    }
     case 'schema': {
       const { runSchema } = await import('../engine/schema/schema-command.ts');
       runSchema({

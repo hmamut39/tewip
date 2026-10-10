@@ -296,4 +296,28 @@ server.registerTool(
     }),
 );
 
+server.registerTool(
+  'project_standards',
+  {
+    title: "What are this project's own rules?",
+    description:
+      "The house rules this team has written down in .tewip/standards/, and whether a change keeps them. Returns two things kept carefully apart: rules Tewip checks and enforces (a forbid or require pattern over a set of files), and guidance it can only carry - prose for the parts no pattern captures, which is passed on when something is written but never reported as verified. Use it before writing or changing code in somebody's project, so what you produce matches their conventions rather than yours.",
+    inputSchema: {
+      project,
+      files: z.array(z.string()).optional().describe('Files to check against the rules. Omit to list what the project has written.'),
+      diff: z.string().optional().describe('A git range whose changed files should be checked instead'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, files, diff }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { checkChanged, loadStandards, renderStandards } = await import('../engine/standards/standards-command.ts');
+      const { changeSummary } = await import('../engine/quality/grounding.ts');
+      const standards = loadStandards(root);
+      const changed = files && files.length > 0 ? files : diff ? (changeSummary(root, diff)?.files ?? []) : [];
+      return renderStandards(standards, changed.length > 0 ? checkChanged(root, standards, changed) : [], changed.length);
+    }),
+);
+
 await server.connect(new StdioServerTransport());

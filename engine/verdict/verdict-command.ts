@@ -13,6 +13,7 @@ import { coverageFor, testFiles } from '../review/coverage.ts';
 import { importingTests } from '../prove/prove.ts';
 import { testsReaching } from '../prove/reaches.ts';
 import { vouchChanged } from '../vouch/changed.ts';
+import { checkChanged, loadStandards } from '../standards/standards-command.ts';
 import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { decide, renderDecision, type Evidence } from './verdict.ts';
@@ -106,6 +107,9 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
     })
     .map((r) => ({ testId: r.testId, category: String((r.diagnosis as { category?: string } | undefined)?.category ?? 'UNKNOWN') }));
 
+  const standards = loadStandards(cmd.root);
+  const brokenRules = standards.length === 0 ? null : checkChanged(cmd.root, standards, changed).map((v) => ({ standard: v.standard, file: v.file, line: v.line, why: v.rule.because }));
+
   const proved = cmd.prove ? proveChanged(cmd.root, changedSource, { budgetSeconds: cmd.proveBudgetSeconds ?? 300, onStep: (m) => console.error(`  ${m}`) }) : null;
 
   return {
@@ -120,6 +124,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
       failingNow,
       noHistory: runs.length === 0,
       uncovered: uncoveredFor(cmd.root, changed, Object.keys(newest?.attempts ?? {})),
+      brokenRules,
     },
   };
 }

@@ -1796,6 +1796,45 @@ and a file read with nothing found never looks like a file that was not read.
 
 Not measured: whether a team's outage rate changes, which needs a team and a year.
 
+### Phase 27: The Team's Own Standards (`tewip standards`)
+
+Checked against the nine capabilities the agent world now takes as standard - harness, memory and state,
+RAG, MCP, skills, guardrails, evals, agent-to-agent, multi-agent - Tewip already had seven. Its harness is
+`pursue`, its memory is the kept history and `recall`, its RAG is the narrow one in Phase 17, it speaks
+MCP with 18 tools, its guardrails are the allowlist and `.tewip/actions.jsonl`, and its evals are the six
+real labelled datasets. The two it did not have were **skills** and **A2A**.
+
+Skills is the one that matters for a company: reusable know-how, loaded on demand. Tewip knew a great deal
+that is true of software in general and nothing that was true of *this* team. Every department has rules
+of its own, and a tool that cannot be taught them argues with the house.
+
+A standard is a markdown file in `.tewip/standards/` with a small front matter block. Phase metric: rules
+enforced with the line quoted, and - the part that decides whether this is worth having - guidance never
+reported as checked.
+
+Status (2026-10-10): **built** as `tewip standards`, wired into `review`, the pull request comment, the
+`done` verdict, and the prompt `write` uses.
+
+The split is the whole feature:
+
+- **`forbid:` and `require:` are enforced.** The violation quotes the line and prints the team's own
+  reason, which they wrote.
+- **The prose is guidance.** It is carried into whatever Tewip writes or fixes and quoted in reports, and
+  it is never counted as kept. "We have a standard" and "the standard was enforced" are different claims,
+  and a tool that blurs them turns a policy document into a comfort blanket.
+- **A rule Tewip cannot parse is reported as unusable**, not dropped. A rule nobody is enforcing is worse
+  than no rule, because somebody believes in it.
+
+Verified on three standards written the way a company writes them - no fixed waits, stable locators, and a
+prose-only migration policy. It enforced the two checkable ones against real test files (quoting
+`await page.waitForTimeout(2000)` at its line), carried the third as guidance, and the verdict came back
+**not ready: 3 rule(s) this team wrote are broken**.
+
+Still missing from the nine: **A2A**, the agent-to-agent protocol. Tewip can be called by an agent over
+MCP but cannot yet be addressed as a peer with an agent card. It is the right direction for a tool whose
+whole thesis is verifying other agents' work, and it is not built yet, because an agent card with no
+caller is a claim with nothing behind it.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

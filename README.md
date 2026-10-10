@@ -552,6 +552,43 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## Teach it your house rules (Phase 27)
+
+```bash
+tewip standards                        # what this project has taught Tewip
+tewip standards --diff main...HEAD --strict
+```
+
+Tewip knows a lot that is true of software in general and nothing that is true of *your company*. Every
+IT department has its own rules — "never drop a column in the release that stops writing to it",
+"locators use data-testid", "no test may sleep" — and a tool that cannot be taught them is a tool that
+argues with the house.
+
+A standard is a markdown file in `.tewip/standards/`:
+
+```markdown
+---
+description: A fixed wait hides a race instead of fixing it.
+applies-to: tests/, e2e/
+forbid: /waitForTimeout|sleep\(/ because a fixed wait passes by luck and fails in CI
+---
+
+Wait for the thing you are actually waiting for — an element, a response, a state —
+never for a number of milliseconds.
+```
+
+**The split is the point.** The `forbid` and `require` lines are checked and enforced, with the offending
+line quoted and your own reason printed beside it. The prose below is **guidance**: Tewip carries it into
+whatever it writes or fixes, and quotes it in reports — but it is never counted as checked and never
+reported as kept. A team that believes an unenforceable rule is being enforced is worse off than a team
+with no tool at all, because they have stopped watching for it themselves. A rule Tewip cannot parse is
+reported as unusable rather than silently dropped.
+
+Once written, the rules appear everywhere the work is judged: in `tewip review`, in the pull request
+comment, and as a question in `tewip done` — *"Does it keep this project's own standards?"* — which
+answers **no** and names the rule. The guidance goes into the prompt when `tewip write` drafts a test, so
+what comes back is in your conventions rather than Tewip's.
+
 ## What will this migration do to a live database? (Phase 26)
 
 ```bash

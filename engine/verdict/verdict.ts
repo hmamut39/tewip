@@ -59,6 +59,8 @@ export interface Evidence {
   noHistory: boolean;
   /** Scenarios of a kept plan that the change relates to and nothing covers. Null when no plans exist. */
   uncovered: Array<{ id: string; title: string }> | null;
+  /** Rules from this project's own standards that the change breaks. Null when it has written none. */
+  brokenRules: Array<{ standard: string; file: string; line: number; why: string }> | null;
 }
 
 /**
@@ -134,7 +136,22 @@ export function decide(evidence: Evidence): Decision {
     checks.push({ question: 'Would the tests catch a bug in this code?', standing: 'met', answer: 'every deliberate change made to this code was caught by a covering test', decidedBy: 'tewip prove' });
   }
 
-  // 5. Is what was asked for covered? Only where the project keeps plans to compare against.
+  // 5. Does it keep the rules this team wrote down? Only a project that has written some can break them.
+  if (evidence.brokenRules === null) {
+    checks.push({ question: "Does it keep this project's own standards?", standing: 'not-checked', answer: 'this project has written none for Tewip to read, so there is nothing to keep or break', decidedBy: 'tewip standards' });
+  } else if (evidence.brokenRules.length > 0) {
+    const first = evidence.brokenRules[0];
+    checks.push({
+      question: "Does it keep this project's own standards?",
+      standing: 'not-met',
+      answer: `${evidence.brokenRules.length} rule(s) this team wrote are broken, starting with ${first.standard} at ${first.file}${first.line > 0 ? `:${first.line}` : ''}${first.why ? ` - ${first.why}` : ''}`,
+      decidedBy: 'tewip standards, which enforces only the rules a pattern can check',
+    });
+  } else {
+    checks.push({ question: "Does it keep this project's own standards?", standing: 'met', answer: 'every rule this team wrote and Tewip can check is kept', decidedBy: 'tewip standards' });
+  }
+
+  // 6. Is what was asked for covered? Only where the project keeps plans to compare against.
   if (evidence.uncovered === null) {
     checks.push({ question: 'Is what was asked for covered?', standing: 'not-checked', answer: 'this project keeps no test plan Tewip can read, so there is nothing to compare the change against', decidedBy: 'tewip trace' });
   } else if (evidence.uncovered.length > 0) {

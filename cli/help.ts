@@ -118,6 +118,13 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
+  tewip standards [--diff main...HEAD] [--strict] [--out standards.md]
+                                    Teach Tewip your house rules. Markdown files in
+                                    .tewip/standards/ - a forbid or require line is checked and
+                                    enforced on the files a change touches; the prose below it is
+                                    guidance Tewip carries into whatever it writes or fixes. It never
+                                    reports guidance as verified, because a rule nobody enforces is
+                                    worse than no rule. No model, no cost.
   tewip schema [<files>] [--diff main...HEAD] [--strict] [--out schema.md]
                                     What will this migration do to a live database? Names the changes
                                     that break the version still running during a deploy, destroy data,

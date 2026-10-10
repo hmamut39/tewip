@@ -19,6 +19,8 @@ import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
 import { changedTestLines, vouchChanged } from '../engine/vouch/changed.ts';
 import { proveChanged, provedChangeLines } from '../engine/prove/changed.ts';
 import { readMigration, renderSchema, schemaFiles, stillUsed } from '../engine/schema/schema-command.ts';
+import { checkChanged, loadStandards } from '../engine/standards/standards-command.ts';
+import { renderViolations } from '../engine/standards/standards.ts';
 import { changeSummary } from '../engine/quality/grounding.ts';
 import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
@@ -141,6 +143,12 @@ async function main(): Promise<void> {
   const testLines = changedTests ? changedTestLines(changedTests) : [];
   if (changedTests) log(`tests in this change: ${changedTests.read} read, ${changedTests.cannotFail.length} cannot fail`);
 
+  // The project's own standards, where it has written any down.
+  const standards = loadStandards(ctx.workspace);
+  const brokenRules = changed ? checkChanged(ctx.workspace, standards, changed) : [];
+  const standardsLines = renderViolations(brokenRules, standards);
+  if (brokenRules.length > 0) log(`${brokenRules.length} violation(s) of this project's own standards`);
+
   // A migration in the change is read before anything else is said about the run: a dropped column or an
   // index built under a lock is the most expensive thing in a pull request, and it costs nothing to read.
   const migrations = changed ? schemaFiles({ root: ctx.workspace, diff: '', files: changed }).map((file) => readMigration(ctx.workspace, file)) : [];
@@ -160,7 +168,7 @@ async function main(): Promise<void> {
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
   writeStepSummary(ctx, items);
   if (github) {
-    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, [...schemaLines, ...testLines, ...proveLines])));
+    const comment = await step('PR comment', () => postPrComment(ctx, github, prCommentBody(ctx, items, fixPr, fixes, imported.records, repliesReadAt, [...schemaLines, ...standardsLines, ...testLines, ...proveLines])));
     if (comment) log(`PR comment: ${comment}`);
     const issue = await step('environment issue', () => postEnvIssue(ctx, github, items));
     if (issue) log(`environment issue: ${issue.html_url}`);

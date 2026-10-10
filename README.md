@@ -1,6 +1,10 @@
 # Tewip
 
-**Tewip** (Uyghur *téwip*, تېۋىپ: healer, doctor) finds why each failing test failed: a real bug, a flaky test, the environment, test data, or a changed selector. Every answer comes with its confidence, its evidence and one next step, and names its source: a deterministic rule, the AI model, or a person's correction.
+**Tewip** (Uyghur *téwip*, تېۋىپ: healer, doctor) is the layer that **proves software work** - written by a person or by an agent.
+
+It finds why each failing test failed (a real bug, a flaky test, the environment, test data, or a changed selector), says whether a test could ever fail at all, breaks your code to find out whether the tests would notice, reads what a migration will do to a live database, and gives one verdict on whether a change is done. Every answer carries its evidence and names what decided it: a deterministic rule, the AI model, or a person's correction.
+
+What makes it worth installing is what it refuses to say. It answers *"cannot say"* rather than guessing, it will not narrow a test run it cannot prove safe to narrow, and every report ends with what it did **not** check. Each number below was measured on strangers' real code, never on fixtures.
 
 It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pytest, unittest), Java and Kotlin (JUnit, TestNG), Go, .NET, Ruby, PHP and Rust, each checked against its real runner's report ([the full list](QUICKSTART.md#not-using-playwright-every-stack-works)), plus Playwright in depth with traces, selector drift and verified fixes. It also reads the failure wording of the browser and component-test tools on top of those runners (Selenium, WebdriverIO, Cypress, Testing Library for React, Vue and Angular, Vue Test Utils, jest-dom and Jasmine), checked against more than 500 real messages from public projects.
 

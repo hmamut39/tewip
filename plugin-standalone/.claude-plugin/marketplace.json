@@ -1,0 +1,12 @@
+{
+  "name": "tewip",
+  "description": "Tewip: the layer that proves software work, for agents and the people who review them.",
+  "owner": { "name": "hmamut39", "url": "https://github.com/hmamut39" },
+  "plugins": [
+    {
+      "name": "tewip",
+      "source": "./",
+      "description": "Triage failing tests, check whether a test can fail at all, prove whether the suite would catch a bug, read what a migration does to a live database, and get one verdict on whether a change is done."
+    }
+  ]
+}

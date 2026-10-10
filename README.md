@@ -121,6 +121,11 @@ claude plugin marketplace add hmamut39/tewip
 claude plugin install tewip@tewip
 ```
 
+**This works today only for people who can clone the repository, which is private.** A marketplace is
+only as public as the repository holding it. To open it to everyone, either make this repository public,
+or publish the `plugin/` directory as a small public repository of its own - it contains a manifest, three
+skills and a pointer to the npm package, and nothing else.
+
 That is the whole publication process. A marketplace is a `.claude-plugin/marketplace.json` file in a git
 repository, so Tewip ships one in its own repo - nobody has to approve it, and there is nothing to pay
 for. The plugin brings Tewip's MCP server and three skills that tell Claude Code *when* to use it:

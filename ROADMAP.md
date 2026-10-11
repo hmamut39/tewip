@@ -2208,6 +2208,44 @@ wrong: discovery is at `/.well-known/agent-card.json` (not `agent.json`), and an
 operation whose flag is false has to return an error, so a minimal honest server declares both false and
 implements `message/send` synchronously.
 
+### Phase 35: The Four Migration Tools That Were Being Called Unreadable
+
+Phase 33 left Knex, Sequelize, EF Core and Liquibase listed as unread, with the right reason: each has a
+DSL of its own and should be written against real migrations rather than a remembered API. So four were
+found in public repositories and read first - Matterwiki (Knex), opencollective-api (Sequelize),
+Coflnet/HypixelSkyblock (EF Core) and DEFRA/ffc-pay-processing (Liquibase).
+
+Reading them first changed the design. **Two of the four real files put their only destructive call in
+the rollback** - Knex's `dropColumn` is in `exports.down`, Sequelize's `removeColumn` is in `down` - and
+that is not an accident of those two files. It is how both ecosystems write migrations: add in `up`,
+remove in `down`. A reader that took the whole file would report nearly every harmless migration in two
+large ecosystems as dropping a column, which would make the feature worse than absent. So the forward
+path matters more here than in any dialect so far, and the correct answer on both real files is silence -
+which is what Tewip now gives.
+
+Status (2026-10-11): **built**. With these, `schema` reads SQL, Django, Rails, Alembic, TypeORM,
+Sequelize, Knex, EF Core and Liquibase - and therefore Prisma, Drizzle, Flyway and golang-migrate too,
+since those emit plain SQL.
+
+Two things the real files taught that a remembered API would not have:
+
+1. **C# puts the opening brace of a method on its own line, at the same indent as the signature.** The
+   block-end test treated that as the start of something new, so EF Core's `Down()` ended one line after
+   it began and the whole rollback was read as part of the change - reporting Coflnet's real migration as
+   dropping three columns it actually adds. A lone brace is punctuation, not a new block. The fix
+   improves every brace-language dialect, not only this one.
+2. **EF Core uses named arguments in either order and across several lines**: `DropColumn(name: "Id",
+   table: "Players")` and `DropColumn(table: "Players", name: "Nickname")` are both ordinary. Each
+   operation is matched both ways round rather than assuming the order the first real file happened to
+   use.
+
+Knex is the awkward one structurally: the table is named by `knex.schema.table('articles', ...)` and the
+operation happens inside the callback, so the two are matched together across the lines between them.
+
+After the fix, the four real files give: Knex nothing, Sequelize nothing (both correct - their drops are
+rollbacks), EF Core two findings, both verified to be in `Up()`, and Liquibase one, which is the real
+`dropColumn` in changeSet 3.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

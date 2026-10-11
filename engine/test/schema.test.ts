@@ -231,3 +231,138 @@ describe('a lock on a table that did not exist a moment ago', () => {
     assert.match(findings(text)[0], /drops the column userId/);
   });
 });
+
+// Phase 35: the four migration tools that were being reported as unreadable.
+//
+// Each shape below is copied from a real migration in a public repository - Matterwiki (Knex),
+// opencollective-api (Sequelize), Coflnet/HypixelSkyblock (EF Core) and DEFRA/ffc-pay-processing
+// (Liquibase) - rather than written from a remembered API.
+//
+// The thing all four have in common is why the forward path matters more here than anywhere else:
+// a Sequelize or Knex migration almost always *adds* in up and *removes* in down, and an EF Core
+// Down() is the mirror of its Up(). A reader that took the whole file would report nearly every
+// harmless migration in those ecosystems as dropping a column. Two of the four real files used
+// here contain a drop, and in both it is in the rollback - so the correct answer is silence.
+describe('Sequelize, Knex, EF Core and Liquibase', () => {
+  const seen = (file: string, text: string) => {
+    const dialect = dialectOf(file, text);
+    return { dialect, findings: readFramework(dialect as 'django', forwardOnly(dialect, text)) };
+  };
+
+  const sequelize = sql(
+    "'use strict';",
+    'module.exports = {',
+    '  up: async (queryInterface, Sequelize) => {',
+    "    await queryInterface.addColumn('Users', 'passwordHash', { type: Sequelize.STRING });",
+    '  },',
+    '  down: async queryInterface => {',
+    "    await queryInterface.removeColumn('Users', 'passwordHash');",
+    '  },',
+    '};',
+  );
+
+  const knex = sql(
+    'exports.up = function(knex, Promise) {',
+    "  return knex.schema.table('articles', function (table) {",
+    "    table.integer('user_id',10).unsigned().references('users.id');",
+    '  })',
+    '};',
+    'exports.down = function(knex, Promise) {',
+    "  return knex.schema.table('articles', function (table) {",
+    "    table.dropColumn('user_id');",
+    '  })',
+    '};',
+  );
+
+  const efcore = sql(
+    'using Microsoft.EntityFrameworkCore.Migrations;',
+    'namespace App.Migrations',
+    '{',
+    '    public partial class v2 : Migration',
+    '    {',
+    '        protected override void Up(MigrationBuilder migrationBuilder)',
+    '        {',
+    '            migrationBuilder.CreateIndex(',
+    '                name: "IX_Players_Uuid",',
+    '                table: "Players");',
+    '        }',
+    '',
+    '        protected override void Down(MigrationBuilder migrationBuilder)',
+    '        {',
+    '            migrationBuilder.DropColumn(',
+    '                name: "Id",',
+    '                table: "Players");',
+    '        }',
+    '    }',
+    '}',
+  );
+
+  const liquibase = sql(
+    '<?xml version="1.1" encoding="UTF-8" standalone="no"?>',
+    '<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">',
+    '  <changeSet author="John Watson" id="3">',
+    '    <dropColumn tableName="completedPaymentRequests">',
+    '      <column name="batched" />',
+    '    </dropColumn>',
+    '  </changeSet>',
+    '</databaseChangeLog>',
+  );
+
+  it('recognises each one instead of calling it unreadable', () => {
+    assert.equal(seen('migrations/20230118-x.js', sequelize).dialect, 'sequelize');
+    assert.equal(seen('migrations/20160919-x.js', knex).dialect, 'knex');
+    assert.equal(seen('Migrations/20201223_v2.cs', efcore).dialect, 'efcore');
+    assert.equal(seen('changelog/db.changelog-1.5.xml', liquibase).dialect, 'liquibase');
+  });
+
+  it('says nothing when the only destructive call is in the rollback', () => {
+    // Both of these are real migrations that add a column. Reporting them as dropping one would
+    // make the whole feature untrustworthy in two large ecosystems.
+    assert.deepEqual(seen('migrations/x.js', sequelize).findings, []);
+    assert.deepEqual(seen('migrations/y.js', knex).findings, []);
+  });
+
+  it("reads EF Core's Up and not its Down, braces and all", () => {
+    // C# puts the opening brace of a method on its own line at the same indent as the signature,
+    // which ended the Down block one line after it began and leaked three drops into the change.
+    const { findings } = seen('Migrations/v2.cs', efcore);
+    assert.equal(findings.length, 1);
+    assert.match(findings[0].what, /builds an index on Players/);
+    assert.ok(!findings.some((f) => /drops/.test(f.what)), 'Down() must not be read as the change');
+  });
+
+  it('reads a Liquibase changeSet, table and column', () => {
+    const { findings } = seen('changelog/x.xml', liquibase);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].risk, 'breaks-old-code');
+    assert.equal(findings[0].table, 'completedPaymentRequests');
+    assert.equal(findings[0].column, 'batched');
+  });
+
+  it('still names a drop that really is in the forward path', () => {
+    const dropping = sql(
+      'module.exports = {',
+      '  up: async (queryInterface) => {',
+      "    await queryInterface.removeColumn('Users', 'legacyEmail');",
+      '  },',
+      '};',
+    );
+    const { findings } = seen('migrations/z.js', dropping);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].table, 'Users');
+    assert.equal(findings[0].column, 'legacyEmail');
+  });
+
+  it("reads EF Core's named arguments in either order", () => {
+    const reversed = sql(
+      '        protected override void Up(MigrationBuilder migrationBuilder)',
+      '        {',
+      '            migrationBuilder.DropColumn(table: "Players", name: "Nickname");',
+      '        }',
+    );
+    const { findings } = seen('Migrations/a.cs', reversed);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].table, 'Players');
+    assert.equal(findings[0].column, 'Nickname');
+  });
+});

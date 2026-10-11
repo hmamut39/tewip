@@ -157,9 +157,11 @@ Usage:
                                     What will this migration do to a live database? Names the changes
                                     that break the version still running during a deploy, destroy data,
                                     block writes while they run, or cannot be undone - and searches your
-                                    code for what still uses the column it takes away. Reads SQL, Django,
-                                    Rails and Alembic migrations, and says so when it cannot read one.
-                                    No model, no cost.
+                                    code for what still uses the column it takes away. Reads SQL,
+                                    Django, Rails, Alembic, TypeORM, Sequelize, Knex, EF Core and
+                                    Liquibase - so Prisma, Drizzle, Flyway and golang-migrate too,
+                                    since those emit plain SQL - and says so when it cannot read one.
+                                    It judges only the forward path, never the rollback. No cost.
   tewip pick [--diff main...HEAD] [--list] [--out picked.md]
                                     Which tests could notice this change? Narrows a test run using
                                     facts rather than a prediction: a test runs when it imports a

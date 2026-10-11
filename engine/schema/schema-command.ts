@@ -100,7 +100,7 @@ export function readMigration(root: string, file: string): Migration {
       file,
       dialect,
       findings: [],
-      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails, Alembic and TypeORM migrations',
+      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails, Alembic, TypeORM, Sequelize, Knex, EF Core and Liquibase migrations',
       irreversible: false,
     };
   }

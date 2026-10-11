@@ -81,7 +81,7 @@ export const ANSWERABLE: ReadonlyArray<AgentSkill & { verb: string }> = [
     verb: 'schema',
     name: 'What will this migration do to a live database?',
     description:
-      'Names what breaks the version still running during a rolling deploy, destroys data, blocks writes, or cannot be undone - and searches the repository for code that still uses a column being dropped. Reads SQL, Django, Rails, Alembic and TypeORM, which covers Prisma, Drizzle and Flyway.',
+      'Names what breaks the version still running during a rolling deploy, destroys data, blocks writes, or cannot be undone - and searches the repository for code that still uses a column being dropped. Reads SQL, Django, Rails, Alembic, TypeORM, Sequelize, Knex, EF Core and Liquibase, which covers Prisma, Drizzle and Flyway too.',
     tags: ['database', 'migrations', 'deployment', 'risk'],
     examples: ['Is this migration safe to deploy?', 'Will this drop break the running version?'],
   },

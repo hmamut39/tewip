@@ -1896,6 +1896,60 @@ Still not reached, and said so in every report: anything needing a rendered page
 an axe or Lighthouse run and triage its findings the way Phase 9 triages a scanner's, which would close
 contrast and focus order without Tewip ever shipping a browser.
 
+### Phase 29: Reading the Browser Run (`tewip access --report`)
+
+Phase 28 ends every report with a list of criteria it cannot reach, because reading markup cannot see a
+rendered page. The answer is not to ship a browser. It is to read the run a team already produces - axe,
+inside their Playwright, Cypress or jest-axe suite - and do to its output what Phase 9 does to a security
+scanner's: decide which findings matter, and say why.
+
+The case for doing it at all is in the real numbers. axe-core 4.14 over nine real pages (bootstrap's own
+component pages and excalidraw's index) produced **174 findings**:
+
+- **53 barriers** - a real WCAG criterion, with the clause of EN 301 549 the European Accessibility Act
+  cites printed beside it;
+- **51 advice** - axe rules tagged `best-practice` that map to **no criterion at all**: `region` (40),
+  `landmark-one-main` (9), `heading-order`, `page-has-heading-one`;
+- **70 questions** - axe's own `incomplete`, which is exactly Tewip's "only a person can settle this".
+
+**42% of what axe hands a team tests no standard**, and `region` alone outnumbers every real barrier on
+the page. That is the reported reason accessibility tooling gets switched off, and separating it out is
+most of the value of the phase.
+
+What a browser run buys, stated precisely: **one** of the seven criteria on Phase 28's unchecked list -
+1.4.3 Contrast - moves to checked. The other six stay, and that is the honest answer rather than a
+disappointing one.
+
+Status (2026-10-11): **built** as `tewip access --report <axe.json>`, and as `axeReport` on the MCP tool.
+
+Written against real axe output rather than the documentation, which is what caught six defects in the
+design, every one of them an over-claim:
+
+1. **Coverage built from findings, not from rules that ran.** A contrast check that ran and found nothing
+   would still have been reported as unchecked. Coverage now comes from `passes` and `inapplicable` too.
+2. **Superseding by criterion was too coarse.** axe reporting `aria-required-children` means it checked
+   that part of 1.3.1, not that it looked at heading structure - which axe treats as best-practice under
+   no criterion. Nineteen real heading findings disappeared. Supersession is now rule by rule, through an
+   explicit map; `click-without-keyboard` has no axe equivalent and is never superseded by anything.
+3. **Superseding ignored which pages were opened.** A run of nine pages discarded all 44 source findings
+   in a repository of 106 markup files, including every one in the example pages axe never saw. A source
+   finding is now set aside only when the run opened *that file*. In a React or Vue project nothing is
+   superseded at all, correctly: the source and the rendered output are two artefacts, and neither is
+   evidence about the other.
+4. **Criterion-number matching claimed the unclaimable.** Because axe's `image-alt` carries the tag
+   `wcag111`, Tewip briefly reported that it had checked whether alt text *describes the picture*, and
+   that it had checked timing behaviour. Each entry on the unchecked list now names the single rule that
+   could settle it, or admits that none can. Six of the seven name none.
+5. **A page where every rule passed looked like a page never opened**, because pages were derived from
+   findings. Pages are now recorded as the run is read.
+6. **`file:///repo/a.html` lost its root slash**, so page matching worked on Windows and nowhere else.
+
+The gate treats a browser barrier exactly like a source barrier - axe saw it on a rendered page, which is
+stronger evidence, not weaker - and never fails a build on advice, whatever impact axe assigns it.
+
+Still not reached: everything in the list that no tool settles. A run also says nothing about a page it
+did not open or a state it did not reach, and the report says so with the page count every time.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

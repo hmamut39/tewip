@@ -118,7 +118,7 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
-  tewip access [<file or directory>] [--strict] [--out access.md]
+  tewip access [<file or directory>] [--report axe.json] [--strict] [--out access.md]
                                     Can everybody use this? Reads your markup and names the barriers
                                     that reading alone can prove - a picture with no alt text, a field
                                     with no label, a div only a mouse can use - each against its WCAG
@@ -127,7 +127,11 @@ Usage:
                                     criterion it cannot reach without rendering the page (contrast,
                                     focus order, whether the alt text is any good) is printed every
                                     time. It never says a page is accessible, only what was checked.
-                                    No browser, no network, no model, no cost.
+                                    Give it --report with the JSON from an axe run and it reads that
+                                    too: contrast moves out of the unchecked list, axe rules that map
+                                    to no WCAG criterion are reported as advice rather than barriers
+                                    (51 of 174 findings on nine real pages), and what axe could not
+                                    determine becomes a question. No browser, no network, no model.
   tewip standards [--diff main...HEAD] [--strict] [--out standards.md]
                                     Teach Tewip your house rules. Markdown files in
                                     .tewip/standards/ - a forbid or require line is checked and

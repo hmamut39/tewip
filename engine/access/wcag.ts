@@ -129,8 +129,18 @@ export const RULES: Record<string, Rule> = {
  * and a scanner reading source rather than a rendered page checks less than that. Printing this
  * every time is what stops "Tewip found no barriers" from being heard as "this is accessible".
  */
-export const NOT_CHECKED: ReadonlyArray<{ criterion: string; why: string }> = [
-  { criterion: '1.4.3 Contrast (Minimum)', why: 'needs the computed colours of a rendered page, not the markup' },
+export const NOT_CHECKED: ReadonlyArray<{ criterion: string; why: string; settledBy?: string }> = [
+  {
+    criterion: '1.4.3 Contrast (Minimum)',
+    why: 'needs the computed colours of a rendered page, not the markup',
+    // The one entry on this list a browser run genuinely closes (Phase 29).
+    settledBy: 'color-contrast',
+  },
+  // Everything below has no `settledBy` on purpose, and must not acquire one because a tool
+  // reports something under the same criterion number. axe's `image-alt` checks that an alt
+  // attribute exists; it has no opinion on whether the words describe the picture, which is the
+  // part named here. Matching on the number alone briefly made Tewip claim it had checked alt-text
+  // quality and timing behaviour, which no tool can.
   { criterion: '1.1.1 Non-text Content, quality', why: 'whether alt text actually describes the picture is a human judgement' },
   { criterion: '2.4.7 Focus Visible', why: 'needs a rendered page to see whether the focus ring survives the stylesheet' },
   { criterion: '1.3.2 Meaningful Sequence', why: 'needs the rendered order, which CSS can change from the source order' },

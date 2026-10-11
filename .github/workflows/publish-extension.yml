@@ -53,11 +53,31 @@ jobs:
             exit 1
           fi
 
+      # The extension has its own version and most releases do not touch it. Open VSX refuses a
+      # version it already holds, which turned every such release into a red workflow that had to be
+      # read before it could be ignored - the surest way to stop reading them. A release that does
+      # not change the extension should simply not publish it.
+      - name: Is this version already on Open VSX?
+        id: already
+        working-directory: extensions/vscode
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/hmamut39/tewip/$version")"
+          echo "extension version $version -> open-vsx returned $code"
+          if [ "$code" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Already on Open VSX. Nothing to do; bump extensions/vscode/package.json to publish a new one."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Package
+        if: steps.already.outputs.published == 'false'
         working-directory: extensions/vscode
         run: npx -y @vscode/vsce@latest package --allow-missing-repository --skip-license
 
       - name: Publish to Open VSX
+        if: steps.already.outputs.published == 'false'
         working-directory: extensions/vscode
         env:
           # Empty when no secret is set, and `ovsx` then uses the workflow's OIDC identity instead.
@@ -71,7 +91,7 @@ jobs:
           npx -y ovsx@latest publish *.vsix
 
       - name: Keep the built extension on the run
-        if: always()
+        if: always() && steps.already.outputs.published == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: tewip-vsix

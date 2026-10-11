@@ -629,6 +629,42 @@ Measured on four public projects, never on fixtures — excalidraw, bootstrap, v
 classes were found and fixed along the way, every one of them a defect in Tewip rather than in the
 projects, and none of them reachable from a fixture. They are listed in [ROADMAP.md](ROADMAP.md).
 
+### Already run axe? Give Tewip the JSON (Phase 29, new)
+
+```bash
+tewip access --report axe-results.json
+```
+
+Reading markup cannot see contrast. A browser can, so if your Playwright, Cypress or jest-axe suite
+already writes an axe report, hand it over — and Tewip will triage it instead of relaying it.
+
+This is where the numbers get uncomfortable. axe 4.14 over nine real pages returned **174 findings**:
+
+| | |
+|---|---|
+| **53 barriers** | a real WCAG criterion, with the **EN 301 549** clause the EU Accessibility Act cites |
+| **51 advice** | axe rules tagged `best-practice` that map to **no criterion at all** |
+| **70 questions** | axe's own `incomplete` — it could not determine them |
+
+**42% of what axe hands you tests no standard.** `region` alone — "all content should be contained by
+landmarks" — was 40 findings, outnumbering every real barrier on the page. Tewip reports those as advice,
+never as barriers, and they never fail a build. That separation is most of the point.
+
+And the unchecked list shrinks, honestly: **one** of its seven entries — 1.4.3 Contrast — moves to
+checked. The other six stay, because no tool settles them. The report also names how many pages the run
+covered, and says plainly that nothing is known about a page it did not open or a state it did not reach.
+
+```
+## Checked here only because a browser run was given
+
+- **1.4.3 Contrast (Minimum)** - would otherwise be unreachable: needs the computed colours of a
+  rendered page, not the markup
+```
+
+A source finding is set aside only when the run opened **that same file** and re-ran the equivalent rule.
+In a React or Vue project that means nothing is set aside — the source and the rendered output are two
+different artefacts, and neither is evidence about the other.
+
 ## Teach it your house rules (Phase 27)
 
 ```bash

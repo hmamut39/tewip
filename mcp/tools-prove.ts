@@ -151,23 +151,48 @@ server.registerTool(
     inputSchema: {
       project,
       path: z.string().optional().describe('A file or directory inside the project to check instead of all of it'),
+      axeReport: z
+        .string()
+        .optional()
+        .describe(
+          'The JSON from an axe run, if the project has one. It settles contrast, which reading markup cannot, and its findings are triaged rather than relayed: axe rules that map to no WCAG criterion are reported as advice, and what axe could not determine becomes a question.',
+        ),
     },
     annotations: readOnly,
   },
-  ({ project: root, path }) =>
+  ({ project: root, path, axeReport }) =>
     answer(async () => {
       if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
       // The pure functions, not runAccess: that one prints, and anything on stdout breaks JSON-RPC.
       const { findBarriers, keyOf, readAccepted, renderAccess } = await import('../engine/access/access-command.ts');
+      const { merge, pagesIn } = await import('../engine/access/merge.ts');
+      const { readAxeReport } = await import('../engine/access/reports.ts');
       const { findings, filesRead } = findBarriers(root, path);
       const judged = readAccepted(root);
       const open = findings.filter((f) => !judged.has(keyOf(f)));
+
+      const run = axeReport ? readAxeReport(isAbsolute(axeReport) ? axeReport : `${root}/${axeReport}`) : undefined;
+      const graded = run ? merge(open, run, root) : undefined;
+      const kept = graded ? graded.kept : open;
+
       return renderAccess(
         {
-          barriers: open.filter((f) => f.confidence === 'barrier'),
-          questions: open.filter((f) => f.confidence === 'ask-a-person'),
+          barriers: kept.filter((f) => f.confidence === 'barrier'),
+          questions: kept.filter((f) => f.confidence === 'ask-a-person'),
           accepted: findings.filter((f) => judged.has(keyOf(f))),
           filesRead,
+          ...(run && graded
+            ? {
+                browser: {
+                  barriers: run.findings.filter((f) => f.confidence === 'barrier'),
+                  questions: run.findings.filter((f) => f.confidence === 'ask-a-person'),
+                  advice: run.findings.filter((f) => f.confidence === 'advice'),
+                  superseded: graded.superseded,
+                  pages: pagesIn(run),
+                  rulesRun: run.rulesRun,
+                },
+              }
+            : {}),
         },
         path ?? root,
       );

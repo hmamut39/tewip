@@ -23,11 +23,12 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
     }
     case 'access': {
       const { runAccess } = await import('../engine/access/access-command.ts');
-      const paths = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+      const paths = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out' && args[i - 1] !== '--report');
       runAccess({
         root: process.cwd(),
         only: paths[0],
         out: flag(args, 'out'),
+        report: flag(args, 'report'),
         gate: args.includes('--strict'),
       });
       return true;

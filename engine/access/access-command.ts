@@ -13,6 +13,8 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { sourceFiles } from '../secure/secrets.ts';
 import { JS_LIKE, MARKUP, tags } from './markup.ts';
 import { checkFile, type Finding } from './checks.ts';
+import { readAxeReport, type BrowserFinding } from './reports.ts';
+import { merge, nowChecked, pagesIn, renderBrowserSection, standardOf, stillNotChecked } from './merge.ts';
 import { blocks, criterionOf, NOT_CHECKED, RULES, type Severity } from './wcag.ts';
 
 export interface AccessCommand {
@@ -22,6 +24,8 @@ export interface AccessCommand {
   gate?: boolean;
   /** Only this file or directory, rather than the whole repository. */
   only?: string;
+  /** An axe run's JSON (Phase 29), which settles what reading markup cannot. */
+  report?: string;
 }
 
 export interface AccessResult {
@@ -30,6 +34,17 @@ export interface AccessResult {
   accepted: Finding[];
   filesRead: number;
   report: string;
+  /** Phase 29, when a browser run was given. */
+  browser?: {
+    barriers: BrowserFinding[];
+    questions: BrowserFinding[];
+    advice: BrowserFinding[];
+    /** Source findings the run supersedes, because it re-checked them on a real page. */
+    superseded: Finding[];
+    pages: string[];
+    /** Every axe rule that ran, whatever its outcome: what the run can be said to have checked. */
+    rulesRun: Set<string>;
+  };
 }
 
 const ORDER: Record<Severity, number> = { blocker: 0, serious: 1, moderate: 2, minor: 3 };
@@ -119,12 +134,19 @@ function section(title: string, findings: Finding[], lines: string[]): void {
 }
 
 export function renderAccess(result: Omit<AccessResult, 'report'>, scanned: string): string {
-  const { barriers, questions, accepted, filesRead } = result;
+  const { barriers, questions, accepted, filesRead, browser } = result;
   const lines = ['# Tewip accessibility check', ''];
 
   lines.push(`Read ${filesRead} markup ${filesRead === 1 ? 'file' : 'files'} under \`${scanned}\`, without rendering any of them.`, '');
+  if (browser) {
+    lines.push(
+      `Also read an axe run over ${browser.pages.length} rendered ${browser.pages.length === 1 ? 'page' : 'pages'}, ` +
+        'which settles what reading markup cannot.',
+      '',
+    );
+  }
 
-  if (barriers.length === 0 && questions.length === 0) {
+  if (barriers.length === 0 && questions.length === 0 && !browser) {
     lines.push('No barrier was found that reading the markup can settle, and nothing needs a decision.', '');
   } else {
     const stopping = barriers.filter((f) => blocks(f.rule)).length;
@@ -133,25 +155,84 @@ export function renderAccess(result: Omit<AccessResult, 'report'>, scanned: stri
       `${questions.length} for a person to settle`,
     ];
     if (accepted.length > 0) counts.push(`${accepted.length} already accepted`);
+    if (browser) {
+      counts.unshift(`${browser.barriers.length} barriers the browser run proves`);
+      if (browser.questions.length > 0) counts.push(`${browser.questions.length} the browser could not determine`);
+    }
     lines.push(`**${counts.join(', ')}.**`, '');
   }
 
-  section('Barriers', [...barriers].sort(worstFirst), lines);
+  if (browser) {
+    renderBrowserSection('Barriers seen in the browser', browser.barriers, lines);
+    renderBrowserSection('The browser could not determine these', browser.questions, lines);
+  }
+
+  section('Barriers read from the source', [...barriers].sort(worstFirst), lines);
   section('Only a person can settle these', [...questions].sort(worstFirst), lines);
+
+  if (browser && browser.advice.length > 0) {
+    // Kept out of the counts above on purpose. These are axe's own best-practice rules, which test
+    // no standard: on nine real pages they were 51 of 174 findings, outnumbering every real barrier.
+    // Reporting them as equals is how a team learns to ignore the whole report.
+    const rules = [...new Set(browser.advice.map((f) => f.rule))].sort();
+    lines.push('## Advice, not barriers', '');
+    lines.push(
+      `${browser.advice.length} findings come from axe rules that map to no WCAG criterion - ` +
+        `${rules.join(', ')}. They are somebody's good idea rather than a standard, so they are not counted as barriers ` +
+        'and never fail a build. Worth reading once; not worth a release.',
+      '',
+    );
+  }
+
+  if (browser && browser.superseded.length > 0) {
+    lines.push('## Set aside, because the browser run checked them', '');
+    lines.push(
+      `${browser.superseded.length} source ${browser.superseded.length === 1 ? 'finding' : 'findings'} ` +
+        'are not listed above: the axe run checked their criterion on a rendered page, so its answer is the better ' +
+        'one and repeating them here would count the same barrier twice. They are in the JSON beside this report.',
+      '',
+    );
+  }
 
   if (accepted.length > 0) {
     lines.push('## Already accepted', '');
     lines.push(`${accepted.length} ${accepted.length === 1 ? 'finding is' : 'findings are'} listed in \`.tewip/access-accepted.txt\`, so they are not repeated here.`, '');
   }
 
+  // Coverage comes from every rule that ran, not from the ones that found something: a contrast
+  // check that ran and passed has still checked contrast.
+  const ran = browser?.rulesRun ?? new Set<string>();
+  const settled = nowChecked(ran);
+  const remaining = stillNotChecked(ran);
+
+  if (settled.length > 0) {
+    lines.push('## Checked here only because a browser run was given', '');
+    for (const n of settled) lines.push(`- **${n.criterion}** - would otherwise be unreachable: ${n.why}`);
+    lines.push('');
+  }
+
   lines.push('## What was not checked', '');
-  lines.push('This read the markup. It did not render a page, so none of the following was tested:', '');
-  for (const n of NOT_CHECKED) lines.push(`- **${n.criterion}** - ${n.why}`);
+  lines.push(
+    browser
+      ? 'Even with the browser run, none of the following was tested:'
+      : 'This read the markup. It did not render a page, so none of the following was tested:',
+    '',
+  );
+  for (const n of remaining) lines.push(`- **${n.criterion}** - ${n.why}`);
+  if (browser) {
+    lines.push('');
+    lines.push(
+      `The run covered ${browser.pages.length} ${browser.pages.length === 1 ? 'page' : 'pages'}. ` +
+        'Nothing is known about a page it did not open, or about a state it did not reach - a dialog that was never ' +
+        'opened, a form that was never submitted, an error that was never triggered.',
+    );
+  }
   lines.push('');
   lines.push(
     'A clean result here means these checks found nothing, not that the product is accessible. ' +
-      'Roughly a third of WCAG can be judged by a machine at all, and reading source rather than a rendered page reaches less than that. ' +
-      'The rest needs a person, ideally one who uses a screen reader.',
+      'Roughly a third of WCAG can be judged by a machine at all' +
+      (browser ? '' : ', and reading source rather than a rendered page reaches less than that') +
+      '. The rest needs a person, ideally one who uses a screen reader.',
     '',
   );
   lines.push('To accept a finding, add its key to `.tewip/access-accepted.txt`, one per line, with a reason after ` - `.', '');
@@ -165,10 +246,29 @@ export function runAccess(cmd: AccessCommand): AccessResult {
 
   const accepted = findings.filter((f) => alreadyJudged.has(keyOf(f)));
   const open = findings.filter((f) => !alreadyJudged.has(keyOf(f)));
-  const barriers = open.filter((f) => f.confidence === 'barrier');
-  const questions = open.filter((f) => f.confidence === 'ask-a-person');
 
-  const result = { barriers, questions, accepted, filesRead };
+  // Phase 29: a browser run, where one was given. It is the better witness for every criterion it
+  // checked, so the source findings for those criteria are set aside rather than repeated.
+  const run = cmd.report ? readAxeReport(resolve(root, cmd.report)) : undefined;
+  const graded = run ? merge(open, run, root) : undefined;
+  const kept = graded ? graded.kept : open;
+
+  const barriers = kept.filter((f) => f.confidence === 'barrier');
+  const questions = kept.filter((f) => f.confidence === 'ask-a-person');
+
+  const browser =
+    run && graded
+      ? {
+          barriers: run.findings.filter((f) => f.confidence === 'barrier'),
+          questions: run.findings.filter((f) => f.confidence === 'ask-a-person'),
+          advice: run.findings.filter((f) => f.confidence === 'advice'),
+          superseded: graded.superseded,
+          pages: pagesIn(run),
+          rulesRun: run.rulesRun,
+        }
+      : undefined;
+
+  const result = { barriers, questions, accepted, filesRead, ...(browser ? { browser } : {}) };
   const report = renderAccess(result, cmd.only ? resolve(root, cmd.only) : root);
   console.log(report);
 
@@ -176,11 +276,12 @@ export function runAccess(cmd: AccessCommand): AccessResult {
   // a build that breaks because something needs a human decision teaches a team to stop asking. Nor
   // does a moderate finding - bootstrap's example pages skip a heading level, which is worth knowing
   // and not worth blocking a release over. Only the barriers that stop somebody outright.
-  const blocking = barriers.filter((f) => blocks(f.rule));
-  if (cmd.gate && blocking.length > 0) {
-    console.error(
-      `${String.fromCharCode(10)}${blocking.length} accessibility barrier(s) that stop somebody outright, out of ${barriers.length} found.`,
-    );
+  // A browser barrier counts the same way: axe saw it on a rendered page, which is stronger
+  // evidence than reading source, not weaker. Advice never counts, whatever axe's impact says.
+  const blocking = barriers.filter((f) => blocks(f.rule)).length + (browser?.barriers.filter((f) => f.severity === 'blocker').length ?? 0);
+  if (cmd.gate && blocking > 0) {
+    const found = barriers.length + (browser?.barriers.length ?? 0);
+    console.error(`${String.fromCharCode(10)}${blocking} accessibility barrier(s) that stop somebody outright, out of ${found} found.`);
     process.exitCode = 1;
   }
 

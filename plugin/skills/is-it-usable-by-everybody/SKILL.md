@@ -18,6 +18,16 @@ switches the check off. Do not reproduce that behaviour by relaying a long list.
 
 It reads markup only. No browser, no network, no model, so it costs nothing and takes about a second.
 
+**If the project already runs axe** — in a Playwright, Cypress or jest-axe suite — pass its JSON as
+`axeReport`. Look for one before saying contrast cannot be checked. It changes three things: contrast
+moves out of the unchecked list, axe's findings are triaged rather than relayed, and source findings for
+pages the run actually opened are set aside instead of being counted twice.
+
+Be careful how you report what comes back from a run. On nine real pages, **51 of axe's 174 findings
+mapped to no WCAG criterion at all** — `region` alone was 40 of them. Tewip puts those under "advice,
+not barriers". Keep them there. Relaying forty landmark suggestions as though they were accessibility
+failures is the behaviour that makes teams switch the whole check off.
+
 ## How to read the answer
 
 There are exactly two kinds of finding, and the difference between them is the whole point:

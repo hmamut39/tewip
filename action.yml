@@ -1,5 +1,11 @@
 name: Tewip
-description: Proves the work: why each test failed, whether a test can fail at all, and what a migration does to a live database.
+# Quoted, and it has to stay quoted. An unquoted scalar containing ": " is a nested mapping to a
+# YAML parser, so this line made the whole manifest unloadable - every release from v0.34.0 onward
+# shipped a GitHub Action that failed with "Failed to load action.yml" the moment anyone used it,
+# while the README told them `uses: hmamut39/tewip@v0.34.0` worked. Nothing caught it because
+# nothing had ever run the action; the workflow that checks Tewip against itself found it in
+# minutes. Keep the quotes, and keep that workflow.
+description: 'Proves the work: why each test failed, whether a test can fail at all, and what a migration does to a live database.'
 branding:
   icon: activity
   color: green

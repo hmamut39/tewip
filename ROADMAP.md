@@ -2138,7 +2138,61 @@ Still unread, and said so rather than passed: Knex, Sequelize, EF Core and Liqui
 DSLs of their own, unlike TypeORM, so each needs its own operation list - and each should be written
 against migrations from a real repository, not from a remembered API.
 
-### Phase 34 (planned): A2A
+### Phase 34: A2A — Tewip as a peer other agents must satisfy
+
+**Built 2026-10-11** as `tewip a2a`. The notes below were written before building it and are kept because
+all four details proved to be the ones that matter.
+
+MCP already lets an assistant call Tewip as a tool. A2A is the other direction: Tewip as an agent in its
+own right, which another agent has to get past. That is the right shape for this product. Tewip exists to
+prove work "written by a person **or by an agent**", and when most code is written by agents, the thing
+that checks the work has to be reachable by agents.
+
+What it serves: the card at `/.well-known/agent-card.json`, and JSON-RPC `SendMessage` at `/a2a/v1`, with
+eight skills — triage, vouch, pick, schema, access, perf, standards, done.
+
+**The guardrails are the design, not a footnote**, because this is an HTTP port that runs commands
+against somebody's repository:
+
+- **Only read-only skills are reachable.** `fix`, `write`, `build`, `pursue` and `prove` are not on the
+  list — they change files or run the suite. A test asserts that none of them can ever appear on it.
+- **It listens on 127.0.0.1** unless `--host` is passed deliberately, and then it prints a warning
+  saying what that means.
+- **Every request is recorded** in `.tewip/a2a.jsonl`, the same way `pursue` records what it did.
+
+**And it refuses rather than guesses.** A2A has a state for exactly this, `TASK_STATE_INPUT_REQUIRED`, so
+a caller who says "check my code" gets back a question naming the eight things Tewip answers, not a coin
+toss between them. A tie in the match is a question too. Guessing would mean occasionally running a long
+job nobody asked for and occasionally answering the wrong question confidently, which is the failure this
+whole product exists to avoid.
+
+Verified against the v1.0 specification rather than from memory, and **all four would have been wrong**:
+
+1. Discovery is `/.well-known/agent-card.json`, not `agent.json`.
+2. The JSON-RPC method is **`SendMessage`** in PascalCase, not `message/send` — that is the older 0.x
+   spelling. A server answering the wrong name is a server nothing can talk to, so the old spelling is
+   explicitly rejected with "this agent answers SendMessage only".
+3. A role is `ROLE_USER` / `ROLE_AGENT`, not `user` / `agent`.
+4. A state is `TASK_STATE_COMPLETED`, not `completed`. And `Part` is one type carrying exactly one of
+   text / raw / url / data — not separate TextPart and FilePart types.
+
+An AgentCard requires `name`, `description`, `supportedInterfaces`, `version`, `capabilities`,
+`defaultInputModes`, `defaultOutputModes` and `skills`; each AgentSkill requires `id`, `name`,
+`description` and `tags`. `capabilities.streaming` and `capabilities.pushNotifications` are declared
+**false**, and the specification requires an operation whose flag is false to return an error — so
+`SendStreamingMessage`, `SubscribeToTask` and the push-notification methods all do, naming the card field
+that says why. Declaring a capability that is not implemented is the one thing a card must not do.
+
+The card's skill list is generated from the same array the server answers from, so the two cannot drift:
+a card that advertises a skill the server will not perform is worse than no card, and a test asserts
+they match.
+
+With this, Tewip has eight of the nine capabilities on the standard agent list — harness, memory, RAG,
+MCP, skills, guardrails, evals and A2A. The one left is multi-agent, and it is not built because Tewip
+has no work that splits usefully across specialists; an orchestrator with nothing to orchestrate is a
+diagram, not a feature.
+
+### Superseded planning note (kept for the record)
 
 The agent-to-agent gap Phase 27 named is still open, and the reason given there - "an agent card with no
 caller is a claim with nothing behind it" - has expired: A2A reached v1.0 under the Linux Foundation with

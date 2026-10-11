@@ -576,6 +576,40 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## Tewip as a peer other agents must satisfy (Phase 34, new)
+
+```bash
+tewip a2a                 # serves on 127.0.0.1:41241
+```
+
+MCP lets an assistant call Tewip as a tool. **A2A is the other direction**: Tewip as an agent in its
+own right, which another agent has to get past before its work counts as finished. That is the right
+shape for a tool whose whole claim is proving work *written by a person or by an agent* — when most
+code is written by agents, the thing that checks it has to be reachable by agents.
+
+It serves the card at `/.well-known/agent-card.json` and answers JSON-RPC `SendMessage`, with eight
+skills: triage, vouch, pick, schema, access, perf, standards and done.
+
+**It asks rather than guesses.** Send "check my code" and you get back a question naming the eight
+things Tewip answers — A2A has a state for exactly that, `TASK_STATE_INPUT_REQUIRED`:
+
+```
+TASK_STATE_INPUT_REQUIRED
+Tewip will not guess which question you are asking: that could be "Does this keep the
+team's own rules?" or "Is this work actually finished?", and Tewip will not pick for you.
+```
+
+**The guardrails are the design.** This is an HTTP port that runs commands against your repository:
+
+- **Only read-only skills are reachable.** `fix`, `write`, `build`, `pursue` and `prove` are not on
+  the list — they change files or run your suite. A test asserts they never can be.
+- **It listens on this machine alone** unless you pass `--host`, and says plainly what that means.
+- **Every request is recorded** in `.tewip/a2a.jsonl`.
+
+Its card declares `streaming: false` and `pushNotifications: false`, and those operations return an
+error naming the field that says why. Declaring a capability you have not implemented is the one
+thing an agent card must not do.
+
 ## Is this change slower? (Phase 30, new)
 
 ```bash

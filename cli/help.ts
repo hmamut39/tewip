@@ -212,6 +212,14 @@ Usage:
                                     it too. --verify says what it checked and what that does not
                                     establish - a digest means undamaged, not unedited. No cost.
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
+  tewip a2a [--port 41241] [--host 127.0.0.1]
+                                    Answer other agents over A2A, so an agent that writes a diff has
+                                    a peer it must satisfy. Serves the agent card at
+                                    /.well-known/agent-card.json and takes JSON-RPC "SendMessage".
+                                    Only the read-only skills are reachable - nothing it exposes
+                                    writes a file - it listens on this machine alone unless you pass
+                                    --host, and every request is recorded in .tewip/a2a.jsonl. A
+                                    message it cannot place comes back as a question, not a guess.
   tewip --version                   Print the version.
 
 Reports it reads: Playwright, pytest/unittest, Jest, Vitest, Mocha, node:test, JUnit/TestNG

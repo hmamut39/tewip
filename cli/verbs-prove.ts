@@ -21,6 +21,19 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
       });
       return true;
     }
+    case 'a2a': {
+      const { serveA2A } = await import('../engine/a2a/serve.ts');
+      const { dirname, join } = await import('node:path');
+      serveA2A({
+        root: process.cwd(),
+        port: Number(flag(args, 'port') ?? '41241'),
+        // Loopback unless somebody asks for otherwise in so many words. The server runs commands
+        // against a repository and has no authentication, so the default must be the safe one.
+        host: flag(args, 'host') ?? '127.0.0.1',
+        tewipRoot: join(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..'),
+      });
+      return true;
+    }
     case 'perf': {
       const { runPerf } = await import('../engine/perf/perf-command.ts');
       const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--label'].includes(args[i - 1] ?? ''));

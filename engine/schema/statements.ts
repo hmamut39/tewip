@@ -58,7 +58,15 @@ const RULES: Rule[] = [
     table: (m) => bare(m[1]),
   },
   {
-    find: new RegExp(String.raw`\bALTER\s+TABLE\s+(${NAME})[\s\S]*?\bDROP\s+(?:COLUMN\s+)?(?:IF\s+EXISTS\s+)?(${NAME})`, 'i'),
+    // The word COLUMN is optional in SQL, so the name after DROP has to be checked against the
+    // other things an ALTER TABLE can drop. Without the lookahead, Prisma's own
+    // `ALTER TABLE "Share" DROP CONSTRAINT "Share_userId_fkey"` - which every Prisma project is full
+    // of - was read as dropping a column called CONSTRAINT, and reported as breaking the running
+    // version, which dropping a foreign key does not do. Found on documenso's real migrations.
+    find: new RegExp(
+      String.raw`\bALTER\s+TABLE\s+(${NAME})[\s\S]*?\bDROP\s+(?:COLUMN\s+)?(?:IF\s+EXISTS\s+)?(?!CONSTRAINT\b|INDEX\b|DEFAULT\b|NOT\s+NULL\b|PRIMARY\b|FOREIGN\b|CHECK\b|UNIQUE\b|PARTITION\b)(${NAME})`,
+      'i',
+    ),
     risk: 'breaks-old-code',
     what: (m) => `drops the column ${bare(m[2])} from ${bare(m[1])}`,
     instead: 'deploy code that no longer selects or writes the column, then drop it in a later migration. During a rolling deploy the old version is still running and will fail on a column that is gone',

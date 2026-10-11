@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { dialectOf, forwardOnly, irreversible, readFramework, type Dialect } from './frameworks.ts';
-import { readSql, type Finding } from './statements.ts';
+import { readSql, type Finding, type Risk } from './statements.ts';
 
 export interface SchemaCommand {
   root: string;
@@ -46,10 +46,41 @@ const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|db\/migrate)\/.*\.(py|rb|js|ts)
 
 /** The schema files in this change. */
 export function schemaFiles(cmd: SchemaCommand): string[] {
-  const given = cmd.files && cmd.files.length > 0 ? cmd.files : (changeSummary(cmd.root, cmd.diff)?.files ?? []);
+  const named = cmd.files !== undefined && cmd.files.length > 0;
+  const given = named ? cmd.files! : (changeSummary(cmd.root, cmd.diff)?.files ?? []);
   return given
     .map((f) => f.split('\\').join('/'))
-    .filter((f) => (SCHEMA_FILE.test(f) || MIGRATION.test(f)) && existsSync(resolve(cmd.root, f)));
+    // Asking for a file by name overrides the path filter: the filter exists to find migrations in
+    // a diff of a hundred files, not to argue with somebody who pointed at one. A TypeORM migration
+    // sitting outside a migrations/ directory was being answered with "no migration in this change".
+    .filter((f) => (named || SCHEMA_FILE.test(f) || MIGRATION.test(f)) && existsSync(resolve(cmd.root, f)));
+}
+
+/**
+ * Tables this migration creates itself.
+ *
+ * A lock is only expensive because of the rows it holds up, and a table created three statements
+ * earlier has none. This matters enormously on the tools that generate their SQL: a Prisma project
+ * emits `CREATE TABLE` followed by an `ADD CONSTRAINT ... FOREIGN KEY` for every relation, so
+ * documenso's 165 real migrations produced 275 "blocks writes while it runs" findings - 1.7 per
+ * migration, nearly all of them about tables that did not exist a moment before. That is the volume
+ * at which a team stops reading the report, which costs more than the warnings are worth.
+ */
+function createdHere(text: string): Set<string> {
+  const names = new Set<string>();
+  for (const m of text.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([\w$.]+)"?/gi)) {
+    names.add(m[1].toLowerCase().replace(/^.*\./, ''));
+  }
+  return names;
+}
+
+/** Risks that are only risks because rows already exist. */
+const ONLY_HURTS_EXISTING_ROWS = new Set<Risk>(['locks-writes', 'slow']);
+
+export function droppingWhatIsNew(findings: Finding[], text: string): Finding[] {
+  const fresh = createdHere(text);
+  if (fresh.size === 0) return findings;
+  return findings.filter((f) => !(ONLY_HURTS_EXISTING_ROWS.has(f.risk) && fresh.has(f.table.toLowerCase().replace(/^.*\./, ''))));
 }
 
 export function readMigration(root: string, file: string): Migration {
@@ -63,13 +94,13 @@ export function readMigration(root: string, file: string): Migration {
   // Only the forward path: a rollback step contains the mirror image of the change, and reading it as
   // part of the change says a migration that creates a table destroys one.
   const forward = forwardOnly(dialect, text);
-  if (dialect === 'sql') return { file, dialect, findings: readSql(forward), unread: '', irreversible: false };
+  if (dialect === 'sql') return { file, dialect, findings: droppingWhatIsNew(readSql(forward), forward), unread: '', irreversible: false };
   if (dialect === 'unknown') {
     return {
       file,
       dialect,
       findings: [],
-      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails and Alembic migrations',
+      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails, Alembic and TypeORM migrations',
       irreversible: false,
     };
   }
@@ -77,9 +108,11 @@ export function readMigration(root: string, file: string): Migration {
   // A migration that only runs raw SQL through the framework is still readable: the SQL is the migration.
   // Raw SQL, however it reaches the database: through the framework, or through a cursor inside a data
   // migration, which is where most large projects put the dangerous parts.
-  const raw = [...forward.matchAll(/(?:RunSQL|op\.execute|execute|cursor\.execute)\(\s*(?:r?["'`]{1,3})([\s\S]*?)["'`]{1,3}\s*[,)]/g)].map((m) => m[1]).join(';');
+  // `queryRunner.query` is TypeORM's, and is the whole of a TypeORM migration rather than an
+  // escape hatch inside one: the class is a wrapper and every statement arrives this way.
+  const raw = [...forward.matchAll(/(?:RunSQL|op\.execute|queryRunner\.query|execute|cursor\.execute)\(\s*(?:r?["'`]{1,3})([\s\S]*?)["'`]{1,3}\s*[,)]/g)].map((m) => m[1]).join(';');
   if (raw.trim()) findings.push(...readSql(raw));
-  return { file, dialect, findings, unread: '', irreversible: irreversible(dialect, text) };
+  return { file, dialect, findings: droppingWhatIsNew(findings, forward), unread: '', irreversible: irreversible(dialect, text) };
 }
 
 /**

@@ -2097,6 +2097,63 @@ best-practice noise held apart - from a tool they already have.
 
 `access-command.ts` passed 300 lines doing this, so the report moved into `render.ts`.
 
+### Phase 33: Migrations a Tool Wrote, Not a Person
+
+`schema` had only ever been pointed at migrations people wrote by hand - 259 of them, from Zulip and
+Mastodon. Generated migrations have different habits, and documenso's repository (165 real Prisma
+migrations) found three faults on the first run.
+
+A correction first, because it was stated the other way round the day before: **Prisma and Drizzle were
+already read.** Both emit plain `.sql`, as do Flyway and golang-migrate, so `dialectOf` returned `sql`
+and the SQL reader did its job. The claim that they were unsupported was wrong; what was actually wrong
+was the reading.
+
+1. **`DROP CONSTRAINT` was read as dropping a column called CONSTRAINT.** The word COLUMN is optional in
+   SQL, so `ALTER TABLE "Share" DROP CONSTRAINT "Share_userId_fkey"` - a line every Prisma project is
+   full of - matched the dropped-column rule, and was reported as breaking the running version, which
+   dropping a foreign key does not do. The rule now rejects the other things an ALTER TABLE can drop.
+2. **A lock on a table created three statements earlier was reported as blocking writes.** A lock is
+   only expensive because of the rows it holds up, and a table that did not exist a moment ago has
+   none. Prisma emits `CREATE TABLE` and then an `ADD CONSTRAINT ... FOREIGN KEY` for every relation, so
+   documenso produced **275 "blocks writes while it runs" findings across 165 migrations** - 1.7 each,
+   nearly all about empty tables. Its initial migration, which creates every table and adds eight
+   foreign keys and a dozen indexes, now reports **nothing at all**, correctly. Total: **275 to 146**,
+   and the 146 that remain are on tables that already existed.
+3. **TypeORM migrations were not read.** A TypeORM migration is a class with `up()` and `down()` that
+   passes DDL to `queryRunner.query()` - the SQL is right there and perfectly readable; only the wrapper
+   was unfamiliar. Every TypeORM project was being told Tewip could not read its migrations, which on a
+   Node backend is most of them. It is now a dialect, `down()` is excluded from the forward path, and
+   its operation list is deliberately empty because TypeORM has no DSL of its own: every finding comes
+   from the same SQL reader. The exhaustive `Record` over dialects turned that into a compile error
+   rather than a silently empty result, which is the second time that pattern has caught a missing case.
+
+Also: naming a file explicitly now overrides the path filter. The filter exists to find migrations in a
+hundred-file diff, not to argue with somebody who pointed at one, and a TypeORM migration outside a
+`migrations/` directory was being answered with "no migration in this change".
+
+Status (2026-10-11): **built**, measured on documenso's 165 real Prisma migrations and a TypeORM
+migration end to end.
+
+Still unread, and said so rather than passed: Knex, Sequelize, EF Core and Liquibase. Those have real
+DSLs of their own, unlike TypeORM, so each needs its own operation list - and each should be written
+against migrations from a real repository, not from a remembered API.
+
+### Phase 34 (planned): A2A
+
+The agent-to-agent gap Phase 27 named is still open, and the reason given there - "an agent card with no
+caller is a claim with nothing behind it" - has expired: A2A reached v1.0 under the Linux Foundation with
+broad adoption. It is also the capability that matches this product's thesis most exactly, because Tewip
+exists to prove work written by a person **or by an agent**, and an agent that writes a diff should have
+a peer it must satisfy.
+
+Verified against the v1.0 specification rather than from memory, since both details would have been got
+wrong: discovery is at `/.well-known/agent-card.json` (not `agent.json`), and an AgentCard requires
+`name`, `description`, `supportedInterfaces`, `version`, `capabilities`, `defaultInputModes`,
+`defaultOutputModes` and `skills`, where each AgentSkill requires `id`, `name`, `description` and `tags`.
+`capabilities.streaming` and `capabilities.pushNotifications` are booleans that must be honoured: an
+operation whose flag is false has to return an error, so a minimal honest server declares both false and
+implements `message/send` synchronously.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

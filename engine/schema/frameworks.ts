@@ -9,7 +9,7 @@
 // application code, is reported as unread rather than cleared - the same rule as everywhere else here.
 import type { Finding, Risk } from './statements.ts';
 
-export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'unknown';
+export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'unknown';
 
 export function dialectOf(file: string, text: string): Dialect {
   const path = file.split('\\').join('/').toLowerCase();
@@ -20,6 +20,11 @@ export function dialectOf(file: string, text: string): Dialect {
   if (/\bmigrations\.Migration\b|\bmigrations\.(?:CreateModel|AddField|RemoveField|AlterField|RenameField|RunSQL|RunPython|DeleteModel|RenameModel)\b/.test(text)) return 'django';
   if (/\bActiveRecord::Migration\b|\bdef\s+(?:up|change)\b[\s\S]*\b(?:add_column|remove_column|add_index|change_column|rename_column|drop_table)\b/.test(text)) return 'rails';
   if (/\bop\.(?:drop_column|add_column|create_index|alter_column|drop_table|rename_table|execute)\b/.test(text)) return 'alembic';
+  // TypeORM writes a migration as a class with up() and down(), and puts the real DDL in template
+  // strings passed to queryRunner.query(). The SQL is right there and perfectly readable; only the
+  // wrapper was unfamiliar, so every TypeORM project was told Tewip could not read its migrations
+  // at all - and on a Node backend that is most of them.
+  if (/\bMigrationInterface\b|\bqueryRunner\.query\s*\(/.test(text)) return 'typeorm';
   if (/(^|\/)(migrations?|db\/migrate)\//.test(path)) return 'unknown';
   return 'unknown';
 }
@@ -188,7 +193,12 @@ const ALEMBIC: Operation[] = [
   },
 ];
 
-const BY_DIALECT: Record<Exclude<Dialect, 'sql' | 'unknown'>, Operation[]> = { django: DJANGO, rails: RAILS, alembic: ALEMBIC };
+// TypeORM has no operations of its own: unlike Django's `RemoveField` or Rails's `remove_column`,
+// a TypeORM migration contains SQL and nothing else, handed to queryRunner.query(). So its list is
+// empty on purpose and every finding comes from reading that SQL, which is the same reader the
+// `.sql` dialect uses. The exhaustive Record is what made this a compile error rather than a
+// TypeORM migration silently producing no findings at all.
+const BY_DIALECT: Record<Exclude<Dialect, 'sql' | 'unknown'>, Operation[]> = { django: DJANGO, rails: RAILS, alembic: ALEMBIC, typeorm: [] };
 
 /** Findings from a framework migration, with the line each one sits on. */
 export function readFramework(dialect: Exclude<Dialect, 'sql' | 'unknown'>, text: string): Finding[] {
@@ -246,7 +256,10 @@ export function forwardOnly(dialect: Dialect, text: string): string {
     const down =
       (dialect === 'rails' && /^\s*def\s+down\b/.test(line)) ||
       (dialect === 'alembic' && /^\s*def\s+downgrade\s*\(/.test(line)) ||
-      (dialect === 'sql' && /^\s*--\s*(?:\+migrate\s+Down|\+goose\s+Down|\/\/@UNDO|Down\b)/i.test(line));
+      (dialect === 'sql' && /^\s*--\s*(?:\+migrate\s+Down|\+goose\s+Down|\/\/@UNDO|Down\b)/i.test(line)) ||
+      // TypeORM's rollback is `public async down(queryRunner: QueryRunner)`. Reading it as part of
+      // the change would report a migration that adds a column as one that drops it.
+      (dialect === 'typeorm' && /^\s*(?:public\s+)?async\s+down\s*\(/.test(line));
     if (down) {
       // To the end of the block: the next line at the same indentation or less that starts something new.
       blankFrom(i, (l, indent) => l.trim() !== '' && indentOf(l) <= indent && !/^\s*(end|\})\s*$/.test(l), indentOf(line));

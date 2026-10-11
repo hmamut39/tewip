@@ -8,8 +8,9 @@
 // and Tewip told them to do it anyway.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { dialectOf, irreversible, readFramework } from '../schema/frameworks.ts';
+import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
+import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
 const NL = String.fromCharCode(10);
 const sql = (...lines: string[]) => lines.join(NL);
@@ -138,5 +139,95 @@ describe('reading a framework migration', () => {
     assert.equal(irreversible('alembic', 'def downgrade():\n    pass'), true);
     assert.equal(irreversible('django', 'migrations.RunPython(forwards)'), true);
     assert.equal(irreversible('django', 'migrations.RunPython(forwards, reverse_code=backwards)'), false);
+  });
+});
+
+// Phase 33: what 165 real Prisma migrations and a TypeORM project taught this.
+//
+// documenso's repository was the first time `schema` had been pointed at output a tool generated
+// rather than output a person wrote, and generated SQL has different habits: it drops constraints
+// constantly, and it creates a table and then immediately indexes it. Both were being reported as
+// dangerous. The third case is TypeORM, whose migrations were not being read at all.
+describe('generated migrations, and the habits they have', () => {
+  it('DROP CONSTRAINT is not a column called CONSTRAINT', () => {
+    // Every Prisma project is full of this line, and it was being reported as breaking the
+    // running version - which dropping a foreign key does not do.
+    assert.deepEqual(risks('ALTER TABLE "Share" DROP CONSTRAINT "Share_userId_fkey";'), []);
+    assert.deepEqual(risks('ALTER TABLE "Share" DROP INDEX "idx_share";'), []);
+    assert.deepEqual(risks('ALTER TABLE "Share" ALTER COLUMN "x" DROP DEFAULT;'), []);
+    assert.deepEqual(risks('ALTER TABLE "Share" ALTER COLUMN "x" DROP NOT NULL;'), []);
+  });
+
+  it('still names a real dropped column, with or without the COLUMN keyword', () => {
+    assert.deepEqual(risks('ALTER TABLE "Share" DROP COLUMN "userId";'), ['breaks-old-code']);
+    assert.deepEqual(risks('ALTER TABLE orders DROP nickname;'), ['breaks-old-code']);
+  });
+
+  it('and the real one in the middle of a generated statement', () => {
+    const found = first('ALTER TABLE "Share" DROP COLUMN "userId", ADD COLUMN "recipientId" INTEGER NOT NULL;');
+    assert.equal(found.risk, 'breaks-old-code');
+    assert.equal(found.column, 'userId');
+  });
+});
+
+describe('TypeORM migrations', () => {
+  const migration = sql(
+    "import { MigrationInterface, QueryRunner } from 'typeorm';",
+    'export class DropEmail1700000000000 implements MigrationInterface {',
+    '  public async up(queryRunner: QueryRunner): Promise<void> {',
+    '    await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "legacy_email"`);',
+    '  }',
+    '  public async down(queryRunner: QueryRunner): Promise<void> {',
+    '    await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "tenantId"`);',
+    '  }',
+    '}',
+  );
+
+  it('is recognised rather than reported as unreadable', () => {
+    assert.equal(dialectOf('src/migration/1700000000000-DropEmail.ts', migration), 'typeorm');
+    assert.equal(dialectOf('src/migration/x.ts', 'await queryRunner.query(`SELECT 1`);'), 'typeorm');
+  });
+
+  it('is not mistaken for another framework', () => {
+    assert.notEqual(dialectOf('a.py', 'class Migration(migrations.Migration): pass'), 'typeorm');
+    assert.equal(dialectOf('a.sql', 'ALTER TABLE x DROP COLUMN y;'), 'sql');
+  });
+
+  it('reads only the forward path, so down() is not read as the change', () => {
+    const forward = forwardOnly('typeorm', migration);
+    assert.match(forward, /legacy_email/);
+    assert.ok(!/tenantId/.test(forward), 'down() must not be read as part of the change');
+  });
+});
+
+describe('a lock on a table that did not exist a moment ago', () => {
+  const findings = (text: string) => droppingWhatIsNew(readSql(text), text).map((f) => f.what);
+
+  it('says nothing about indexing a table this migration just created', () => {
+    // documenso's initial Prisma migration creates every table and then adds eight foreign keys
+    // and a dozen indexes. It was producing a wall of "blocks writes while it runs"; all of it was
+    // about tables with no rows in them. Across its 165 migrations this was 129 findings.
+    const text = sql(
+      'CREATE TABLE "Share" ("id" INTEGER NOT NULL, "recipientId" INTEGER NOT NULL);',
+      'CREATE INDEX "Share_recipientId_idx" ON "Share"("recipientId");',
+      'ALTER TABLE "Share" ADD CONSTRAINT "Share_recipientId_fkey" FOREIGN KEY ("recipientId") REFERENCES "Recipient"("id");',
+    );
+    assert.deepEqual(findings(text), []);
+  });
+
+  it('still says it about a table that was already there', () => {
+    const text = 'CREATE INDEX "User_email_idx" ON "User"("email");';
+    assert.equal(findings(text).length, 1);
+    assert.match(findings(text)[0], /builds an index on User/);
+  });
+
+  it('a new table does not excuse a drop on an old one in the same migration', () => {
+    const text = sql(
+      'CREATE TABLE "Recipient" ("id" INTEGER NOT NULL);',
+      'ALTER TABLE "Share" DROP COLUMN "userId";',
+    );
+    // Dropping a column is never about row count, so the guard must not touch it.
+    assert.equal(findings(text).length, 1);
+    assert.match(findings(text)[0], /drops the column userId/);
   });
 });

@@ -836,7 +836,8 @@ That last section is the part no SQL linter does: it searches your own code for 
 away. "This drops `users.nickname`, and four files still read it" is a different sentence from "dropping a
 column is risky", and it is the one that stops the outage.
 
-It reads **SQL, Django, Rails and Alembic** migrations, judges **only the forward path** (a rollback step
+It reads **SQL, Django, Rails, Alembic and TypeORM** migrations — which covers Prisma, Drizzle, Flyway
+and golang-migrate too, since those all emit plain `.sql`. It judges **only the forward path** (a rollback step
 contains the mirror image of the change, so reading it says a migration that creates a table destroys
 one), and stays quiet when the team already did the safe thing — `atomic = False`, `algorithm:
 :concurrently`, `NOT VALID`, `postgresql_concurrently=True`. When it cannot read a migration it says so

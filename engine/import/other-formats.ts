@@ -7,6 +7,9 @@
 // importer" would be a label on something that already works.
 import type { XmlElement } from './xml.ts';
 import { descendants } from './xml.ts';
+import { looksLikeCsvJtl, readCsv } from '../perf/jtl.ts';
+
+export { looksLikeCsvJtl };
 
 export interface RawCase {
   testId: string;
@@ -144,4 +147,55 @@ export function looksLikeK6(json: unknown): boolean {
   const report = json as { metrics?: Record<string, unknown> };
   if (!report?.metrics || typeof report.metrics !== 'object') return false;
   return ['http_req_duration', 'iterations', 'vus', 'checks', 'http_reqs'].some((m) => m in report.metrics!);
+}
+
+/**
+ * JMeter's CSV results file, which is the one it writes by default.
+ *
+ * The XML reader above has been the only one since this was written, and `.jtl` means CSV in every
+ * real repository you look in - so `importJunit` answered "not an XML document: no root element" on
+ * genuine JMeter output while the help text advertised JMeter support. A format nobody tested
+ * against a real file.
+ *
+ * The parsing is shared with `tewip perf`, which needs the same rows for its statistics, and it is a
+ * real CSV reader rather than a line split because JMeter quotes a failureMessage containing commas
+ * and newlines - one real record found here spans seven physical lines.
+ */
+export function jmeterCsvCases(text: string): RawCase[] {
+  const rows = readCsv(text);
+  const header = (rows[0] ?? []).map((h) => h.trim());
+  const at = (name: string) => header.indexOf(name);
+  const elapsed = at('elapsed');
+  const label = at('label');
+  if (elapsed === -1 || label === -1) return [];
+  const success = at('success');
+  const code = at('responseCode');
+  const message = at('responseMessage');
+  const failure = at('failureMessage');
+
+  const byLabel = new Map<string, { failed: number; total: number; time: number; codes: Map<string, number>; messages: Set<string> }>();
+  for (const row of rows.slice(1)) {
+    if (row.length <= Math.max(elapsed, label)) continue;
+    const name = (row[label] ?? '').trim() || 'sample';
+    const found = byLabel.get(name) ?? { failed: 0, total: 0, time: 0, codes: new Map(), messages: new Set() };
+    found.total += 1;
+    const ms = Number(row[elapsed]);
+    if (Number.isFinite(ms)) found.time += ms;
+    if (success !== -1 && (row[success] ?? '').trim().toLowerCase() === 'false') {
+      found.failed += 1;
+      const seen = `${code === -1 ? '' : (row[code] ?? '')} ${message === -1 ? '' : (row[message] ?? '')}`.trim();
+      if (seen) found.codes.set(seen, (found.codes.get(seen) ?? 0) + 1);
+      const why = failure === -1 ? '' : (row[failure] ?? '').trim();
+      if (why) found.messages.add(why.replace(/\s+/g, ' ').slice(0, 200));
+    }
+    byLabel.set(name, found);
+  }
+
+  return [...byLabel].map(([name, s]) => {
+    const worst = [...s.codes].sort((a, b) => b[1] - a[1])[0];
+    // A 2xx that still counts as failed is an assertion failing, not the server.
+    const why = worst ? (/^2\d\d/.test(worst[0]) ? `, an assertion failed (${worst[1]} times, response ${worst[0]})` : `, mostly ${worst[0]} (${worst[1]} times)`) : '';
+    const text = s.failed === 0 ? '' : `${s.failed} of ${s.total} requests failed${why}${s.messages.size > 0 ? `: ${[...s.messages][0]}` : ''}`;
+    return { testId: `JMeter > ${name}`, file: '', duration: s.time, attempts: [{ failed: s.failed > 0, message: text, stack: [...s.messages].join('\n').slice(0, 2000) }] };
+  });
 }

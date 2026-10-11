@@ -21,11 +21,15 @@ import { isLighthouseFile, readLighthouse, type ManualCheck } from './lighthouse
 import { fromK6, metricsInOrder, show, type ComparableRun } from './run.ts';
 import { compareMetric, ENOUGH_BASELINES, type Comparison } from './compare.ts';
 import { baselineFor, fromSameTool, knownLabels, recordRun, storedRuns } from './history.ts';
+import { byLabel, readJtlSamples } from './jtl.ts';
+import { compareRuns, describeRun } from './jtl-report.ts';
 
 export interface PerfCommand {
   root: string;
-  /** A k6 --summary-export JSON or a Lighthouse --output=json report. */
+  /** A k6 --summary-export JSON, a Lighthouse --output=json report, or a JMeter .jtl. */
   summary: string;
+  /** For a JMeter run: the earlier .jtl to compare against, request by request. */
+  against?: string;
   label?: string;
   record?: boolean;
   out?: string;
@@ -172,8 +176,50 @@ export function renderPerf(
   return lines.join('\n');
 }
 
-export function runPerf(cmd: PerfCommand): PerfResult {
+
+/**
+ * A JMeter run. With `--against` the two are compared request by request; without it the run is
+ * described and nothing is claimed about a change, because one run is not a comparison.
+ */
+function runJtl(root: string, cmd: PerfCommand): undefined {
+  const now = resolve(root, cmd.summary);
+  if (!cmd.against) {
+    const samples = readJtlSamples(now);
+    const report = describeRun(byLabel(samples), samples.length);
+    console.log(report);
+    if (cmd.out) writeOut(root, cmd.out, report);
+    return undefined;
+  }
+
+  const result = compareRuns(now, resolve(root, cmd.against));
+  console.log(result.report);
+  if (cmd.out) writeOut(root, cmd.out, result.report);
+
+  // Failures are a separate matter from speed and gate on their own: a run whose requests failed
+  // is a run whose timings describe something that did not work.
+  const failed = result.failing.reduce((n, c) => n + c.failedNow, 0);
+  if (cmd.gate && (result.slower.length > 0 || failed > 0)) {
+    const why = [result.slower.length > 0 ? `${result.slower.length} label(s) slower than the runs explain` : '', failed > 0 ? `${failed} request(s) failed` : '']
+      .filter(Boolean)
+      .join(', and ');
+    console.error(`${String.fromCharCode(10)}Performance gate failed: ${why}.`);
+    process.exitCode = 1;
+  }
+  return undefined;
+}
+
+function writeOut(root: string, out: string, report: string): void {
+  const path = resolve(root, out);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, report, 'utf8');
+}
+
+export function runPerf(cmd: PerfCommand): PerfResult | undefined {
   const root = resolve(cmd.root);
+
+  // A JMeter results file is answered differently, and better: it carries every request rather
+  // than six aggregates, so two runs are compared with a real test instead of a range check.
+  if (/\.jtl$/i.test(cmd.summary)) return runJtl(root, cmd);
   const label = cmd.label ?? 'default';
   const { run, manual } = readPerfFile(resolve(root, cmd.summary));
 

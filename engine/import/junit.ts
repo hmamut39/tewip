@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { SCHEMA_VERSION, type RunSummary, type TriageRecord } from '../../reporters/types.ts';
 import type { ImportMeta, ImportResult } from './blob.ts';
 import { descendants, parseXml, type XmlElement } from './xml.ts';
-import { jmeterCases, k6Cases, looksLikeK6, robotCases, robotTime } from './other-formats.ts';
+import { jmeterCases, jmeterCsvCases, k6Cases, looksLikeCsvJtl, looksLikeK6, robotCases, robotTime } from './other-formats.ts';
 import { nunitCases, trxCases } from './dotnet.ts';
 import { PASSED, failure, type Attempt, type Case } from './case.ts';
 
@@ -182,6 +182,13 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
       }
       parsedFiles++;
       addCases(k6Cases(parsed));
+      continue;
+    }
+    // JMeter's default output is CSV, not XML, so a real .jtl would otherwise be rejected as "not
+    // an XML document" - which it is not, and never was.
+    if (looksLikeCsvJtl(raw)) {
+      parsedFiles++;
+      addCases(jmeterCsvCases(raw));
       continue;
     }
     const root = parseXml(raw);

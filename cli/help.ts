@@ -118,10 +118,11 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
-  tewip perf <k6-summary.json | lighthouse.json> [--record] [--label checkout] [--strict] [--out perf.md]
+  tewip perf <k6.json | lighthouse.json | run.jtl> [--against before.jtl] [--record] [--strict]
                                     Is this change slower, and does it matter? Reads a k6 run (what
                                     the server does under load) or a Lighthouse report (what one
-                                    page load costs in a browser), and answers two questions apart:
+                                    page load costs in a browser) or a JMeter .jtl, and answers two
+                                    questions apart:
                                     is anything in a bad state now - from the thresholds you wrote,
                                     or from Lighthouse's own scoring, never a budget Tewip invented
                                     - and is this slower than it was. The second only from repeated
@@ -129,7 +130,10 @@ Usage:
                                     run against one cannot tell a regression from a busy machine.
                                     --record adds a run to the baseline, and is deliberately not
                                     automatic: a regression recorded by accident becomes next week's
-                                    normal. It never predicts a duration or a capacity. No cost.
+                                    normal. A .jtl is different and better: it carries every request,
+                                    so --against before.jtl compares the two distributions with a
+                                    real test rather than a range check - and refuses a difference
+                                    that is certain but too small to act on. No cost.
   tewip access [<file or directory>] [--report axe.json|lighthouse.json] [--strict]
                                     Can everybody use this? Reads your markup and names the barriers
                                     that reading alone can prove - a picture with no alt text, a field

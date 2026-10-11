@@ -2346,6 +2346,45 @@ every check the CI script can run offered by the input that selects them.
 The general lesson is the one this project keeps relearning in new places: **a thing nobody has run is
 a thing nobody has checked**, however many tests surround it.
 
+### Phase 39: JMeter, Read Properly and Judged Properly
+
+Two things were wrong and one was missing.
+
+**Tewip could not read a real JMeter file at all.** The importer handled `.jtl` only as XML, and CSV is
+JMeter's default - what every real repository has - so `importJunit` answered *"not an XML document: no
+root element"* on genuine JMeter output while the help text advertised JMeter support. A format nobody
+had ever tested against a real file.
+
+**And a `.jtl` is the best performance data Tewip has ever been handed.** A k6 summary gives six
+aggregates per metric and no samples, which is why Phase 30's comparison had to be a crude range check
+that refuses a lot of real regressions. A `.jtl` carries one row per request - real samples, per label -
+which support an actual statistical test. The better answer was sitting in a format that would not open.
+
+So `tewip perf now.jtl --against before.jtl` runs a **Mann-Whitney U test** per label: it asks whether
+one distribution is shifted from another without assuming either is normal, which response times never
+are. They are a lump near the median with a long tail, exactly the shape a t-test handles badly. Ties
+are corrected because response times are whole milliseconds and a fast endpoint produces hundreds of
+identical values.
+
+**The decision that matters is not the p-value.** With ten thousand samples a one-millisecond shift is
+overwhelmingly significant and completely irrelevant, and a tool that reports it has taught its team
+that regressions are noise. A change has to be *both* statistically real and large enough to care about,
+and the report says which of the two it failed. The effect size reported is the readable one: how likely
+a random request now is slower than a random request before.
+
+Status (2026-10-11): **built**, and verified against real files rather than reasoning.
+
+The parser is a real CSV reader rather than a line split, and that was not fastidiousness: in the first
+real file read here - NikeshMan16/JmeterPerformance_testing_Project - the quoted `failureMessage` of a
+400 contains a comma **and a newline**, so one logical record spans seven physical lines. A line split
+would have produced six corrupt rows out of one.
+
+The best validation available was real data against itself: one real 50-request run split in half and
+compared. U came out at 312 against a midpoint of 312.5 - the two halves are indistinguishable - so
+Tewip says **cannot say**, which is the only correct answer about two halves of the same run. The U
+statistic was then checked against a brute-force count of every pair, and matched exactly; shifting the
+same real samples by 500ms gives U = 625, complete separation, p = 1.3e-9.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

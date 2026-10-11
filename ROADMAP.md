@@ -2004,6 +2004,58 @@ support a proper non-parametric test rather than this crude range check - a bett
 give. It is not written because there is no JMeter here to produce real output from, and this project
 does not write a parser against a remembered schema. JMeter results are still imported for failures.
 
+### Phase 31: What One Page Load Costs (`tewip perf` reads Lighthouse)
+
+Phase 30 reads k6, which measures what a server does under load. That is half of performance. The other
+half is what a single page load costs in a real browser - Largest Contentful Paint, layout shift,
+blocking time - which is nearer to what a person actually waits for, and is what most teams already
+measure. Tewip could read neither until Phase 30 and only the server half after it.
+
+Rather than grow a second performance pipeline that slowly drifts from the first, both tools now
+normalise to one comparable shape and share one comparison. What deliberately does **not** normalise is
+how much evidence a run carries: 876 requests and one page load are not the same weight, and the report
+says which it had, every time.
+
+Lighthouse needs the Phase 30 discipline more than k6 does, not less. **Four real Lighthouse runs of an
+unchanged page gave LCP of 922, 912, 936 and 916ms** - a 2.6% spread from nothing happening at all, and
+the score itself moved between runs. So the same rule applies: three baselines before anything is called,
+and outside the baseline range by more than its own width. A fifth run at 916ms is correctly not called a
+regression; the deliberately slowed page at 2112ms is, at +129%.
+
+Status (2026-10-11): **built**. `tewip perf` takes either tool's output and detects which it was given.
+
+One thing is deliberately not invented. "Is 2112ms bad?" has a published answer and it is Google's, not
+Tewip's: Lighthouse scores every metric on its own curve and renders its bands at 0.9 and 0.5. Tewip
+reads that score rather than hard-coding thresholds it remembered, so the word "poor" in a report is
+traceable to Lighthouse. On the real slowed run this correctly reported `server-response-time` at 611ms
+as **poor** while calling LCP at 2112ms good - Lighthouse's judgement, which Tewip would have got wrong
+had it applied one remembered number to both.
+
+Also read, and new in kind: **the audits Lighthouse refuses to score.** It marks ten accessibility checks
+`manual` - logical tab order, focus traps, whether the visual order follows the DOM - and hands them to a
+person. They are neither failures nor passes, which is exactly Tewip's "only a person can settle this",
+and a page with no failures and ten unanswered manual checks is not a page that passed. They are reported
+as what they are and pointed at `tewip access`.
+
+Written against Lighthouse 13.5.0 run against a real page, which caught four things:
+
+1. A report can carry a `runtimeError` and still be valid JSON with empty audits. Lighthouse refused the
+   first test server outright because it served `application/json`. Reporting "no regression" from a run
+   that never loaded the page is the worst available answer, so that now throws.
+2. A metric's band must come from `score`, not from its milliseconds: FCP and LCP had the identical value
+   of 2112ms on the slowed run and Lighthouse rates them differently, because their curves differ.
+3. Storage had to change shape to hold either tool's numbers, and runs recorded by Phase 30 are still
+   read - otherwise upgrading would silently empty a project's baseline, drop it below three, and make
+   Tewip refuse to judge a project it judged fine the day before.
+4. A k6 p95 and a Lighthouse LCP must never become each other's baseline, so stored runs carry their
+   source and are filtered by it. A run recorded before that field existed is k6, which is what its
+   absence means.
+
+Not built: reading Lighthouse's accessibility failures into `tewip access`. They are axe rules underneath
+and the Phase 29 triage would take them directly, but Lighthouse does not carry axe's WCAG tags, so the
+criterion for each would have to come from a mapping written here - and an unverified mapping is the kind
+of thing this project does not ship. The failures are extracted and available; nothing consumes them yet.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

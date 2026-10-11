@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Tewip">
+  <title>Tewip</title>
+  <!--
+    Tewip means doctor, and the product's claim is that it proves the work rather than guessing at
+    it. So the mark is one unbroken stroke that does both: a pulse - the reading, the diagnosis -
+    which rises on its last beat into a check. Nothing else, because the mark has to survive being
+    drawn 16 pixels wide in an editor sidebar, where anything finer turns to mud.
+  -->
+  <rect width="128" height="128" rx="28" fill="#0f766e"/>
+  <path
+    d="M 18 74 H 38 L 46 52 L 57 96 L 66 74 H 77 L 88 89 L 112 44"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="9"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+</svg>

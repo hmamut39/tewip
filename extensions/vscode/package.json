@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - why did my test fail?",
   "description": "Proves the work: is this change done, could these tests ever fail, would they catch a bug, what will this migration do to a live database, and why did CI fail.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -126,6 +126,10 @@
       {
         "command": "tewip.access",
         "title": "Tewip: Can everybody use this?"
+      },
+      {
+        "command": "tewip.perf",
+        "title": "Tewip: Is this change slower?"
       }
     ],
     "configuration": {
@@ -145,5 +149,10 @@
   "homepage": "https://github.com/hmamut39/tewip#readme",
   "author": {
     "name": "Mamuti Aishan (Hasan)"
+  },
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#0f766e",
+    "theme": "dark"
   }
 }

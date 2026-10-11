@@ -22,6 +22,7 @@ import { readK6Summary, requestCount } from '../perf/k6.ts';
 import { compareMetric, ENOUGH_BASELINES, timingsToCompare } from '../perf/compare.ts';
 import { baselineFor, knownLabels, recordRun, storedRuns } from '../perf/history.ts';
 import { renderPerf } from '../perf/perf-command.ts';
+import { fromK6 } from '../perf/run.ts';
 
 /** The classic shape, as k6 writes it with --summary-export. */
 function classic(p95: number, thresholdBreached: boolean, requests = 876) {
@@ -151,9 +152,8 @@ describe('the baseline is only what was deliberately recorded', () => {
 
   it('records and reads back, keeping labels apart', () => {
     const root = project();
-    const run = readK6Summary(summaryFile(classic(62, false)));
-    recordRun(root, 'checkout', run, 876);
-    recordRun(root, 'search', readK6Summary(summaryFile(classic(20, false))), 500);
+    recordRun(root, 'checkout', fromK6(readK6Summary(summaryFile(classic(62, false))), 876));
+    recordRun(root, 'search', fromK6(readK6Summary(summaryFile(classic(20, false))), 500));
     assert.equal(storedRuns(root, 'checkout').length, 1);
     assert.equal(storedRuns(root, 'search').length, 1);
     assert.deepEqual(baselineFor(storedRuns(root, 'checkout'), 'http_req_duration'), [62]);
@@ -162,7 +162,7 @@ describe('the baseline is only what was deliberately recorded', () => {
 
   it('a line it cannot read does not make the whole baseline unreadable', () => {
     const root = project();
-    recordRun(root, 'x', readK6Summary(summaryFile(classic(62, false))), 876);
+    recordRun(root, 'x', fromK6(readK6Summary(summaryFile(classic(62, false))), 876));
     const path = join(root, '.tewip', 'perf', 'runs.jsonl');
     mkdirSync(join(root, '.tewip', 'perf'), { recursive: true });
     writeFileSync(path, `${'{ this is not json'}\n${JSON.stringify({ at: '2026-01-01', label: 'x', timings: { http_req_duration: { p95: 70, med: 30, avg: 30 } }, requests: 1 })}\n`, 'utf8');
@@ -171,17 +171,17 @@ describe('the baseline is only what was deliberately recorded', () => {
 });
 
 describe('the report', () => {
-  const run = (p95: number, breached: boolean) => readK6Summary(summaryFile(classic(p95, breached)));
+  const run = (p95: number, breached: boolean, requests = 876) => fromK6(readK6Summary(summaryFile(classic(p95, breached, requests))), requests);
 
   it('never says a threshold held when the export does not record thresholds', () => {
-    const r = readK6Summary(summaryFile(machineReadable(282.5)));
-    const report = renderPerf(r, [], 867, 'default', 5, false);
+    const r = fromK6(readK6Summary(summaryFile(machineReadable(282.5))), 867);
+    const report = renderPerf(r, [], 'default', 5, false);
     assert.match(report, /Cannot say.*records no threshold results/s);
     assert.ok(!/No threshold breached/.test(report));
   });
 
   it('says what it does not know, every time', () => {
-    const report = renderPerf(run(62, false), [], 876, 'default', 5, false);
+    const report = renderPerf(run(62, false), [], 'default', 5, false);
     assert.match(report, /What this does not tell you/);
     assert.match(report, /Nothing about production/);
     assert.match(report, /No duration is predicted/);
@@ -189,17 +189,17 @@ describe('the report', () => {
   });
 
   it('warns when the run is too thin for a percentile to mean anything', () => {
-    assert.match(renderPerf(run(62, false), [], 12, 'default', 5, false), /12 requests is thin/);
-    assert.ok(!/is thin/.test(renderPerf(run(62, false), [], 876, 'default', 5, false)));
+    assert.match(renderPerf(run(62, false, 12), [], 'default', 5, false), /12 requests is thin/);
+    assert.ok(!/is thin/.test(renderPerf(run(62, false), [], 'default', 5, false)));
   });
 
   it('explains that it did not record, so nobody assumes a baseline grew', () => {
-    assert.match(renderPerf(run(62, false), [], 876, 'default', 5, false), /was \*\*not\*\* recorded/);
-    assert.match(renderPerf(run(62, false), [], 876, 'default', 5, true), /was added to the baseline/);
+    assert.match(renderPerf(run(62, false), [], 'default', 5, false), /was \*\*not\*\* recorded/);
+    assert.match(renderPerf(run(62, false), [], 'default', 5, true), /was added to the baseline/);
   });
 
   it('counts one breached threshold in the singular', () => {
-    const report = renderPerf(run(282, true), [], 876, 'default', 5, false);
+    const report = renderPerf(run(282, true), [], 'default', 5, false);
     assert.match(report, /\*\*1 of your own thresholds was breached\.\*\*/);
   });
 });

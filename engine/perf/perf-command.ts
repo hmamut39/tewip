@@ -1,91 +1,116 @@
-// Phase 30: `tewip perf` - is this change slower, and does it matter?
+// Phase 30, extended in Phase 31: `tewip perf` - is this change slower, and does it matter?
 //
-// Two questions, answered separately because they fail separately:
+// Reads a k6 run (what a server does under load) or a Lighthouse report (what one page load costs in
+// a browser), whichever it is handed, and answers two questions separately because they fail
+// separately:
 //
-//   1. **Did your own thresholds hold?** The team already wrote what "fast enough" means, in the k6
-//      script. Tewip reads the result rather than asking them to write a budget twice. When the
-//      export does not record thresholds - which the machine-readable one does not - the answer is
-//      "this export cannot tell me", never "nothing was breached".
-//   2. **Is it slower than it was?** Answered only from repeated baseline runs, and refused when
-//      there are not enough of them, because one run against one run is not evidence.
+//   1. **Is anything in a bad state right now?** From the team's own k6 thresholds, or from
+//      Lighthouse's published scoring bands. Never from a budget Tewip invented.
+//   2. **Is it slower than it was?** Only from repeated baselines, and refused below three, because
+//      one run against one run is not evidence. Four real k6 runs of unchanged code gave p95 of
+//      60.8-62.8ms; four real Lighthouse runs of an unchanged page gave LCP of 912-936ms. Both move
+//      on their own, and a tool that calls that a regression is muted within a week.
 //
-// It never estimates a duration, a capacity or a user impact. It has no idea what the production
-// hardware is, what the data volume is, or how many people use the endpoint, and a number invented
-// for any of those is worse than silence.
+// It never predicts a duration, a capacity or a user impact: it cannot see the production hardware,
+// the real data volume or the real traffic, and an invented number for any of those is worse than
+// silence.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { MAIN_TIMING, readK6Summary, requestCount, type PerfRun } from './k6.ts';
-import { compareMetric, ENOUGH_BASELINES, ENOUGH_REQUESTS, timingsToCompare, type Comparison } from './compare.ts';
-import { baselineFor, knownLabels, recordRun, storedRuns } from './history.ts';
+import { readK6Summary, requestCount } from './k6.ts';
+import { isLighthouseFile, readLighthouse, type ManualCheck } from './lighthouse.ts';
+import { fromK6, metricsInOrder, show, type ComparableRun } from './run.ts';
+import { compareMetric, ENOUGH_BASELINES, type Comparison } from './compare.ts';
+import { baselineFor, fromSameTool, knownLabels, recordRun, storedRuns } from './history.ts';
 
 export interface PerfCommand {
   root: string;
-  /** The k6 summary JSON to judge. */
+  /** A k6 --summary-export JSON or a Lighthouse --output=json report. */
   summary: string;
-  /** Which suite this is, so two load tests are not each other's baseline. */
   label?: string;
-  /** Add this run to the baseline. Deliberately explicit: see history.ts. */
   record?: boolean;
   out?: string;
-  /** Exit non-zero on a breached threshold or a regression the baselines cannot explain. */
   gate?: boolean;
   gitSha?: string;
 }
 
 export interface PerfResult {
-  run: PerfRun;
+  run: ComparableRun;
   comparisons: Comparison[];
-  requests: number;
   regressed: boolean;
   breached: boolean;
   report: string;
 }
 
-const ms = (n: number): string => `${Math.round(n * 10) / 10}ms`;
+/** Enough requests for a percentile to mean anything. Below this, p95 is three data points. */
+export const ENOUGH_REQUESTS = 100;
+
+export function readPerfFile(path: string): { run: ComparableRun; manual: ManualCheck[]; url: string } {
+  if (isLighthouseFile(path)) {
+    const report = readLighthouse(path);
+    return { run: report.run, manual: report.manual, url: report.url };
+  }
+  const k6 = readK6Summary(path);
+  return { run: fromK6(k6, requestCount(k6)), manual: [], url: '' };
+}
 
 export function renderPerf(
-  run: PerfRun,
+  run: ComparableRun,
   comparisons: Comparison[],
-  requests: number,
   label: string,
   baselineCount: number,
   recorded: boolean,
+  manual: ManualCheck[] = [],
 ): string {
   const lines = ['# Tewip performance check', ''];
   const breaches = (run.thresholds ?? []).filter((t) => t.breached);
+  const poor = Object.entries(run.metrics).filter(([, m]) => m.rating === 'poor');
   const slower = comparisons.filter((c) => c.direction === 'slower');
   const faster = comparisons.filter((c) => c.direction === 'faster');
   const unsure = comparisons.filter((c) => c.direction === 'cannot-say');
+  const tool = run.source === 'k6' ? 'k6' : 'Lighthouse';
 
-  lines.push(`Read a k6 run of **${requests} requests**, compared against **${baselineCount}** recorded baseline ${baselineCount === 1 ? 'run' : 'runs'} for \`${label}\`.`, '');
+  lines.push(
+    `Read a ${tool} run of **${run.volume.n} ${run.volume.kind}${run.volume.n === 1 ? '' : 's'}**, compared against **${baselineCount}** recorded ` +
+      `${tool} baseline ${baselineCount === 1 ? 'run' : 'runs'} for \`${label}\`.`,
+    '',
+  );
 
-  // Headline, in the order that decides what a person does next.
-  if (breaches.length > 0) {
-    lines.push(`**${breaches.length} of your own thresholds ${breaches.length === 1 ? 'was' : 'were'} breached.**`, '');
-  }
+  if (breaches.length > 0) lines.push(`**${breaches.length} of your own thresholds ${breaches.length === 1 ? 'was' : 'were'} breached.**`, '');
+  if (poor.length > 0) lines.push(`**${poor.length} ${poor.length === 1 ? 'metric is' : 'metrics are'} in ${tool}'s worst band.**`, '');
   if (slower.length > 0) lines.push(`**${slower.length} ${slower.length === 1 ? 'metric is' : 'metrics are'} slower than the baseline runs can explain.**`, '');
-  if (breaches.length === 0 && slower.length === 0) {
+  if (breaches.length === 0 && poor.length === 0 && slower.length === 0) {
     lines.push(
       run.thresholds === null
         ? '**No regression this baseline can detect.** Your thresholds are not in this export, so nothing is said about them.'
-        : '**No threshold breached, and no regression this baseline can detect.**',
+        : '**Nothing in a bad state, and no regression this baseline can detect.**',
       '',
     );
   }
 
-  lines.push('## Did your own thresholds hold?', '');
-  if (run.thresholds === null) {
-    lines.push(
-      '**Cannot say.** This summary came from `--new-machine-readable-summary`, and that export records no threshold ' +
-        'results at all - the word appears in it only inside the copy of your script. Tewip will not report "nothing was ' +
-        'breached" from a file that does not say. Re-run with plain `--summary-export` to get the answer.',
-      '',
-    );
-  } else if (run.thresholds.length === 0) {
-    lines.push('This run has no thresholds. Add them to your k6 script and the team decides what "fast enough" means, rather than Tewip.', '');
+  lines.push('## Is anything in a bad state right now?', '');
+  if (run.source === 'k6') {
+    if (run.thresholds === null) {
+      lines.push(
+        '**Cannot say.** This summary came from `--new-machine-readable-summary`, and that export records no threshold ' +
+          'results at all - the word appears in it only inside the copy of your script. Tewip will not report "nothing was ' +
+          'breached" from a file that does not say. Re-run with plain `--summary-export` to get the answer.',
+        '',
+      );
+    } else if (run.thresholds.length === 0) {
+      lines.push('This run has no thresholds. Add them to your k6 script and the team decides what "fast enough" means, rather than Tewip.', '');
+    } else {
+      for (const t of run.thresholds) lines.push(`- ${t.breached ? '**breached**' : 'held'} — \`${t.metric}\`: \`${t.expression}\``);
+      lines.push('');
+    }
   } else {
-    for (const t of run.thresholds) {
-      lines.push(`- ${t.breached ? '**breached**' : 'held'} — \`${t.metric}\`: \`${t.expression}\``);
+    // The bands are Lighthouse's own, computed by Lighthouse. Tewip is relaying a judgement with a
+    // published basis, not applying numbers it chose.
+    lines.push("Rated by Lighthouse's own scoring, not by any threshold Tewip invented:", '');
+    for (const name of metricsInOrder(run)) {
+      const m = run.metrics[name];
+      if (m.rating === null) continue;
+      const mark = m.rating === 'poor' ? '**poor**' : m.rating === 'needs-improvement' ? 'needs improvement' : 'good';
+      lines.push(`- ${mark} — \`${name}\`: ${show(m)}`);
     }
     lines.push('');
   }
@@ -93,24 +118,26 @@ export function renderPerf(
   lines.push('## Is it slower than it was?', '');
   if (baselineCount < ENOUGH_BASELINES) {
     lines.push(
-      `**Cannot say.** There ${baselineCount === 1 ? 'is' : 'are'} ${baselineCount} recorded ${baselineCount === 1 ? 'run' : 'runs'} for \`${label}\`, ` +
-        `and Tewip needs ${ENOUGH_BASELINES} before it will call anything a regression. Performance numbers move between identical ` +
-        'runs, and without several of them there is no way to tell a change from the machine having a busy moment. ' +
-        `Record baselines on your main branch with \`tewip perf <summary.json> --record\`.`,
+      `**Cannot say.** There ${baselineCount === 1 ? 'is' : 'are'} ${baselineCount} recorded ${tool} ${baselineCount === 1 ? 'run' : 'runs'} ` +
+        `for \`${label}\`, and Tewip needs ${ENOUGH_BASELINES} before it will call anything a regression. Performance numbers move ` +
+        'between identical runs, and without several of them there is no way to tell a change from the machine having a busy moment. ' +
+        'Record baselines on your main branch with `tewip perf <file> --record`.',
       '',
     );
   }
   for (const c of [...slower, ...faster, ...unsure]) {
     const verdict = c.direction === 'slower' ? '**slower**' : c.direction === 'faster' ? 'faster' : 'cannot say';
-    lines.push(`- \`${c.metric}\` p95 ${ms(c.now)} — ${verdict}`);
-    lines.push(`  - baseline ${ms(c.baselineLow)}–${ms(c.baselineHigh)} over ${c.baselineRuns} runs, middle ${ms(c.before)}`);
+    const unit = run.metrics[c.metric]?.unit ?? 'ms';
+    const u = (n: number) => (unit === 'ms' ? `${n}ms` : `${n}`);
+    lines.push(`- \`${c.metric}\` ${u(c.now)} — ${verdict}`);
+    lines.push(`  - baseline ${u(c.baselineLow)}–${u(c.baselineHigh)} over ${c.baselineRuns} runs, middle ${u(c.before)}`);
     lines.push(`  - ${c.why}`);
   }
   lines.push('');
 
-  if (requests < ENOUGH_REQUESTS) {
+  if (run.source === 'k6' && run.volume.n < ENOUGH_REQUESTS) {
     lines.push(
-      `**${requests} requests is thin.** A p95 from this few is a handful of data points and will move on its own. ` +
+      `**${run.volume.n} requests is thin.** A p95 from this few is a handful of data points and will move on its own. ` +
         'Treat everything above as indicative and lengthen the run before deciding anything.',
       '',
     );
@@ -121,13 +148,26 @@ export function renderPerf(
     '- **Nothing about production.** This is the hardware the run happened on, with that data volume and that ' +
       'concurrency. Tewip cannot see your real machines, your real data or your real traffic, and will not guess.',
     '- **No duration is predicted.** How long a real user waits depends on network, device and cache, none of which are here.',
-    '- **Only what the script exercised.** An endpoint the test never called is not covered, however green this looks.',
+    '- **Only what the run exercised.** A page or endpoint it never touched is not covered, however green this looks.',
     '- **Not capacity.** This says whether it changed, not how many users it would hold.',
-    '',
   );
+  if (run.source === 'lighthouse') {
+    lines.push(
+      `- **One page load.** k6 reports a percentile over many requests; this is a single load of one page, and a single ` +
+        'load is the noisiest measurement either tool offers.',
+    );
+    if (manual.length > 0) {
+      lines.push(
+        `- **${manual.length} accessibility checks Lighthouse refuses to score** and hands to a person - ` +
+          `${manual.slice(0, 3).map((m) => `\`${m.id}\``).join(', ')} and others. They are not failures and not passes. ` +
+          'Run `tewip access` for the accessibility side.',
+      );
+    }
+  }
+  lines.push('');
 
   if (recorded) lines.push(`This run was added to the baseline for \`${label}\`.`, '');
-  else lines.push(`This run was **not** recorded. Add \`--record\` on your main branch to make it part of the baseline; a regression recorded by accident becomes next week's normal.`, '');
+  else lines.push('This run was **not** recorded. Add `--record` on your main branch to make it part of the baseline; a regression recorded by accident becomes next week\'s normal.', '');
 
   return lines.join('\n');
 }
@@ -135,35 +175,38 @@ export function renderPerf(
 export function runPerf(cmd: PerfCommand): PerfResult {
   const root = resolve(cmd.root);
   const label = cmd.label ?? 'default';
-  const run = readK6Summary(resolve(root, cmd.summary));
-  const requests = requestCount(run);
+  const { run, manual } = readPerfFile(resolve(root, cmd.summary));
 
-  const history = storedRuns(root, label);
-  if (history.length === 0) {
+  const all = storedRuns(root, label);
+  const history = fromSameTool(all, run.source);
+  if (all.length === 0) {
     const known = knownLabels(root);
-    // A typo in --label would otherwise look exactly like "no history yet", and the team would
-    // record a second baseline under the wrong name without noticing.
     if (known.length > 0 && !known.includes(label)) {
       console.error(`[tewip] no recorded runs for label "${label}". This project has: ${known.join(', ')}.`);
     }
   }
 
-  const comparisons = timingsToCompare(run)
-    .map((metric) => compareMetric(metric, run.timings[metric].p95, baselineFor(history, metric)))
-    // A metric that is zero now and was zero every time before says nothing. http_req_blocked is
-    // zero on a local run, and printing "0ms is within 0-0ms" three times buries the real lines.
+  const comparisons = metricsInOrder(run)
+    .map((metric) => compareMetric(metric, run.metrics[metric].value, baselineFor(history, metric)))
+    // A metric that is zero now and was zero every time before says nothing, and printing
+    // "0ms is within 0-0ms" three times buries the real lines.
     .filter((c) => c.now > 0 || c.baselineHigh > 0);
 
   const recorded = cmd.record === true;
-  if (recorded) recordRun(root, label, run, requests, cmd.gitSha);
+  if (recorded) recordRun(root, label, run, cmd.gitSha);
 
   const breached = (run.thresholds ?? []).some((t) => t.breached);
+  const poor = Object.values(run.metrics).some((m) => m.rating === 'poor');
   const regressed = comparisons.some((c) => c.direction === 'slower');
-  const report = renderPerf(run, comparisons, requests, label, history.length, recorded);
+  const report = renderPerf(run, comparisons, label, history.length, recorded, manual);
   console.log(report);
 
-  if (cmd.gate && (breached || regressed)) {
-    const why = [breached ? 'a threshold you wrote was breached' : '', regressed ? 'something is slower than the baselines explain' : '']
+  if (cmd.gate && (breached || regressed || poor)) {
+    const why = [
+      breached ? 'a threshold you wrote was breached' : '',
+      poor ? "something is in Lighthouse's worst band" : '',
+      regressed ? 'something is slower than the baselines explain' : '',
+    ]
       .filter(Boolean)
       .join(', and ');
     console.error(`${String.fromCharCode(10)}Performance gate failed: ${why}.`);
@@ -176,5 +219,5 @@ export function runPerf(cmd: PerfCommand): PerfResult {
     writeFileSync(path, report, 'utf8');
   }
 
-  return { run, comparisons, requests, regressed, breached, report };
+  return { run, comparisons, regressed, breached: breached || poor, report };
 }

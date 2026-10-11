@@ -160,19 +160,19 @@ server.registerTool(
       if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
       // Never records: an assistant adding runs to a team's baseline unasked is how a regression
       // silently becomes the new normal. Recording stays a deliberate act on the command line.
-      const { readK6Summary, requestCount } = await import('../engine/perf/k6.ts');
-      const { compareMetric, timingsToCompare } = await import('../engine/perf/compare.ts');
-      const { baselineFor, storedRuns } = await import('../engine/perf/history.ts');
-      const { renderPerf } = await import('../engine/perf/perf-command.ts');
+      const { compareMetric } = await import('../engine/perf/compare.ts');
+      const { baselineFor, fromSameTool, storedRuns } = await import('../engine/perf/history.ts');
+      const { readPerfFile, renderPerf } = await import('../engine/perf/perf-command.ts');
+      const { metricsInOrder } = await import('../engine/perf/run.ts');
       const { isAbsolute: abs, resolve } = await import('node:path');
 
-      const run = readK6Summary(abs(summary) ? summary : resolve(root, summary));
+      const { run, manual } = readPerfFile(abs(summary) ? summary : resolve(root, summary));
       const name = label ?? 'default';
-      const history = storedRuns(root, name);
-      const comparisons = timingsToCompare(run)
-        .map((m) => compareMetric(m, run.timings[m].p95, baselineFor(history, m)))
+      const history = fromSameTool(storedRuns(root, name), run.source);
+      const comparisons = metricsInOrder(run)
+        .map((m) => compareMetric(m, run.metrics[m].value, baselineFor(history, m)))
         .filter((c) => c.now > 0 || c.baselineHigh > 0);
-      return renderPerf(run, comparisons, requestCount(run), name, history.length, false);
+      return renderPerf(run, comparisons, name, history.length, false, manual);
     }),
 );
 

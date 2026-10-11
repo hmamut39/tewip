@@ -624,6 +624,37 @@ compare everywhere else.
 **It never predicts a duration, a capacity, or what a user will feel.** It cannot see your production
 hardware, your real data volume or your real traffic, and every report says so.
 
+### Lighthouse too (Phase 31, new)
+
+```bash
+tewip perf lighthouse-report.json --record
+```
+
+k6 measures what your server does under load. Lighthouse measures what **one page load costs in a real
+browser** — Largest Contentful Paint, layout shift, blocking time — which is nearer to what a person
+actually waits for. `tewip perf` takes either and works out which it was given.
+
+Lighthouse needs the same discipline *more*, not less. **Four real Lighthouse runs of an unchanged
+page gave LCP of 922, 912, 936 and 916ms.** Same rule: three baselines, outside the range by more than
+its own width.
+
+**And Tewip does not invent a verdict.** "Is 2112ms bad?" has a published answer and it is Google's:
+Lighthouse scores every metric on its own curve. Tewip reads that score rather than hard-coding
+thresholds it remembered — which matters, because on the real slowed run FCP and LCP had the *identical*
+value of 2112ms and Lighthouse rates them differently:
+
+```
+- good — `largest-contentful-paint`: 2112ms
+- needs improvement — `first-contentful-paint`: 2112ms
+- **poor** — `server-response-time`: 611ms
+```
+
+One remembered threshold applied to both would have been wrong.
+
+It also surfaces the **ten accessibility audits Lighthouse refuses to score** — logical tab order, focus
+traps, whether visual order follows the DOM. Those are neither failures nor passes, and a page with no
+failures and ten unanswered manual checks is not a page that passed.
+
 One more thing it refuses: if your summary came from `--new-machine-readable-summary`, that export
 records **no threshold results at all** — the word appears in it only inside a copy of your script.
 Tewip says "this export cannot tell me" rather than "nothing was breached".

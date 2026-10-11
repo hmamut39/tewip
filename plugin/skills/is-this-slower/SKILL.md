@@ -1,6 +1,6 @@
 ---
 name: is-this-slower
-description: Use whenever someone asks whether a change made something slower, whether a load test result is a regression, or what a k6 run means - and whenever a k6 summary JSON appears. Separates whether the team's own thresholds held from whether the run is slower than the recorded baseline, and refuses to call a regression without enough baseline runs to tell one from noise. Triggers on "performance", "slower", "regression", "latency", "p95", "load test", "k6", "benchmark", "is this fast enough".
+description: Use whenever someone asks whether a change made something slower, whether a load test or Lighthouse result is a regression, or what a k6 or Lighthouse run means - and whenever a k6 summary or Lighthouse JSON appears. Separates whether the team's own thresholds held from whether the run is slower than the recorded baseline, and refuses to call a regression without enough baseline runs to tell one from noise. Triggers on "performance", "slower", "regression", "latency", "p95", "load test", "k6", "lighthouse", "core web vitals", "LCP", "benchmark", "is this fast enough".
 ---
 
 # Is this change slower, and does it matter?
@@ -12,9 +12,13 @@ machine as the change, and saying it out loud is how a team learns to ignore per
 
 ## What to call
 
-**`is_this_slower`** with the project path and the path to a `k6 run --summary-export` JSON.
-Optionally `label`, when the project runs more than one load test, so two suites are not each
-other's baseline.
+**`is_this_slower`** with the project path and the path to either a `k6 run --summary-export` JSON or
+a Lighthouse `--output=json` report. It detects which it was given. Optionally `label`, when the
+project measures more than one thing, so two suites are not each other's baseline.
+
+The two measure different halves: k6 is what the server does under load, Lighthouse is what one page
+load costs in a browser. A Lighthouse run is a **single** page load, which is the noisiest measurement
+either tool offers - say so if you quote one.
 
 It reads only. It never adds a run to the baseline - that stays a deliberate act on the command
 line, because a regression recorded by accident becomes next week's normal.
@@ -39,6 +43,8 @@ Two answers, kept apart because they fail apart:
 - **Do not report "no threshold was breached" from a machine-readable summary.** That export records
   no threshold results at all; Tewip will say so. Pass that on as "your export does not contain them",
   and suggest re-running with plain `--summary-export`.
+- **Do not restate a Lighthouse band as your own opinion.** "Poor" and "good" in the report are
+  Lighthouse's scoring, not Tewip's and not yours. Attribute them.
 - **Do not treat a thin run as evidence.** If the report says the request count is thin, a p95 from it
   is a handful of data points. Say so.
 

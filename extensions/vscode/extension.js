@@ -252,6 +252,9 @@ const readMigrations = changeCommand({ verb: 'schema', busy: 'Tewip is reading w
 const houseRules = fileCommand({ verb: 'standards', busy: "Tewip is reading this project's own standards…", needsFile: false });
 const couldItFail = fileCommand({ verb: 'vouch', busy: 'Tewip is checking whether these tests could ever fail…', needsFile: true });
 const whoCannotUseIt = fileCommand({ verb: 'access', busy: 'Tewip is checking who cannot use this interface…', needsFile: false, wholeProject: true });
+// Needs the report file itself, so the open editor is the right thing to pass: a person runs this
+// with their k6 summary or Lighthouse JSON in front of them.
+const isItSlower = fileCommand({ verb: 'perf', busy: 'Tewip is checking whether this is slower than it was…', needsFile: true });
 // Proving breaks the file and runs the tests that cover it, once per change, so it is slow by nature.
 const wouldTestsCatch = fileCommand({ verb: 'prove', busy: 'Tewip is breaking this file to see whether the tests notice (this takes minutes)…', needsFile: true, extra: ['--limit', '4'] });
 
@@ -274,6 +277,7 @@ function activate(context) {
     vscode.commands.registerCommand('tewip.schema', readMigrations),
     vscode.commands.registerCommand('tewip.standards', houseRules),
     vscode.commands.registerCommand('tewip.access', whoCannotUseIt),
+    vscode.commands.registerCommand('tewip.perf', isItSlower),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

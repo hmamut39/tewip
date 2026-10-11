@@ -10,15 +10,23 @@
 // there, and so a person can read it or delete a bad line with an editor.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { PerfRun } from './k6.ts';
+import type { ComparableRun } from './run.ts';
 
 export interface StoredRun {
   at: string;
   /** Which suite this is, so two different load tests do not become each other's baseline. */
   label: string;
   gitSha?: string;
-  /** Metric name to its p95 and median, which is all a comparison needs. */
-  timings: Record<string, { p95: number; med: number; avg: number }>;
+  /** Which tool produced it: a k6 run and a Lighthouse run are not each other's baseline either. */
+  source?: 'k6' | 'lighthouse';
+  /** Metric name to the one number compared between runs. */
+  metrics?: Record<string, number>;
+  /**
+   * How runs were stored before Lighthouse existed here. Still read, so a baseline recorded by an
+   * earlier version is not silently lost - which would reset the count below three and make Tewip
+   * refuse to judge a project that had been judging fine yesterday.
+   */
+  timings?: Record<string, { p95: number; med: number; avg: number }>;
   requests: number;
 }
 
@@ -36,7 +44,8 @@ export function storedRuns(root: string, label: string): StoredRun[] {
       const parsed = JSON.parse(trimmed) as StoredRun;
       // A line Tewip cannot read is skipped rather than throwing: one bad line written by a crashed
       // run must not make the whole baseline unreadable.
-      if (parsed && typeof parsed.at === 'string' && parsed.label === label && parsed.timings) out.push(parsed);
+      // Either shape counts: `metrics` is what is written now, `timings` what older versions wrote.
+      if (parsed && typeof parsed.at === 'string' && parsed.label === label && (parsed.metrics ?? parsed.timings)) out.push(parsed);
     } catch {
       continue;
     }
@@ -44,13 +53,14 @@ export function storedRuns(root: string, label: string): StoredRun[] {
   return out;
 }
 
-export function recordRun(root: string, label: string, run: PerfRun, requests: number, gitSha?: string): StoredRun {
+export function recordRun(root: string, label: string, run: ComparableRun, gitSha?: string): StoredRun {
   const stored: StoredRun = {
     at: run.at,
     label,
     ...(gitSha ? { gitSha } : {}),
-    timings: Object.fromEntries(Object.entries(run.timings).map(([m, v]) => [m, { p95: v.p95, med: v.med, avg: v.avg }])),
-    requests,
+    source: run.source,
+    metrics: Object.fromEntries(Object.entries(run.metrics).map(([m, v]) => [m, v.value])),
+    requests: run.volume.n,
   };
   const path = file(root);
   mkdirSync(dirname(path), { recursive: true });
@@ -58,9 +68,23 @@ export function recordRun(root: string, label: string, run: PerfRun, requests: n
   return stored;
 }
 
-/** Every stored p95 for one metric, oldest first, for the comparison to read the spread from. */
+/**
+ * Every stored value for one metric, oldest first, for the comparison to read the spread from.
+ *
+ * Reads the older shape as well, so upgrading Tewip does not quietly empty a project's baseline -
+ * which would drop it below three runs and make Tewip refuse to judge a project it judged fine the
+ * day before.
+ */
 export function baselineFor(runs: StoredRun[], metric: string): number[] {
-  return runs.map((r) => r.timings[metric]?.p95).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  return runs
+    .map((r) => r.metrics?.[metric] ?? r.timings?.[metric]?.p95)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+}
+
+/** Runs from the same tool. A k6 p95 and a Lighthouse LCP are not each other's baseline. */
+export function fromSameTool(runs: StoredRun[], source: ComparableRun['source']): StoredRun[] {
+  // Runs recorded before the field existed were all k6, which is what the absence means.
+  return runs.filter((r) => (r.source ?? 'k6') === source);
 }
 
 /** The labels this project has recorded, so a typo in --label does not look like an empty history. */

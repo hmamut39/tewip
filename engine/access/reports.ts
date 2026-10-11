@@ -151,6 +151,8 @@ function fromRule(rule: AxeRule, page: string, kind: 'violation' | 'incomplete')
  * some unrelated rule under the same number reported a violation.
  */
 export interface AxeRun {
+  /** Which tool produced it. Lighthouse runs axe rules, but a report should name what was run. */
+  source: 'axe' | 'lighthouse';
   findings: BrowserFinding[];
   /** Every page the run opened - including ones where everything passed, which are still checked. */
   pages: Set<string>;
@@ -205,7 +207,7 @@ export function readAxeReport(path: string): AxeRun {
     throw new Error(`${path} is not JSON. Tewip reads the JSON an axe run writes.`);
   }
 
-  const run: AxeRun = { findings: [], pages: new Set(), rulesRun: new Set(), criteriaCovered: new Set() };
+  const run: AxeRun = { source: 'axe', findings: [], pages: new Set(), rulesRun: new Set(), criteriaCovered: new Set() };
   const pageOf = (v: Record<string, unknown>, fallback: string) => text(v.url) || text(v.page) || fallback;
 
   if (looksLikeAxe(parsed)) {

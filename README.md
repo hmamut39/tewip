@@ -750,6 +750,26 @@ A source finding is set aside only when the run opened **that same file** and re
 In a React or Vue project that means nothing is set aside — the source and the rendered output are two
 different artefacts, and neither is evidence about the other.
 
+**Already run Lighthouse instead? That works too** (Phase 32, new):
+
+```bash
+tewip access --report lighthouse-report.json
+```
+
+Lighthouse's accessibility audits *are* axe rules — same rule ids — so the same triage applies. Most
+teams have Lighthouse in CI and no separate axe step; they get the whole of the above from a tool they
+already run.
+
+The catch was that a Lighthouse report strips axe's tags, so it says `landmark-one-main` and nothing
+about which WCAG criterion that is, or whether it is one at all. That distinction covers **30 of axe's
+105 rules**, and a remembered table of a hundred mappings is a table with mistakes in it. So the table
+is **generated from axe-core itself** (`scripts/axe-rules.ts`) — 105 rules, 75 carrying a criterion, 30
+best-practice only, none unclassified.
+
+It also surfaces the **ten audits Lighthouse marks `manual`** — logical tab order, focus traps, whether
+visual order follows the DOM. Those become questions, never passes. A page with no failures and ten
+unanswered manual checks has not passed.
+
 ## Teach it your house rules (Phase 27)
 
 ```bash

@@ -2056,6 +2056,47 @@ and the Phase 29 triage would take them directly, but Lighthouse does not carry 
 criterion for each would have to come from a mapping written here - and an unverified mapping is the kind
 of thing this project does not ship. The failures are extracted and available; nothing consumes them yet.
 
+### Phase 32: A Lighthouse Report Is Accessibility Evidence Too
+
+Phase 29 reads an axe run. Phase 31 read a Lighthouse report for its performance half and left the
+accessibility half extracted but unused, with the reason written down: Lighthouse's accessibility audits
+*are* axe rules and carry axe's rule ids, but a Lighthouse report strips axe's tags. So it says
+`landmark-one-main` and nothing about which WCAG criterion that is - or whether it is a criterion at all.
+That distinction is what the whole command rests on, and it covers **30 of axe's 105 rules**, so
+supplying it from a remembered table was not acceptable: a wrong criterion printed beside a finding is
+worse than no criterion.
+
+The way through is to stop remembering it. `engine/access/axe-rules.ts` is **generated**: axe-core is
+loaded in a browser and asked for its own rule catalogue, and its tags are parsed exactly as Phase 29
+parses them on a live run. `scripts/axe-rules.ts` regenerates it after an axe upgrade. From axe-core
+4.14.0: 105 rules, **75 carrying a WCAG criterion and 30 tagged best-practice only**, with none left
+unclassified - which is what makes "advice" a safe verdict rather than a guess about rules the table did
+not recognise.
+
+Status (2026-10-11): **built**. `tewip access --report` takes an axe run or a Lighthouse report and works
+out which it was given; the MCP tool does too.
+
+Verified against the real Lighthouse 13.5.0 report generated in Phase 31, run over a real Bootstrap page:
+
+- `landmark-one-main` came out as **advice**, not a barrier, from the generated table - correctly, since
+  axe tags it best-practice and it tests no standard;
+- **contrast moved off the "not checked" list**, because the run exercised `color-contrast`, exactly as an
+  axe run does. Alt-text quality stayed on it, because no tool settles that;
+- the **ten audits Lighthouse marks `manual`** - logical tab order, focus traps, whether visual order
+  follows the DOM - became questions. They are neither failures nor passes, and a page with no failures
+  and ten unanswered manual checks has not passed.
+
+One thing Lighthouse does not report and is not invented: **impact**. A live axe run says `critical` or
+`moderate`; Lighthouse says nothing. Severity therefore comes from the WCAG conformance level, which is
+real data and is the standard's own ordering of how basic a requirement is, and the code says so where it
+is done.
+
+What this buys a team: most projects run Lighthouse in CI and do not run axe separately. They now get the
+accessibility half of Phase 29 - triaged, with criteria and EN 301 549 clauses attached, and with axe's
+best-practice noise held apart - from a tool they already have.
+
+`access-command.ts` passed 300 lines doing this, so the report moved into `render.ts`.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

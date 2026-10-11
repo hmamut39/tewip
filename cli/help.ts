@@ -130,7 +130,7 @@ Usage:
                                     --record adds a run to the baseline, and is deliberately not
                                     automatic: a regression recorded by accident becomes next week's
                                     normal. It never predicts a duration or a capacity. No cost.
-  tewip access [<file or directory>] [--report axe.json] [--strict] [--out access.md]
+  tewip access [<file or directory>] [--report axe.json|lighthouse.json] [--strict]
                                     Can everybody use this? Reads your markup and names the barriers
                                     that reading alone can prove - a picture with no alt text, a field
                                     with no label, a div only a mouse can use - each against its WCAG
@@ -139,11 +139,13 @@ Usage:
                                     criterion it cannot reach without rendering the page (contrast,
                                     focus order, whether the alt text is any good) is printed every
                                     time. It never says a page is accessible, only what was checked.
-                                    Give it --report with the JSON from an axe run and it reads that
-                                    too: contrast moves out of the unchecked list, axe rules that map
-                                    to no WCAG criterion are reported as advice rather than barriers
-                                    (51 of 174 findings on nine real pages), and what axe could not
-                                    determine becomes a question. No browser, no network, no model.
+                                    Give it --report with the JSON from an axe run or a Lighthouse
+                                    report and it reads that too - Lighthouse runs axe rules, so
+                                    either works. Contrast moves out of the unchecked list, rules
+                                    that map to no WCAG criterion are reported as advice rather than
+                                    barriers (51 of 174 findings on nine real pages), and what the
+                                    tool could not determine becomes a question. Lighthouse's ten
+                                    manual checks are questions too, never passes. No model, no cost.
   tewip standards [--diff main...HEAD] [--strict] [--out standards.md]
                                     Teach Tewip your house rules. Markdown files in
                                     .tewip/standards/ - a forbid or require line is checked and

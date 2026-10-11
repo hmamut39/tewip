@@ -69,6 +69,12 @@ export interface LighthouseReport {
    * that passed.
    */
   manual: ManualCheck[];
+  /**
+   * Every accessibility audit that ran, whatever its outcome - passing and not-applicable included.
+   * Both are evidence the rule was checked, which is what lets a Lighthouse run move contrast off
+   * the list of things Tewip says it could not look at (Phase 32).
+   */
+  accessibilityAuditIds: string[];
   url: string;
   lighthouseVersion: string;
 }
@@ -145,11 +151,15 @@ export function readLighthouse(path: string): LighthouseReport {
 
   const accessibilityFailures: LighthouseReport['accessibilityFailures'] = [];
   const manual: ManualCheck[] = [];
+  const accessibilityAuditIds: string[] = [];
   const a11yRefs = ((categories.accessibility as Record<string, unknown> | undefined)?.auditRefs ?? []) as Array<{ id?: unknown }>;
   for (const ref of a11yRefs) {
     const audit = audits[text(ref.id)];
     if (!audit) continue;
     const id = text(audit.id);
+    // Recorded before the outcome is looked at: a rule that passed, or did not apply to this page,
+    // has still been checked, and that is what coverage means.
+    if (id !== '') accessibilityAuditIds.push(id);
     if (audit.scoreDisplayMode === 'manual') {
       manual.push({ id, title: text(audit.title) });
       continue;
@@ -174,6 +184,7 @@ export function readLighthouse(path: string): LighthouseReport {
     categories: Object.fromEntries(Object.entries(categories).map(([k, v]) => [k, num(v?.score)])),
     accessibilityFailures,
     manual,
+    accessibilityAuditIds,
     url: text(o.finalDisplayedUrl) || text(o.finalUrl) || text(o.requestedUrl),
     lighthouseVersion: text(o.lighthouseVersion),
   };

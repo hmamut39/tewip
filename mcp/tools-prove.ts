@@ -189,7 +189,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          'The JSON from an axe run, if the project has one. It settles contrast, which reading markup cannot, and its findings are triaged rather than relayed: axe rules that map to no WCAG criterion are reported as advice, and what axe could not determine becomes a question.',
+          'The JSON from an axe run OR a Lighthouse report, if the project has either - Lighthouse runs axe rules, so both work. It settles contrast, which reading markup cannot, and its findings are triaged rather than relayed: rules that map to no WCAG criterion are reported as advice, and what the tool could not determine becomes a question.',
         ),
     },
     annotations: readOnly,
@@ -198,14 +198,14 @@ server.registerTool(
     answer(async () => {
       if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
       // The pure functions, not runAccess: that one prints, and anything on stdout breaks JSON-RPC.
-      const { findBarriers, keyOf, readAccepted, renderAccess } = await import('../engine/access/access-command.ts');
+      const { findBarriers, keyOf, readAccepted, readBrowserRun, renderAccess } = await import('../engine/access/access-command.ts');
       const { merge, pagesIn } = await import('../engine/access/merge.ts');
-      const { readAxeReport } = await import('../engine/access/reports.ts');
+
       const { findings, filesRead } = findBarriers(root, path);
       const judged = readAccepted(root);
       const open = findings.filter((f) => !judged.has(keyOf(f)));
 
-      const run = axeReport ? readAxeReport(isAbsolute(axeReport) ? axeReport : `${root}/${axeReport}`) : undefined;
+      const run = axeReport ? readBrowserRun(isAbsolute(axeReport) ? axeReport : `${root}/${axeReport}`) : undefined;
       const graded = run ? merge(open, run, root) : undefined;
       const kept = graded ? graded.kept : open;
 
@@ -224,6 +224,7 @@ server.registerTool(
                   superseded: graded.superseded,
                   pages: pagesIn(run),
                   rulesRun: run.rulesRun,
+                  tool: run.source,
                 },
               }
             : {}),

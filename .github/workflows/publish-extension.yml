@@ -1,6 +1,11 @@
 # Publishes the editor extension to Open VSX, which is what Cursor, Windsurf, VSCodium, Gitpod and
-# Theia search. It is **not** the Visual Studio Marketplace: VS Code reads only Microsoft's registry,
-# and that one needs an Azure DevOps organisation with a subscription behind it.
+# Theia search, and attaches the built .vsix to the release.
+#
+# The Visual Studio Marketplace - what VS Code itself searches - is a separate registry and is
+# published by hand: the .vsix attached to the release is uploaded at
+# marketplace.visualstudio.com/manage/publishers/hmamut39. Publishing it from CI instead would need
+# a token from an Azure DevOps organisation, and creating one of those now requires an active Azure
+# subscription; the manual upload needs no subscription, no token and no card.
 #
 # Two ways in, and it takes whichever is available.
 #
@@ -26,7 +31,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # to attach the built .vsix to the release
   id-token: write # how Open VSX knows this really is hmamut39/tewip
 
 jobs:
@@ -71,8 +76,10 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Packaged on every run, even when Open VSX already has this version, because the file is also
+      # what gets attached to the GitHub release - and that file is how the extension reaches the
+      # Visual Studio Marketplace, which is uploaded by hand.
       - name: Package
-        if: steps.already.outputs.published == 'false'
         working-directory: extensions/vscode
         run: npx -y @vscode/vsce@latest package --allow-missing-repository --skip-license
 
@@ -90,8 +97,30 @@ jobs:
           fi
           npx -y ovsx@latest publish *.vsix
 
+      # The Visual Studio Marketplace - which is what VS Code itself searches - is published by
+      # uploading this file on the publisher page by hand. Automating it needs a token from an Azure
+      # DevOps organisation, and creating one of those now requires an active Azure subscription
+      # with a card behind it (Microsoft's own prerequisites say so). Attaching the file to the
+      # release is the part that does not need any of that: every version then has a build anybody
+      # can download and upload, instead of a CI artifact that expires.
+      - name: Attach the extension to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: extensions/vscode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" ./*.vsix --clobber
+            echo "Attached to release $tag. To publish to the Visual Studio Marketplace, download it"
+            echo "and upload it at https://marketplace.visualstudio.com/manage/publishers/hmamut39"
+          else
+            echo "No release exists for $tag yet, so there is nothing to attach it to."
+            echo "Create the release and re-run this workflow, or upload the artifact below by hand."
+          fi
+
       - name: Keep the built extension on the run
-        if: always() && steps.already.outputs.published == 'false'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tewip-vsix

@@ -138,17 +138,19 @@ and you always get the current version.
 
 ### The editor extension (VS Code, Cursor, Windsurf, VSCodium)
 
-Download **[tewip-0.5.0.vsix](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)**, then in the
-editor press `Ctrl+Shift+P` and run **Extensions: Install from VSIX…**. It needs the command line:
-`npm install -g tewip-ai`.
+**Open the Extensions pane and search for "Tewip".** It is in both registries, so that works in
+VS Code, Cursor, Windsurf, VSCodium, Gitpod and Eclipse Theia:
 
-Press `Ctrl+Shift+P` and type "Tewip" for: *Explain a test report…*, *Why did CI fail on this
-branch?*, *Risk review of this change*, *Which flaky tests to quarantine*, *Check secrets and
-dependencies*, and *What our corrections add up to*. The editor's AI assistant also picks Tewip up
-as an MCP server with nothing to configure.
+- **VS Code** — [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=hmamut39.tewip)
+- **Cursor, Windsurf, VSCodium, Gitpod, Theia** — [Open VSX](https://open-vsx.org/extension/hmamut39/tewip)
 
-It is not in the Visual Studio Marketplace: publishing there now requires an Azure subscription,
-which means a credit card for a free extension. The file above installs exactly the same thing.
+Or install the `.vsix` attached to any [release](https://github.com/hmamut39/tewip/releases) with
+**Extensions: Install from VSIX…**. Either way it needs the command line: `npm install -g tewip-ai`.
+
+Press `Ctrl+Shift+P` and type "Tewip" for: *Is this work done?*, *Can everybody use this?*, *Could
+these tests ever fail?*, *Would the tests catch a bug in this file?*, *Which tests could notice this
+change?*, *What will this migration do to a live database?*, *Why did CI fail on this branch?*, and
+more. The editor's AI assistant also picks Tewip up as an MCP server with nothing to configure.
 
 ### 2. From any AI assistant, through MCP (the whole IT team)
 

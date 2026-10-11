@@ -2418,6 +2418,41 @@ This is the second of the three things that matter, and the only one of them tha
 one real team for two weeks, which is still unmet and cannot be written. The third is Tewip learning
 from its own corrections across projects, which `learn` only half does.
 
+### Phase 41: The Field Trial
+
+The Definition of Success below asks for two weeks of real team usage, and that cannot be written -
+it needs people. But a large part of what a team would find in two weeks is *correctness at scale*,
+and that can be had today by using Tewip the way a team would, on codebases nobody here wrote.
+
+So: real projects in the domains that matter, not invented ones. Writing a pretend CVS pharmacy
+codebase and running Tewip over it would be grading its own homework - the fabricated project would
+match the same assumptions the scanner does, which is the fixtures problem this project rejects.
+
+**alphagov/govuk-frontend**, the UK government's design system, is the harshest test available for
+`access`: built by accessibility specialists under a legal obligation. Tewip reported **15 barriers**.
+
+Twelve were one bug. The examples gallery passes markup as a *string argument* -
+`{{ govukLabel({ "text": "<h1> govuk-label--xl" }) }}` - and Tewip read that `<h1>` as a real heading,
+poisoning the outline of a page whose headings are perfectly ordered. The same class as the template
+literal in Phase 28, in a new place. Template expressions are now blanked, with the delimiters kept,
+because `<button>{{ label }}</button>` must still read as content the file cannot see and
+`alt="{{ alt }}"` must still count as present. Template comments - `{# #}` and `{% comment %}` - go too.
+
+**15 became 3, and all three are real**, verified by hand against the source: a colour input whose
+label has neither `for` nor text, and two checkboxes whose label says `for="foo"` while the input is
+`id="foo1"` - a label pointing at nothing, in the UK government's own review app.
+
+**firefly-iii**, a real finance application with 24.8k stars, found the second thing: the front door
+reported **no migrations**, and it has 61. Laravel - one of the most used web frameworks there is -
+was not a dialect, while `schema` advertised nine. It is one now, written against those 61 files, and
+all 61 are read. The shape that mattered: in real Laravel the rollback is often written *above* the
+forward path and holds all the drops, so firefly-iii's `add_running_balance` correctly reports nothing
+while `drop_tele_table` correctly reports dropping `telemetry`.
+
+Both findings came from using the thing rather than from reading a list of what it supports. That is
+the whole argument for the field trial, and it is worth repeating on the next two projects - Saleor
+for Django and OpenMRS for Java.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

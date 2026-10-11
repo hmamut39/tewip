@@ -8,10 +8,10 @@
 // Only what can be read plainly is judged. A migration that builds its SQL in a loop, or calls out to
 // application code, is reported as unread rather than cleared - the same rule as everywhere else here.
 import type { Finding, Risk } from './statements.ts';
-import { ALEMBIC, DJANGO, RAILS, type Operation } from './dialect-rules.ts';
+import { ALEMBIC, DJANGO, LARAVEL, RAILS, type Operation } from './dialect-rules.ts';
 import { EFCORE, KNEX, LIQUIBASE, SEQUELIZE } from './dialect-rules-node.ts';
 
-export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'sequelize' | 'knex' | 'efcore' | 'liquibase' | 'unknown';
+export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'sequelize' | 'knex' | 'efcore' | 'liquibase' | 'laravel' | 'unknown';
 
 export function dialectOf(file: string, text: string): Dialect {
   const path = file.split('\\').join('/').toLowerCase();
@@ -26,6 +26,9 @@ export function dialectOf(file: string, text: string): Dialect {
   // strings passed to queryRunner.query(). The SQL is right there and perfectly readable; only the
   // wrapper was unfamiliar, so every TypeORM project was told Tewip could not read its migrations
   // at all - and on a Node backend that is most of them.
+  // Laravel, before the generic checks: its migrations are PHP and would otherwise fall through
+  // to 'unknown'. firefly-iii has 61 of them and Tewip could not read a word.
+  if (/Illuminate.Database.Migrations.Migration|\bSchema::(?:table|create|drop|dropIfExists|connection)\s*\(/.test(text)) return 'laravel';
   if (/\bMigrationInterface\b|\bqueryRunner\.query\s*\(/.test(text)) return 'typeorm';
   if (/\bqueryInterface\.\w+\s*\(/.test(text)) return 'sequelize';
   if (/\bknex\.schema\b|\bexports\.(?:up|down)\s*=\s*(?:async\s*)?function\s*\(\s*knex\b/.test(text)) return 'knex';
@@ -44,6 +47,7 @@ const BY_DIALECT: Record<Exclude<Dialect, 'sql' | 'unknown'>, Operation[]> = {
   knex: KNEX,
   efcore: EFCORE,
   liquibase: LIQUIBASE,
+  laravel: LARAVEL,
 };
 
 /** Findings from a framework migration, with the line each one sits on. */
@@ -114,6 +118,8 @@ export function forwardOnly(dialect: Dialect, text: string): string {
       (dialect === 'sequelize' && /^\s*down\s*:/.test(line)) ||
       (dialect === 'knex' && /^\s*(?:exports\.down|module\.exports\.down)\s*=/.test(line)) ||
       (dialect === 'efcore' && /^\s*protected\s+override\s+void\s+Down\s*\(/.test(line)) ||
+      // Laravel's rollback, which in real files often comes *before* up().
+      (dialect === 'laravel' && /^\s*(?:public\s+)?function\s+down\s*\(/.test(line)) ||
       // Liquibase puts the reverse inside the change itself rather than in a second method.
       (dialect === 'liquibase' && /^\s*<rollback\b/.test(line));
     if (down) {

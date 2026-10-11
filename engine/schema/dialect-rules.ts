@@ -178,4 +178,53 @@ const ALEMBIC: Operation[] = [
 // `.sql` dialect uses. The exhaustive Record is what made this a compile error rather than a
 // TypeORM migration silently producing no findings at all.
 
+
+/**
+ * Laravel. Found missing by running Tewip over firefly-iii, a real finance application with **61
+ * migrations Tewip could not read a word of** - and Laravel is one of the most used web frameworks
+ * there is, while `schema` advertised nine dialects.
+ *
+ * Structurally it is Knex's shape: the table is named by `Schema::table('accounts', ...)` and the
+ * operation happens inside the closure, so the two are matched together across the lines between.
+ */
+export const LARAVEL: Operation[] = [
+  {
+    find: new RegExp(String.raw`Schema::(?:table|connection\(.*?\)->table)\(\s*${STR}[\s\S]{0,600}?->dropColumn\(\s*${STR}`, 'i'),
+    risk: 'breaks-old-code',
+    what: (m) => `drops ${m[1]}.${m[2]}`,
+    instead: 'deploy code that no longer selects or writes the column, then drop it in a later migration. Eloquent caches the column list, so the running version keeps selecting it',
+    table: (m) => m[1],
+    column: (m) => m[2],
+  },
+  {
+    find: new RegExp(String.raw`Schema::(?:table|connection\(.*?\)->table)\(\s*${STR}[\s\S]{0,600}?->renameColumn\(\s*${STR}`, 'i'),
+    risk: 'breaks-old-code',
+    what: (m) => `renames ${m[1]}.${m[2]}`,
+    instead: 'add the new column, write to both, move the readers, then remove the old one',
+    table: (m) => m[1],
+    column: (m) => m[2],
+  },
+  {
+    find: new RegExp(String.raw`Schema::drop(?:IfExists)?\(\s*${STR}`, 'i'),
+    risk: 'destroys-data',
+    what: (m) => `drops the table ${m[1]}`,
+    instead: 'stop reading the table, deploy that, then drop it once nothing refers to it',
+    table: (m) => m[1],
+  },
+  {
+    find: new RegExp(String.raw`Schema::(?:table|connection\(.*?\)->table)\(\s*${STR}[\s\S]{0,600}?->index\(`, 'i'),
+    risk: 'locks-writes',
+    what: (m) => `builds an index on ${m[1]} while holding a lock that blocks writes to it`,
+    instead: 'build it with a raw CREATE INDEX CONCURRENTLY through DB::statement, or accept the lock if the table is small',
+    table: (m) => m[1],
+  },
+  {
+    find: new RegExp(String.raw`Schema::(?:table|connection\(.*?\)->table)\(\s*${STR}[\s\S]{0,600}?->foreign\(`, 'i'),
+    risk: 'locks-writes',
+    what: (m) => `adds a foreign key to ${m[1]}, which checks every existing row under a lock on both tables`,
+    instead: 'add it NOT VALID and validate it afterwards, which takes a weaker lock',
+    table: (m) => m[1],
+  },
+];
+
 export { DJANGO, RAILS, ALEMBIC };

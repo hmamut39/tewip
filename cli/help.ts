@@ -167,7 +167,7 @@ Usage:
                                     that break the version still running during a deploy, destroy data,
                                     block writes while they run, or cannot be undone - and searches your
                                     code for what still uses the column it takes away. Reads SQL,
-                                    Django, Rails, Alembic, TypeORM, Sequelize, Knex, EF Core and
+                                    Django, Rails, Alembic, TypeORM, Sequelize, Knex, Laravel, EF Core and
                                     Liquibase - so Prisma, Drizzle, Flyway and golang-migrate too,
                                     since those emit plain SQL - and says so when it cannot read one.
                                     It judges only the forward path, never the rollback. No cost.

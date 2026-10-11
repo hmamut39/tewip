@@ -76,7 +76,23 @@ function withoutNonMarkup(source: string, jsLike: boolean): string {
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, blank)
     .replace(/<script\b[\s\S]*?<\/script\s*>/gi, blank)
     .replace(/<style\b[\s\S]*?<\/style\s*>/gi, blank);
-  return jsLike ? stripped.replace(/`(?:[^`\\]|\\[\s\S])*`/g, blank) : stripped;
+  // A template expression is code, not markup, and real templates put markup *inside* it: GOV.UK's
+  // own examples gallery passes `{{ govukLabel({ "text": "<h1> govuk-label--xl" }) }}`, and reading
+  // that `<h1>` as a heading poisoned the outline so badly that twelve heading skips were reported
+  // on a page whose headings are perfectly ordered - on the design system built by the UK
+  // government's accessibility specialists, which is as wrong as this check can be.
+  //
+  // The delimiters are kept and only the contents blanked, which matters: `<button>{{ label }}</button>`
+  // must still read as content this file cannot see, so the button is asked about rather than
+  // called empty, and `alt="{{ alt }}"` must still count as an alt attribute that is present.
+  const withoutExpressions = stripped
+    // A template comment is a comment: Jinja, Nunjucks and Twig write `{# ... #}`, and Django and
+    // Jinja also have a `{% comment %}` block. Neither renders, so neither is markup.
+    .replace(/\{#[\s\S]*?#\}/g, blank)
+    .replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/gi, blank)
+    .replace(/\{\{[\s\S]*?\}\}/g, (m) => `{{${m.slice(2, -2).replace(/[^\n]/g, ' ')}}}`)
+    .replace(/\{%[\s\S]*?%\}/g, (m) => `{%${m.slice(2, -2).replace(/[^\n]/g, ' ')}%}`);
+  return jsLike ? withoutExpressions.replace(/`(?:[^`\\]|\\[\s\S])*`/g, blank) : withoutExpressions;
 }
 
 /** Files whose markup is embedded in JavaScript, where a backtick string is not page markup. */

@@ -253,3 +253,49 @@ describe('server-rendered templates', () => {
     assert.deepEqual(rules(django, 'technical_404.html'), []);
   });
 });
+
+// Phase 41: markup inside a template expression is not markup.
+//
+// Found by running `access` over alphagov/govuk-frontend - the UK government's design system, built
+// by accessibility specialists under a legal obligation, which is the harshest available test. It
+// reported 15 barriers. Twelve were one bug: the examples gallery passes markup as a *string
+// argument*, `{{ govukLabel({ "text": "<h1> govuk-label--xl" }) }}`, and reading that `<h1>` as a
+// real heading poisoned the outline of a page whose headings are perfectly ordered.
+//
+// The same class as the template literal in Phase 28, in a new place. Blanking has to keep the
+// delimiters, or the two things Phase 37 got right would break.
+describe('a template expression is code, not markup', () => {
+  it('does not read a tag inside a Nunjucks or Twig expression', () => {
+    const gallery = [
+      '<h1>Labels, legends and headings</h1>',
+      '<h2>Text input</h2>',
+      '{{ govukLabel({',
+      '  "text": "<h1> govuk-label--xl",',
+      '  "classes": "govuk-label--xl"',
+      '}) }}',
+      '<h3>isPageHeading: true</h3>',
+    ].join(NL);
+    // h1, h2, h3 in order. The <h1> in the string must not make this look like a skip.
+    assert.deepEqual(rules(gallery, 'index.njk'), []);
+  });
+
+  it('nor inside a Jinja or Django block tag', () => {
+    const django = ['<h1>Title</h1>', '{% comment %}<h4>not a heading</h4>{% endcomment %}', '<h2>Next</h2>'].join(NL);
+    assert.deepEqual(rules(django, 'page.html'), []);
+  });
+
+  it('but the braces stay, so a button filled by the template is still asked about', () => {
+    // If blanking removed the delimiters this would become "contains no text" - a barrier - and
+    // every well-written template in Laravel, Django and Symfony would be condemned.
+    assert.equal(confidenceOf('<button>{{ label }}</button>', 'button-name', 'a.njk'), 'ask-a-person');
+  });
+
+  it('and an attribute the template fills is still present', () => {
+    assert.deepEqual(rules('<img src="a.png" alt="{{ caption }}">', 'a.njk'), []);
+    assert.deepEqual(rules('<input type="text" aria-label="{{ hint }}">', 'a.njk'), []);
+  });
+
+  it('a real heading skip is still caught in a template', () => {
+    assert.deepEqual(rules(['<h1>One</h1>', '{{ something }}', '<h3>Three</h3>'].join(NL), 'a.njk'), ['heading-skip']);
+  });
+});

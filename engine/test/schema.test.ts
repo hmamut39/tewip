@@ -366,3 +366,89 @@ describe('Sequelize, Knex, EF Core and Liquibase', () => {
     assert.equal(findings[0].column, 'Nickname');
   });
 });
+
+// Phase 41: Laravel, found missing by using Tewip rather than by reading a list.
+//
+// Running the front door over firefly-iii - a real finance application, 24.8k stars - reported no
+// migrations. It has 61. Laravel is one of the most used web frameworks there is, and `schema`
+// advertised nine dialects without it.
+//
+// The shapes below are from those 61 real files, including the one that matters most: in real
+// Laravel the rollback often comes *before* the forward path, and the drops live in it.
+describe('Laravel migrations', () => {
+  const seen = (text: string, file = 'database/migrations/2024_01_01_000000_x.php') => {
+    const dialect = dialectOf(file, text);
+    return { dialect, findings: readFramework(dialect as 'django', forwardOnly(dialect, text)) };
+  };
+
+  const dropInUp = sql(
+    '<?php',
+    'use Illuminate\Database\Migrations\Migration;',
+    'return new class extends Migration {',
+    '    public function up(): void',
+    '    {',
+    "        Schema::table('budget_limits', static function (Blueprint $table): void {",
+    "            $table->dropColumn('repeats');",
+    '        });',
+    '    }',
+    '};',
+  );
+
+  const dropInDown = sql(
+    '<?php',
+    'use Illuminate\Database\Migrations\Migration;',
+    'return new class extends Migration {',
+    '    public function down(): void',
+    '    {',
+    "        Schema::table('transactions', static function (Blueprint $table): void {",
+    "            $table->dropColumn('balance_after');",
+    '        });',
+    '    }',
+    '',
+    '    public function up(): void',
+    '    {',
+    "        Schema::table('transactions', static function (Blueprint $table): void {",
+    "            $table->decimal('balance_after', 32, 12)->nullable();",
+    '        });',
+    '    }',
+    '};',
+  );
+
+  it('is recognised rather than reported as unreadable', () => {
+    assert.equal(seen(dropInUp).dialect, 'laravel');
+    assert.equal(dialectOf('x.php', "Schema::create('users', function ($t) {});"), 'laravel');
+  });
+
+  it('names a column dropped in the forward path', () => {
+    const { findings } = seen(dropInUp);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].risk, 'breaks-old-code');
+    assert.equal(findings[0].table, 'budget_limits');
+    assert.equal(findings[0].column, 'repeats');
+  });
+
+  it('says nothing when the drop is in down(), even when down() comes first', () => {
+    // Real Laravel does this, and firefly-iii's add_running_balance migration is exactly it: the
+    // rollback is written above the forward path and holds all three drops.
+    assert.deepEqual(seen(dropInDown).findings, []);
+  });
+
+  it('names a dropped table and a rename', () => {
+    const dropped = seen(sql('<?php', 'use Illuminate\Database\Migrations\Migration;', 'public function up(): void', '{', "    Schema::dropIfExists('telemetry');", '}'));
+    assert.equal(dropped.findings[0].risk, 'destroys-data');
+    assert.equal(dropped.findings[0].table, 'telemetry');
+
+    const renamed = seen(
+      sql('<?php', 'use Illuminate\Database\Migrations\Migration;', 'public function up(): void', '{', "    Schema::table('tags', function (Blueprint $t) {", "        $t->renameColumn('tagMode', 'tag_mode');", '    });', '}'),
+    );
+    assert.match(renamed.findings[0].what, /renames tags\.tagMode/);
+  });
+
+  it('an index or a foreign key on an existing table takes a lock', () => {
+    const indexed = seen(
+      sql('<?php', 'use Illuminate\Database\Migrations\Migration;', 'public function up(): void', '{', "    Schema::table('transactions', function (Blueprint $t) {", "        $t->index(['deleted_at'], 'idx_tj_deleted');", '    });', '}'),
+    );
+    assert.equal(indexed.findings[0].risk, 'locks-writes');
+    assert.match(indexed.findings[0].what, /builds an index on transactions/);
+  });
+});

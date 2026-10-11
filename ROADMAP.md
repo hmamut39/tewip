@@ -1950,6 +1950,60 @@ stronger evidence, not weaker - and never fails a build on advice, whatever impa
 Still not reached: everything in the list that no tool settles. A run also says nothing about a page it
 did not open or a state it did not reach, and the report says so with the page count every time.
 
+### Phase 30: Is This Change Slower? (`tewip perf`)
+
+Tewip has imported k6 and JMeter results since the polyglot work, and never had an opinion about them.
+It could tell you a load test failed; it could not tell you the thing every team actually asks before a
+release, which is whether the change made anything slower and whether that matters.
+
+The reason that question is hard is not arithmetic. Reporting "p95 went from 180ms to 210ms, +16%" takes
+four lines and is worthless, because nobody knows whether 16% is the change or the laptop. Performance
+numbers move between identical runs. **Four real k6 runs of unchanged code, measured here, gave p95 of
+60.8, 60.9, 61.4 and 62.8ms** - a 3% spread from nothing at all. A tool that calls that a regression is
+muted within a week, which is the same failure as the accessibility scanners in Phase 28.
+
+So `tewip perf` answers two questions, separately, because they fail separately:
+
+- **Did your own thresholds hold?** The team already wrote what "fast enough" means, in their k6 script.
+  Tewip reads the result rather than making them write a budget twice.
+- **Is it slower than it was?** Answered only from repeated baselines, and **refused below three of
+  them**, because one run against one run cannot tell a regression from a busy machine. Against the
+  three real baselines above, a fourth identical run at 61.4ms is correctly *not* called a regression,
+  and a genuine 282.5ms run is, at +364%.
+
+A k6 summary carries no raw samples - only avg, min, med, p90, p95, max - so no confidence interval is
+available and nothing here pretends otherwise. The test is crude on purpose: a value must fall outside
+everything the baselines produced, by more than the width of their own spread, with a 5% floor so that
+three suspiciously identical runs cannot make a 1% move look significant. Better to miss a real 4%
+regression than to cry wolf, because the second one costs the team the tool.
+
+Status (2026-10-11): **built** as `tewip perf`, and as the MCP tool `is_this_slower`.
+
+Written against k6 v2.3.0 run against a real server, which is the only reason two things are right:
+
+1. **A classic summary writes `{"p(95)<120": true}` when the threshold is BREACHED.** It reads like "the
+   condition holds" and means the opposite. The run that produced `true` is the one whose p95 was 282ms
+   against a 120ms limit. From memory this would have been read backwards, and every failing run
+   reported as passing - the worst possible direction for a bug of this kind.
+2. **`--new-machine-readable-summary` records no threshold results at all.** The word "threshold" appears
+   in that file only inside `config.script`, which is a copy of the test source. A team on that flag has
+   no pass or fail anywhere in their export. Tewip returns `null` rather than an empty list, and the
+   report says "this export cannot tell me" rather than "nothing was breached".
+
+Recording a baseline is deliberately **not** automatic. A tool that files every run it sees into the
+baseline ratchets: today's regression becomes tomorrow's normal, the comparison keeps saying "within
+range", and a service triples in latency over a quarter without a single report ever being wrong. So
+`--record` is explicit, the MCP tool never records at all, and the report says every time whether it did.
+
+It never predicts a duration, a capacity or a user impact, and says so in every report: it cannot see
+the production hardware, the real data volume or the real traffic, and an invented number for any of
+those is worse than silence.
+
+Not built: judging JMeter. A `.jtl` carries one row per request, which is a real sample set and would
+support a proper non-parametric test rather than this crude range check - a better answer than k6 can
+give. It is not written because there is no JMeter here to produce real output from, and this project
+does not write a parser against a remembered schema. JMeter results are still imported for failures.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

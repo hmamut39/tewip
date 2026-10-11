@@ -576,6 +576,58 @@ With `--json` the verdict is **sealed**: editing `not-ready` to `ready` in the f
 fail, so a verdict that travels into a ticket or a release note can be checked rather than trusted. It is
 also an MCP tool, so an agent can ask whether its own work is done before saying that it is.
 
+## Is this change slower? (Phase 30, new)
+
+```bash
+tewip perf summary.json --record            # on main: add this run to the baseline
+tewip perf summary.json --strict            # on a branch: fail the build on a real regression
+```
+
+Tewip has imported k6 results for a while and never had an opinion about them. Now it answers the
+question every team asks before a release.
+
+**The hard part is not the arithmetic.** "p95 went from 180ms to 210ms, +16%" is four lines of code
+and worthless, because nobody knows whether 16% is the change or the laptop. Here are **four real k6
+runs of code that did not change**:
+
+```
+run 1   p95 = 60.9ms
+run 2   p95 = 60.8ms
+run 3   p95 = 62.8ms
+run 4   p95 = 61.4ms
+```
+
+A 3% spread from nothing at all. A tool that calls that a regression gets switched off.
+
+So Tewip answers **two questions separately**, because they fail separately:
+
+| | |
+|---|---|
+| **Did your own thresholds hold?** | You already wrote what "fast enough" means in your k6 script. Tewip reads the result instead of asking you to write a budget twice. |
+| **Is it slower than it was?** | Answered **only** from three or more recorded baselines. Below that: *cannot say*. |
+
+Given those three real baselines, a fourth identical run at 61.4ms is **not** called a regression —
+and a genuine one is:
+
+```
+- `http_req_duration` p95 282.5ms — **slower**
+  - baseline 60.8ms–62.8ms over 3 runs, middle 60.9ms
+  - 282.5ms is outside everything 3 baseline runs produced (60.8-62.8ms) by more than
+    their own spread, so the runs cannot explain it. That is +364% on the middle run.
+```
+
+**Recording is deliberately not automatic.** A tool that files every run into the baseline ratchets:
+today's regression becomes tomorrow's normal, the comparison keeps saying "within range", and a
+service triples in latency over a quarter without one report ever being wrong. `--record` on main,
+compare everywhere else.
+
+**It never predicts a duration, a capacity, or what a user will feel.** It cannot see your production
+hardware, your real data volume or your real traffic, and every report says so.
+
+One more thing it refuses: if your summary came from `--new-machine-readable-summary`, that export
+records **no threshold results at all** — the word appears in it only inside a copy of your script.
+Tewip says "this export cannot tell me" rather than "nothing was breached".
+
 ## Can everybody use it? (Phase 28, new)
 
 ```bash

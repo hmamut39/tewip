@@ -118,6 +118,16 @@ Usage:
                                     is what was asked for covered. Answers ready, not ready, or cannot
                                     say - and cannot say is never rounded up to ready. --json writes a
                                     sealed verdict that can be checked later. No model, no cost.
+  tewip perf <k6-summary.json> [--record] [--label checkout] [--strict] [--out perf.md]
+                                    Is this change slower, and does it matter? Reads a k6 run and
+                                    answers two questions separately: did the thresholds you wrote
+                                    hold, and is this slower than it was. The second is answered only
+                                    from repeated baselines - with fewer than three it says cannot
+                                    say, because one run against one run cannot tell a regression
+                                    from a busy machine. --record adds a run to the baseline, and is
+                                    deliberately not automatic: a regression recorded by accident
+                                    becomes next week's normal. It never predicts a duration or a
+                                    capacity. No model, no cost.
   tewip access [<file or directory>] [--report axe.json] [--strict] [--out access.md]
                                     Can everybody use this? Reads your markup and names the barriers
                                     that reading alone can prove - a picture with no alt text, a field

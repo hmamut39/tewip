@@ -21,6 +21,24 @@ export async function proveVerb(verb: string, args: string[]): Promise<boolean> 
       });
       return true;
     }
+    case 'perf': {
+      const { runPerf } = await import('../engine/perf/perf-command.ts');
+      const paths = args.filter((a, i) => !a.startsWith('--') && !['--out', '--label'].includes(args[i - 1] ?? ''));
+      if (paths.length === 0) {
+        console.error('tewip perf needs the JSON from a k6 run: tewip perf summary.json [--record] [--label checkout]');
+        process.exitCode = 1;
+        return true;
+      }
+      runPerf({
+        root: process.cwd(),
+        summary: paths[0],
+        label: flag(args, 'label'),
+        record: args.includes('--record'),
+        out: flag(args, 'out'),
+        gate: args.includes('--strict'),
+      });
+      return true;
+    }
     case 'access': {
       const { runAccess } = await import('../engine/access/access-command.ts');
       const paths = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out' && args[i - 1] !== '--report');

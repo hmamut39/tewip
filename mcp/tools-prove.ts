@@ -143,6 +143,40 @@ server.registerTool(
 );
 
 server.registerTool(
+  'is_this_slower',
+  {
+    title: 'Is this change slower, and does it matter?',
+    description:
+      "Judges a k6 load-test run, rather than restating its numbers. Two answers kept apart: whether the thresholds the team wrote in their own k6 script held, and whether this run is slower than the recorded baseline. The second is answered only from three or more baseline runs - below that it returns 'cannot say', because one run against one run cannot distinguish a regression from a busy machine, and a percentage printed without that distinction is how performance tooling gets ignored. It never predicts a duration, a capacity or a user impact, and it says what the run does not cover. Use it when asked whether a change made something slower.",
+    inputSchema: {
+      project,
+      summary: z.string().describe('Path to the JSON from `k6 run --summary-export=summary.json`'),
+      label: z.string().optional().describe('Which load test this is, so two different suites do not become each other baseline'),
+    },
+    annotations: readOnly,
+  },
+  ({ project: root, summary, label }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      // Never records: an assistant adding runs to a team's baseline unasked is how a regression
+      // silently becomes the new normal. Recording stays a deliberate act on the command line.
+      const { readK6Summary, requestCount } = await import('../engine/perf/k6.ts');
+      const { compareMetric, timingsToCompare } = await import('../engine/perf/compare.ts');
+      const { baselineFor, storedRuns } = await import('../engine/perf/history.ts');
+      const { renderPerf } = await import('../engine/perf/perf-command.ts');
+      const { isAbsolute: abs, resolve } = await import('node:path');
+
+      const run = readK6Summary(abs(summary) ? summary : resolve(root, summary));
+      const name = label ?? 'default';
+      const history = storedRuns(root, name);
+      const comparisons = timingsToCompare(run)
+        .map((m) => compareMetric(m, run.timings[m].p95, baselineFor(history, m)))
+        .filter((c) => c.now > 0 || c.baselineHigh > 0);
+      return renderPerf(run, comparisons, requestCount(run), name, history.length, false);
+    }),
+);
+
+server.registerTool(
   'accessibility_barriers',
   {
     title: 'Can everybody use this interface?',

@@ -2287,6 +2287,26 @@ Two files passed the 300-line rule doing this, so the four per-language readers 
 
 Still not read: Elixir, Swift, Haskell and the rest - and `vouch` says so rather than clearing them.
 
+### Phase 37: The Server-Rendered Templates
+
+`access` read HTML, JSX, TSX, Vue, Svelte, Astro, ERB and PHP, and would not open a Blade, Twig, Jinja,
+Razor, Handlebars, Liquid, Nunjucks or EJS file - which between them are most of the web's actual HTML,
+and every Laravel, Symfony, Django, Flask, .NET and Rails app.
+
+The happy part: reading laravel/laravel's `welcome.blade.php`, symfony/demo's blog index and Django's own
+`technical_404.html` first showed that the scanner already handled them correctly once it would open
+them. `{{ $caption }}` is a brace expression, which the reader has treated as "a value present but not
+readable here" since Phase 28 because that is what JSX's `{caption}` is. So `alt="{{ $alt }}"` is an alt
+attribute, a `<button>{{ $label }}</button>` is a question rather than an accusation, and `{% if %}` is
+not mistaken for content. Most of this phase was recognising the file.
+
+Status (2026-10-11): **built**. Verified on the three real templates above - no false accusations, and
+Twig's three genuine questions still asked.
+
+The lesson repeats: the gap was not in the judgement but in what Tewip would agree to look at, which is
+the same shape as Phase 36, where PHP's assertions had been understood all along and the file was never
+opened.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

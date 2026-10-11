@@ -1,7 +1,7 @@
 {
   "name": "tewip",
   "displayName": "Tewip",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "description": "Proves the work: triages failing tests, says whether a test could ever fail, breaks your code to see whether the tests notice, reads what a migration does to a live database, and gives one verdict on whether a change is done.",
   "author": {
     "name": "Mamuti Aishan (Hasan)",

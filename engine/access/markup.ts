@@ -209,4 +209,4 @@ export function labelledBy(tag: Tag): { named: boolean; unknown: boolean } {
 }
 
 /** Files whose markup this scanner reads. */
-export const MARKUP = /\.(?:html?|jsx|tsx|vue|svelte|astro|erb|php)$/i;
+export const MARKUP = /\.(?:html?|jsx|tsx|vue|svelte|astro|erb|php|twig|jinja2?|j2|cshtml|razor|hbs|handlebars|mustache|ejs|liquid|njk|blade\.php)$/i;

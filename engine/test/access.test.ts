@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { JS_LIKE, tags } from '../access/markup.ts';
+import { JS_LIKE, MARKUP, tags } from '../access/markup.ts';
 import { checkFile } from '../access/checks.ts';
 import { findBarriers, keyOf, readAccepted, renderAccess, runAccess } from '../access/access-command.ts';
 import { NOT_CHECKED, RULES } from '../access/wcag.ts';
@@ -208,5 +208,48 @@ describe('the report', () => {
     const root = project({ 'src/__tests__/a.test.tsx': '<img src="a.png">', 'src/App.tsx': '<img src="b.png">' });
     const { findings } = findBarriers(root);
     assert.deepEqual(findings.map((f) => f.file), ['src/App.tsx']);
+  });
+});
+
+// Phase 37: the server-rendered templates. Laravel's Blade, Symfony's Twig, Django and Flask's
+// Jinja, .NET's Razor, Angular, Handlebars and the rest - which between them are most of the web's
+// actual HTML, and none of which `access` would even open.
+//
+// The shapes below come from laravel/laravel's welcome.blade.php, symfony/demo's blog index and
+// Django's own technical_404.html. The happy discovery was that the reader already handled
+// `{{ ... }}` correctly - a brace expression is a value it cannot read, exactly like JSX's - so
+// most of this phase was recognising the file at all. These tests pin that it stays true.
+describe('server-rendered templates', () => {
+  const rules = (source: string, file: string) => check(source, file).map((f) => f.rule).sort();
+
+  it('opens the template languages at all', () => {
+    for (const file of ['welcome.blade.php', 'index.html.twig', 'page.jinja2', 'page.j2', 'View.cshtml', 'Page.razor', 'card.hbs', 'list.njk', 'row.liquid', 'item.ejs']) {
+      assert.equal(MARKUP.test(file), true, file);
+    }
+  });
+
+  it('a value the template fills in is a value, not a missing one', () => {
+    // alt="{{ $alt }}" is an alt attribute. Reporting it as missing would condemn every
+    // well-written template in Laravel, Django and Symfony.
+    assert.deepEqual(rules('<img src="/a.png" alt="{{ $caption }}">', 'a.blade.php'), []);
+    assert.deepEqual(rules('<img src="/a.png" alt="{{ caption }}">', 'a.html.twig'), []);
+    assert.deepEqual(rules('<input type="text" aria-label="{{ form.label }}">', 'a.jinja2'), []);
+  });
+
+  it('a button whose text the template fills in is asked about, not accused', () => {
+    assert.equal(confidenceOf('<button>{{ $label }}</button>', 'button-name', 'a.blade.php'), 'ask-a-person');
+    assert.equal(confidenceOf('<button>{% trans "Save" %}</button>', 'button-name', 'a.html.twig'), 'ask-a-person');
+  });
+
+  it('but a template that really leaves it out is still caught', () => {
+    assert.equal(confidenceOf('<img src="{{ $photo }}">', 'image-alt', 'a.blade.php'), 'barrier');
+    assert.equal(confidenceOf('<input type="text" placeholder="{{ hint }}">', 'input-label', 'a.html.twig'), 'barrier');
+  });
+
+  it('reads a real Laravel and a real Django page without inventing anything', () => {
+    const blade = '<html lang="{{ str_replace(\'_\', \'-\', app()->getLocale()) }}">\n<body>\n@if (Route::has(\'login\'))\n<a href="{{ url(\'/dashboard\') }}">Dashboard</a>\n@endif\n</body>\n</html>';
+    assert.deepEqual(rules(blade, 'welcome.blade.php'), []);
+    const django = '<html lang="en">\n<body>\n{% if reason %}<pre>{{ reason }}</pre>{% endif %}\n<table><tr><td>{{ request.path }}</td></tr></table>\n</body>\n</html>';
+    assert.deepEqual(rules(django, 'technical_404.html'), []);
   });
 });

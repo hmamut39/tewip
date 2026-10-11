@@ -701,6 +701,10 @@ tewip access src/components/Nav.tsx    # or just one
 tewip access --strict                  # fails the build on a barrier that stops somebody outright
 ```
 
+Reads **HTML, JSX, TSX, Vue, Svelte, Astro, ERB, PHP** and the server-rendered template languages —
+**Blade, Twig, Jinja, Razor, Handlebars, Liquid, Nunjucks, EJS** — which between them are most of the
+web's actual HTML.
+
 Accessibility is the one quality question that is also a legal one. The European Accessibility Act has
 been enforceable since June 2025, and it lands on the people who already own testing.
 

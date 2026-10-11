@@ -73,6 +73,27 @@ steps:
       autofix: 'true'                                  # optional: verified locator-fix PRs
 ```
 
+**Run the verdict verbs in CI** (Phase 38, new) — one step, as many checks as you want:
+
+```yaml
+- uses: hmamut39/tewip@main
+  with:
+    mode: check
+    checks: schema, access, vouch     # or: done, standards, perf, or `all`
+    gate: blocking                    # optional: fail the job on what a verb calls blocking
+```
+
+Every check runs even when an earlier one found something, so a pull request gets the whole picture
+in one push. The gate is deliberately narrower than the report: it fails only on what the verb itself
+calls blocking, because a gate that fires on advice teaches a team to pass `continue-on-error`. A
+check with nothing to look at says so and never fails the job — no migrations in the diff is not a
+pass.
+
+> **Use `@main` or `v0.46.0` or later.** Every tag before that shipped an `action.yml` whose
+> description contained an unquoted colon, which YAML reads as a nested mapping — the runner answered
+> *"Failed to load action.yml"* and the action never ran. It is fixed, and there is now a test over
+> the manifest so it cannot come back.
+
 On every run, the action:
 - **Developers:** posts one diagnosis comment on the pull request and keeps it updated. For each failure it says whether the change likely caused it, why, and what to do next.
 - **SDETs:** writes the triage board into the job summary.

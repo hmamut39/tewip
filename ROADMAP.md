@@ -2307,6 +2307,45 @@ The lesson repeats: the gap was not in the judgement but in what Tewip would agr
 the same shape as Phase 36, where PHP's assertions had been understood all along and the file was never
 opened.
 
+### Phase 38: The Verdict Verbs, Reachable From CI
+
+The Action could triage a failed run, build the team report and narrow a test run. Six of Tewip's
+strongest commands - `access`, `schema`, `vouch`, `standards`, `done`, `perf` - could not be reached
+from a workflow at all. That is the wrong way round: CI is where a team adopts a tool, and a migration
+reader that only runs on somebody's laptop reads very few migrations.
+
+`mode: check` with `checks: schema, access, vouch` runs as many as a team asks for in one step. Three
+decisions, each the difference between a check a team keeps and one they switch off:
+
+- **Every check runs**, even when an earlier one found something, so a pull request gets the whole
+  picture in one push rather than one problem at a time.
+- **The gate is narrower than the report.** `gate: blocking` fails only on what a verb itself calls
+  blocking; advice and open questions are reported without breaking the build. A gate that fires on
+  advice teaches a team to pass `continue-on-error`, and then it never fires again.
+- **A check with nothing to look at says so**, and never fails the job. No migrations in the diff is
+  not a pass and not a failure, and silently green is how a tool gets trusted for the wrong reason.
+
+The allowlist rule from the A2A surface applies here too, with a test: nothing that writes to the
+repository is reachable, because this runs on pull requests including from forks.
+
+Status (2026-10-11): **built**, and verified by running it rather than by reasoning about it.
+
+**And that verification earned its keep immediately.** A workflow that runs Tewip's own check mode
+against Tewip failed on its first execution: `action.yml`'s description was an unquoted scalar
+containing `": "`, which YAML reads as a nested mapping, so the runner answered **"Failed to load
+action.yml"**. The same line is in v0.34.0, v0.40.0 and v0.45.0 - **every release had shipped a GitHub
+Action that could not run**, while the README and the release notes told people
+`uses: hmamut39/tewip@v0.34.0` worked.
+
+Nothing had caught it because nothing had ever run the action. The publish workflows do not use it, and
+a manifest is data rather than code, so neither the typechecker nor 868 passing tests had an opinion
+about it. There is now a test over the manifest - no unquoted colons, no tabs, the keys GitHub requires,
+the description inside the Marketplace limit, every documented mode routed to a script that exists, and
+every check the CI script can run offered by the input that selects them.
+
+The general lesson is the one this project keeps relearning in new places: **a thing nobody has run is
+a thing nobody has checked**, however many tests surround it.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

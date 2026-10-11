@@ -2246,6 +2246,47 @@ After the fix, the four real files give: Knex nothing, Sequelize nothing (both c
 rollbacks), EF Core two findings, both verified to be in `Up()`, and Liquibase one, which is the real
 `dropColumn` in changeSet 3.
 
+### Phase 36: `vouch` for Ruby, PHP and Rust
+
+Triage has claimed Ruby, PHP and Rust for months. `vouch` refused to look at any of them, which made
+the product's own list of languages a half-truth. Closing it meant pointing Tewip at the reference
+suites - rails/activesupport (minitest), rspec-core's own specs, laravel/framework (PHPUnit) and
+ripgrep (Rust) - and **every one of them produced a wrong answer before it produced a right one.**
+
+Status (2026-10-11): **built**. `vouch` reads JavaScript, TypeScript, Python, Java, Kotlin, Scala, Go,
+C#, Ruby, PHP and Rust. Final result on those four real suites: **363 tests read, and not one wrongly
+condemned.** Everything below is what stood between those two sentences.
+
+1. **PHPUnit support had never once worked.** The pattern was `/\b\$this\s*->\s*assert/`, and a word
+   boundary needs a word character on one side: `$` is not one and the character before it in real
+   code is a space, so the regex could not match anything, ever. 88 of laravel's 128 real tests came
+   back as "Tewip would not judge" because `assertSame(...)` was being read as an unknown helper that
+   might assert. The pattern had been on the list since it was written and had never fired.
+2. **Minitest's `assert_equal "a", b` has no parentheses**, and every generic `assert` pattern wanted a
+   `.` or a `(`. 121 of the 154 real tests in Rails's `string_ext_test.rb` were reported as comparing
+   no value. That is the Phase 8 lesson for the fourth time: a missing entry in this vocabulary does
+   not produce a smaller answer, it produces a confident wrong one.
+3. **A Rust lifetime looks like an unterminated quote.** `&'a str` opened a string the detector never
+   closed, so it swallowed the rest of the file and all six of ripgrep's `#[test]` attributes were
+   discarded as "inside a string" - the file reported as having no tests, which reads like an answer.
+4. **RSpec's block form.** `expect { thing }.to raise_error(...)` is how every raise_error, change and
+   output matcher is written, and the pattern only knew `expect(...)`. It condemned tests in the
+   reference implementation of RSpec.
+5. **An `it` inside an `it` is a fixture, not a test.** rspec-core defines one as the thing whose
+   behaviour the enclosing test then asserts on. Python's finder had skipped nested `def`s for this
+   reason since Phase 22; Ruby now does the same, which removed nine phantom tests.
+6. **A `skip` inside a block the test hands to something else is not this test being skipped.** Same
+   file: `capture { skip "because" }` is fixture content, and the test around it asserts plenty. Only
+   a `skip` at the body's own indentation counts now, which is the rule Go's finder already used.
+7. **A body that is one call to something defined in another file** is a question, not an accusation.
+   Rails's `test_constantize` is a single line calling a shared helper that asserts plenty; "it
+   compares no value" would be a confident wrong answer, so it is `cannot-tell`.
+
+Two files passed the 300-line rule doing this, so the four per-language readers moved into
+`find-tests.ts` and `tests-in.ts` kept the questions every language shares.
+
+Still not read: Elixir, Swift, Haskell and the rest - and `vouch` says so rather than clearing them.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

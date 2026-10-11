@@ -121,9 +121,23 @@ describe('what it must not accuse', () => {
   });
 
   it('says nothing about a file it cannot read into, rather than clearing it', () => {
-    const vouched = vouchFile('cart.test.rb', `describe Cart do\n  it 'totals' do\n    expect(cart.total).to eq 2\n  end\nend`);
+    // Elixir, which Tewip genuinely does not read. Ruby used to be the example here and is not
+    // any more: Phase 36 taught it Ruby, PHP and Rust, and a test that pins a limitation has to
+    // be retired the day the limitation is.
+    const vouched = vouchFile('cart_test.exs', `defmodule CartTest do\n  test "totals" do\n    assert Cart.total() == 2\n  end\nend`);
     assert.deepEqual(vouched.judgements, []);
     assert.match(vouched.unread, /does not read this kind of file/);
+  });
+
+  it('reads Ruby now, in both of the shapes Ruby uses', () => {
+    const rspec = vouchFile('cart_spec.rb', `describe Cart do\n  it 'totals' do\n    expect(cart.total).to eq 2\n  end\nend`);
+    assert.equal(rspec.judgements.length, 1);
+    assert.equal(rspec.judgements[0].verdict, 'checks');
+    assert.equal(rspec.judgements[0].name, 'totals');
+
+    const minitest = vouchFile('cart_test.rb', `class CartTest < Minitest::Test\n  def test_totals\n    assert_equal 2, cart.total\n  end\nend`);
+    assert.equal(minitest.judgements.length, 1);
+    assert.equal(minitest.judgements[0].verdict, 'checks', 'assert_equal has no parentheses and is still a check');
   });
 
   it('will not vouch for source code, which is a different question', () => {
@@ -249,5 +263,95 @@ public void testPeekLargerThanLongMaxValue() throws IOException {
   it('reads a commented-out check as no check at all', () => {
     const text = `it('totals the order', () => {\n  const cart = build();\n  // expect(cart.total).toBe(2);\n});`;
     assert.equal(verdictOf('cart.test.js', text), 'crash-only', 'a check somebody commented out is the classic way a test stops checking');
+  });
+});
+
+// Phase 36: Ruby, PHP and Rust, which triage had claimed for months while vouch refused to look.
+//
+// Every shape below is copied from a real suite - rails/activesupport (minitest), rspec-core's own
+// specs, laravel/framework (PHPUnit) and ripgrep (Rust) - and each test here exists because the
+// real file produced a wrong answer before it was written.
+describe('Ruby, PHP and Rust', () => {
+  const verdicts = (file: string, text: string) => vouchFile(file, text).judgements.map((j) => j.verdict);
+
+  it("minitest's assert_equal counts, parentheses or not", () => {
+    // 121 of the 154 real tests in Rails's string_ext_test.rb were reported as comparing no value,
+    // because every generic `assert` pattern wanted a `.` or a `(` after the word.
+    assert.deepEqual(verdicts('a_test.rb', `class T < Minitest::Test\n  def test_x\n    assert_equal "a", y\n  end\nend`), ['checks']);
+    assert.deepEqual(verdicts('b_test.rb', `class T < Minitest::Test\n  def test_x\n    refute_nil y\n  end\nend`), ['checks']);
+    assert.deepEqual(verdicts('c_test.rb', `class T < Minitest::Test\n  def test_x\n    assert y.valid?\n  end\nend`), ['checks']);
+  });
+
+  it("RSpec's block form is an assertion", () => {
+    // `expect { ... }.to raise_error` is how every raise_error, change and output matcher is
+    // written, and missing it reported rspec-core's own specs as unable to fail.
+    const block = `describe X do\n  it 'raises' do\n    expect {\n      thing.run\n    }.to raise_error(ArgumentError)\n  end\nend`;
+    assert.deepEqual(verdicts('x_spec.rb', block), ['checks']);
+    const changing = `describe X do\n  it 'does not change' do\n    expect { thing.run }.not_to change { thing.count }\n  end\nend`;
+    assert.deepEqual(verdicts('y_spec.rb', changing), ['checks']);
+  });
+
+  it('still catches a Ruby test that really checks nothing', () => {
+    assert.deepEqual(verdicts('z_spec.rb', `describe X do\n  it 'does a thing' do\n    thing.run\n    other.run\n  end\nend`), ['crash-only']);
+  });
+
+  it("PHPUnit's \$this->assert counts, which it never did before", () => {
+    // The pattern was on the list from the start with a \b before the $, and a word boundary needs
+    // a word character - so it had never once matched. 88 of laravel's 128 real tests were
+    // "Tewip would not judge" as a result.
+    const php = `<?php\nclass T extends TestCase {\n    public function testWords(): void\n    {\n        \$this->assertSame('a', Str::words('a b', 1));\n    }\n}`;
+    assert.deepEqual(verdicts('StrTest.php', php), ['checks']);
+  });
+
+  it('reads a PHPUnit attribute and a @test docblock as well as the naming convention', () => {
+    const attribute = `<?php\nclass T extends TestCase {\n    #[Test]\n    public function wordsAreLimited(): void\n    {\n        self::assertSame('a', \$x);\n    }\n}`;
+    assert.deepEqual(verdicts('AttrTest.php', attribute), ['checks']);
+  });
+
+  it('reads a Rust #[test], and is not fooled by a lifetime', () => {
+    // Every one of ripgrep's six #[test] attributes was discarded as being inside a string,
+    // because `&'a str` looks like an opening quote that never closes.
+    const rust = `fn helper<'a>(s: &'a str) -> &'a str { s }\n\n#[test]\nfn totals() {\n    assert_eq!(2, cart_total());\n}`;
+    assert.deepEqual(verdicts('cart.rs', rust), ['checks']);
+  });
+
+  it('a Rust test that asserts nothing is still caught', () => {
+    assert.deepEqual(verdicts('x.rs', `#[test]\nfn runs() {\n    let x = compute();\n    drop(x);\n}`), ['crash-only']);
+  });
+
+  it('a body that is one call to something defined elsewhere is a question, not an accusation', () => {
+    // Rails's own test_constantize is one line calling a helper from a different file, which
+    // asserts plenty. Saying "it compares no value" about that is a confident wrong answer.
+    const delegating = `class T < Minitest::Test\n  def test_constantize\n    run_constantize_tests_on(&:constantize)\n  end\nend`;
+    assert.deepEqual(verdicts('d_test.rb', delegating), ['cannot-tell']);
+  });
+});
+
+describe('Ruby, and what is not actually a skip or a test', () => {
+  const vouch = (text: string) => vouchFile('x_spec.rb', text).judgements;
+
+  it('a skip inside a block the test hands to something else is not this test being skipped', () => {
+    // rspec-core's own specs pass a block containing `skip "because"` to a helper, as the fixture
+    // whose behaviour the test then asserts on. Reading it as "never runs" condemned the
+    // reference implementation of RSpec.
+    const text = `describe X do\n  it "reports a skipped example" do\n    result = capture do\n      skip "because"\n    end\n\n    expect(result.status).to eq :pending\n  end\nend`;
+    const [only] = vouch(text);
+    assert.equal(only.verdict, 'checks');
+  });
+
+  it('but a skip at the top of the body still means it never runs', () => {
+    const text = `describe X do\n  it "is turned off" do\n    skip "flaky"\n    expect(1).to eq 2\n  end\nend`;
+    assert.equal(vouch(text)[0].verdict, 'never-runs');
+  });
+
+  it('an it inside an it is a fixture, not a second test', () => {
+    const text = `describe X do\n  it "applies the hook" do\n    describe_successfully do\n      it "inner" do\n        sequence << :example\n      end\n    end\n\n    expect(sequence).to eq [:example]\n  end\nend`;
+    const judged = vouch(text);
+    assert.equal(judged.length, 1, 'the inner it is test data for the outer one');
+    assert.equal(judged[0].verdict, 'checks');
+  });
+
+  it('xit is still a test that never runs', () => {
+    assert.equal(vouch(`describe X do\n  xit "later" do\n    expect(1).to eq 1\n  end\nend`)[0].verdict, 'never-runs');
   });
 });

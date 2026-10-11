@@ -185,8 +185,9 @@ Usage:
                                     that check nothing, compare a value with itself, leave an
                                     expectation unfinished, swallow their own failure, or never run.
                                     Where the checking is in a helper it cannot follow it says so
-                                    instead of accusing. --strict exits non-zero on a finding, for a
-                                    gate. No model, no cost.
+                                    instead of accusing. Reads JavaScript, TypeScript, Python, Java,
+                                    Kotlin, Scala, Go, C#, Ruby, PHP and Rust. --strict exits
+                                    non-zero on a finding, for a gate. No model, no cost.
   tewip trace [--only "<ticket or title>"] [--out trace.md]
                                     Is this requirement covered, and is it passing right now? Joins
                                     the plans Tewip wrote to the tests that cover them and the runs

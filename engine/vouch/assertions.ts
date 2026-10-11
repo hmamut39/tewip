@@ -38,10 +38,35 @@ const CHECKS: RegExp[] = [
   // Go.
   /\bt\s*\.\s*(Error|Errorf|Fatal|Fatalf|Fail|FailNow)\b/,
   /\b(require|assert)\s*\.\s*[A-Z]\w+\s*\(/,
-  // Ruby, PHP, Rust.
-  /\bexpect\s*\(.*\)\s*\.\s*to\b/,
-  /\b\$this\s*->\s*assert/,
+  // Ruby. The snake_case family is the whole of minitest and most of Rails's own suite, and
+  // `assert_equal "x", y` has no parentheses - so the generic `assert` patterns above, which all
+  // want a `.` or a `(`, matched none of it. Without this, 121 of the 154 real tests in Rails's
+  // activesupport string_ext_test.rb were reported as comparing no value. That is the Phase 8
+  // lesson for the fourth time: a missing entry here does not produce a smaller answer, it
+  // produces a confident wrong one.
+  /\b(assert|refute)_\w+/,
+  /\bassert\s+[^=\n]/,
+  /\bexpect\s*\(.*\)\s*\.\s*(to|not_to|to_not)\b/,
+  // RSpec's block form, which is how every raise_error, change and output matcher is written:
+  // `expect { thing }.to raise_error(...)`. Missing it reported rspec-core's own specs - the
+  // reference implementation - as containing tests that cannot fail.
+  /\bexpect\s*\{[\s\S]*?\}\s*\.\s*(to|not_to|to_not)\b/,
+  /\bis_expected\s*\.\s*to\b/,
+  /\.\s*(must_equal|must_be|wont_equal|wont_be)\b/,
+  // PHP: PHPUnit on the instance or statically, and Pest's expectation chain.
+  //
+  // No `\b` before the `$`. A word boundary needs a word character on one side, `$` is not one,
+  // and the character before it in real code is a space - so `/\b\$this/` matched nothing, ever.
+  // This pattern was on the list from the start and had never once fired: 88 of the 128 real tests
+  // in laravel/framework's SupportStrTest came back as "Tewip would not judge" because the
+  // `assertSame(...)` in them was being read as an unknown helper that might assert.
+  /\$this\s*->\s*assert/,
+  /\b(?:self|static|Assert)\s*::\s*assert/,
+  /\bexpect\s*\(.*\)\s*->\s*\w+/,
+  // Rust. A #[should_panic] test asserts by panicking, so it can fail without an assert in it.
   /\bassert(_eq|_ne|_matches)?!\s*\(/,
+  /\bdebug_assert(_eq|_ne)?!\s*\(/,
+  /#\s*\[\s*should_panic/,
   // Robot Framework and other keyword styles: a line that reads as a check.
   /^\s*Should\s+(Be|Not|Contain|Match)\b/im,
 ];

@@ -995,6 +995,9 @@ tewip vouch tests/            # or a file, or the whole project
 tewip vouch tests/ --strict   # exits non-zero, for a merge gate
 ```
 
+Reads **JavaScript, TypeScript, Python, Java, Kotlin, Scala, Go, C#, Ruby, PHP and Rust** — and says
+so, rather than clearing a file it cannot read.
+
 Most tests in a pull request are now written by an agent, and the question that decides whether they
 are worth anything goes unasked: **could this test ever fail?** Coverage counts a test that checks
 nothing. CI goes green on it. A reviewer skims something plausible and approves it.

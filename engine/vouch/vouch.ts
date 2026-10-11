@@ -130,6 +130,17 @@ function judge(file: string, test: FoundTest, helpers: Set<string>): Judgement {
   if (helping) return { ...at, verdict: 'checks', evidence: `${helping}(…)`, why: `it checks through ${helping}(), which asserts` };
   const unknown = called.find((name) => /^(check|verify|ensure|validate|assert|expect|should|confirm)/i.test(name));
   if (unknown) return { ...at, verdict: 'cannot-tell', evidence: `${unknown}(…)`, why: `${unknown}() may assert, and it is not in this file, so Tewip will not call this either way` };
+  // A body whose whole content is one call to something defined in another file. The check is very
+  // likely inside it, and Tewip cannot follow it there, so "it compares no value" would be a
+  // confident wrong answer. Rails's own `test_constantize` is exactly this: one line calling
+  // `run_constantize_tests_on`, which lives in a shared helper and asserts plenty.
+  const statements = body
+    .split(String.fromCharCode(10))
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#') && !l.startsWith('//'));
+  if (statements.length === 1 && /^[A-Za-z_][\w.:]*\s*[({]/.test(statements[0])) {
+    return { ...at, verdict: 'cannot-tell', evidence: statements[0].slice(0, 80), why: 'its whole body is one call to something defined elsewhere, which may assert; Tewip will not call this either way' };
+  }
   if (unfinished.length > 0) return { ...at, verdict: 'unfinished-expectation', evidence: unfinished[0], why: MEANS['unfinished-expectation'] };
   if (tautology.length > 0) return { ...at, verdict: 'tautology', evidence: tautology[0], why: MEANS.tautology };
   if (body.trim() === '') return { ...at, verdict: 'crash-only', evidence: '(the body is empty)', why: 'the test has no body at all, so nothing can fail it' };

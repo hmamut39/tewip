@@ -40,7 +40,10 @@ export function testFiles(root: string, paths: string[]): string[] {
         continue;
       }
       if (stat.isDirectory()) walk(full, depth + 1);
-      else if (/\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|java|kt|kts|scala|groovy|go|cs|fs)$/i.test(entry)) found.push(full);
+      // rb, php and rs added in Phase 36. They were missing here as well as in languageOf, so even
+      // a file named outright came back "0 test(s) read in 0 file(s)" - which reads like a clean
+      // answer and is not one.
+      else if (/\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|java|kt|kts|scala|groovy|go|cs|fs|rb|php|rs)$/i.test(entry)) found.push(full);
     }
   };
   for (const path of paths) {

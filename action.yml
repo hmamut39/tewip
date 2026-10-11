@@ -13,7 +13,21 @@ inputs:
       tests and output the test files that could notice this change, with everything it leaves out written
       into the job summary. In pick mode it outputs `tests` and `narrowed`; when it cannot narrow safely,
       `narrowed` is false and `tests` is empty, so a workflow that ignores that still runs everything.
+      check: run the verdict verbs over this change - access, schema, vouch, standards, done, perf -
+      naming which ones in `checks`. Every one runs even when an earlier one found something, so a
+      pull request gets the whole picture in one push rather than one problem at a time.
     default: triage
+  checks:
+    description: >-
+      In check mode, which checks to run, comma separated: done, schema, standards, vouch, access,
+      perf - or `all`. Default `done`, which is the one verdict over the whole change. A name Tewip
+      has no verb for is reported in the summary rather than ignored.
+    default: done
+  perf-report:
+    description: >-
+      In check mode with `perf`, the k6 --summary-export or Lighthouse --output=json file to judge.
+      Without it there is nothing to read and the check reports that rather than passing.
+    default: ''
   github-token:
     description: Token used to comment, open issues and fix pull requests. Needs contents, pull-requests and issues write permissions.
     default: ${{ github.token }}
@@ -51,6 +65,9 @@ inputs:
       a real bug, a changed selector, a test-data problem or undecided, and lets through failures
       that a deterministic rule or a person classified as flaky (TIMING) or environment (ENV).
       AI-only verdicts still block. Put continue-on-error: true on the test step so the gate decides.
+      'blocking' is the check-mode gate: it fails the step only on what a verb itself calls
+      blocking, so advice and open questions are reported without breaking the build. A gate that
+      fires on advice teaches a team to pass continue-on-error, and then it never fires at all.
       Empty (the default) never fails the workflow.
     default: ''
   prove:
@@ -113,7 +130,7 @@ runs:
     - name: Diagnose failures and deliver
       id: triage
       shell: bash
-      run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || inputs.mode == 'pick' && 'pick' || 'run' }}.ts"
+      run: node "$GITHUB_ACTION_PATH/ci/${{ inputs.mode == 'report' && 'report' || inputs.mode == 'pick' && 'pick' || inputs.mode == 'check' && 'check' || 'run' }}.ts"
       env:
         TRIAGE_GITHUB_TOKEN: ${{ inputs.github-token }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
@@ -129,9 +146,11 @@ runs:
         TEWIP_PROVE: ${{ inputs.prove }}
         TEWIP_PROVE_BUDGET: ${{ inputs.prove-budget }}
         TEWIP_ATTEST_KEY: ${{ inputs.attest-key }}
+        TEWIP_CHECKS: ${{ inputs.checks }}
+        TEWIP_PERF_REPORT: ${{ inputs.perf-report }}
 
     - name: Save triage history
-      if: always() && inputs.mode != 'report' && inputs.mode != 'pick'
+      if: always() && inputs.mode != 'report' && inputs.mode != 'pick' && inputs.mode != 'check'
       uses: actions/cache/save@v4
       with:
         path: .triage-agent/history

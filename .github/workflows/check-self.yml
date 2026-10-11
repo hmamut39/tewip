@@ -1,0 +1,41 @@
+# Runs Tewip's own check mode against Tewip, which is the only way to know the Action works.
+#
+# Everything in ci/check.ts can be exercised locally, and local success proves very little about a
+# composite action: the inputs arrive as strings from a different place, the checkout is shallow
+# unless told otherwise, GITHUB_STEP_SUMMARY exists only on a runner, and the diff range depends on
+# what the runner actually fetched. Those are exactly the things that break, so this workflow runs
+# the action from this repository on every push to main and can be started by hand.
+#
+# It does not gate. Tewip gating its own pull requests on its own newest code would be a loop with
+# nothing underneath it; the point here is that the mode runs, reads the change and writes a
+# summary a person can open.
+name: Tewip checks itself
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      checks:
+        description: 'Which checks to run'
+        default: 'done, schema, standards, vouch, access'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 so there is a base to diff against. Without it the range is empty and the
+      # change-based checks have nothing to read - which the report says, rather than passing.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Tewip's own verdict verbs
+        uses: ./
+        with:
+          mode: check
+          checks: ${{ inputs.checks || 'done, schema, standards, vouch, access' }}
+          post-pr-comment: 'false'

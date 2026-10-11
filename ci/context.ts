@@ -30,7 +30,12 @@ export interface CiContext {
   /** Name of this test suite when a workflow triages several; '' for a single suite. */
   suite: string;
   /** 'real-failures': fail the step only on failures that are not a rule's or a person's flaky/ENV. */
-  gate: '' | 'real-failures';
+  /**
+   * 'real-failures': in triage mode, fail only on failures that are not a rule's or a person's
+   * flaky/ENV verdict. 'blocking': in check mode, fail only on what a verb itself calls blocking.
+   * They are different words because they gate different things, and one step runs one mode.
+   */
+  gate: '' | 'real-failures' | 'blocking';
   /** Where step outputs go (GITHUB_OUTPUT); null outside Actions. */
   outputFile: string | null;
   historyDir: string;
@@ -72,7 +77,7 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     blobDir: inWorkspace(env.TRIAGE_BLOB_DIR || 'blob-report'),
     junitReport: env.TRIAGE_JUNIT_REPORT ? inWorkspace(env.TRIAGE_JUNIT_REPORT) : null,
     suite: (env.TRIAGE_SUITE ?? '').trim(),
-    gate: env.TRIAGE_GATE?.trim() === 'real-failures' ? 'real-failures' : '',
+    gate: env.TRIAGE_GATE?.trim() === 'real-failures' ? 'real-failures' : env.TRIAGE_GATE?.trim() === 'blocking' ? 'blocking' : '',
     outputFile: env.GITHUB_OUTPUT || null,
     historyDir: inWorkspace(env.TRIAGE_HISTORY_DIR || '.triage-agent/history'),
     outDir: inWorkspace(env.TRIAGE_OUT_DIR || '.triage-agent/out'),

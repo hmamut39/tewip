@@ -1,17 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Tewip">
   <title>Tewip</title>
   <!--
-    Tewip means doctor, and the product's claim is that it proves the work rather than guessing at
-    it. So the mark is one unbroken stroke that does both: a pulse - the reading, the diagnosis -
-    which rises on its last beat into a check. Nothing else, because the mark has to survive being
-    drawn 16 pixels wide in an editor sidebar, where anything finer turns to mud.
+    Tewip means doctor, so the mark has to be read as a stethoscope before it is read as anything
+    else, and it is also the letter T so that it belongs to this product rather than to the idea of
+    health in general.
+
+    The ear tips are what make it legible. A straight crossbar with a circle hanging off it reads as
+    a T with a dot; turning the two ends of the bar downward gives the headset its silhouette, and
+    the eye names the object immediately. The tubing then drops from the centre - which is also the
+    stem of the T - and hooks into the chest piece.
+
+    Everything is one weight of stroke with round caps, because the mark is drawn 16 pixels wide in
+    an editor sidebar and anything finer turns to mud at that size.
   -->
-  <rect width="128" height="128" rx="28" fill="#0f766e"/>
-  <path
-    d="M 18 74 H 38 L 46 52 L 57 96 L 66 74 H 77 L 88 89 L 112 44"
-    fill="none"
-    stroke="#ffffff"
-    stroke-width="9"
-    stroke-linecap="round"
-    stroke-linejoin="round"/>
+  <rect width="128" height="128" rx="28" fill="#15233b"/>
+  <g fill="none" stroke="#ffffff" stroke-width="12.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- The binaural: a flat bar whose ends turn down into the ear tips. Also the crossbar of the T. -->
+    <path d="M 27 47 L 27 37 Q 27 30 34 30 L 94 30 Q 101 30 101 37 L 101 47"/>
+    <!-- The tubing: the stem of the T, hooking right into the chest piece. -->
+    <path d="M 64 30 L 64 63 C 64 82 73 90 85 91"/>
+  </g>
+  <!-- The chest piece, in the one accent colour so the eye finishes here. -->
+  <circle cx="98" cy="92" r="16" fill="#f0a500"/>
+  <circle cx="98" cy="92" r="6.5" fill="#15233b"/>
 </svg>

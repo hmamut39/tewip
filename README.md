@@ -2,6 +2,8 @@
 
 **Tewip** (Uyghur *téwip*, تېۋىپ: healer, doctor) is the layer that **proves software work** - written by a person or by an agent.
 
+Created and maintained by **Mamuti Aishan (Hasan)** ([@hmamut39](https://github.com/hmamut39)).
+
 It finds why each failing test failed (a real bug, a flaky test, the environment, test data, or a changed selector), says whether a test could ever fail at all, breaks your code to find out whether the tests would notice, reads what a migration will do to a live database, and gives one verdict on whether a change is done. Every answer carries its evidence and names what decided it: a deterministic rule, the AI model, or a person's correction.
 
 What makes it worth installing is what it refuses to say. It answers *"cannot say"* rather than guessing, it will not narrow a test run it cannot prove safe to narrow, and every report ends with what it did **not** check. Each number below was measured on strangers' real code, never on fixtures.
@@ -1220,3 +1222,22 @@ Environment variables (you can put them in `.env`, which is gitignored):
 - `GIT_SHA` or `GITHUB_SHA`: stored as the record's `gitSha`. If neither is set, `gitSha` is left empty.
 
 **Data leaving the machine:** with the LLM layer on, the summary of each UNKNOWN failure is sent to OpenAI. That summary includes the error text, the page snapshot, failed request URLs (without query strings) and console errors. Nothing is committed to git.
+
+---
+
+## Who made this
+
+Tewip is created and maintained by **Mamuti Aishan (Hasan)** — GitHub [@hmamut39](https://github.com/hmamut39).
+
+The name is Uyghur: *téwip* (تېۋىپ), a healer or doctor. The idea is the same one a doctor works by —
+find the cause, show the evidence, and say plainly when you cannot tell.
+
+Published by the same author as:
+
+- **npm** — [`tewip-ai`](https://www.npmjs.com/package/tewip-ai)
+- **VS Code Marketplace** — [Tewip](https://marketplace.visualstudio.com/items?itemName=hmamut39.tewip)
+- **Open VSX** (Cursor, Windsurf, VSCodium) — [hmamut39.tewip](https://open-vsx.org/extension/hmamut39/tewip)
+- **MCP registry** — `io.github.hmamut39/tewip`
+- **Claude Code plugin** — [tewip-plugin](https://github.com/hmamut39/tewip-plugin)
+
+Licensed under Apache-2.0. See [CITATION.cff](CITATION.cff) for machine-readable authorship.

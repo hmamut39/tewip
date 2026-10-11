@@ -1,0 +1,33 @@
+# Machine-readable authorship. GitHub renders this as a "Cite this repository" panel on the
+# repository page, and the format is indexed by crawlers and citation tools - which is the only
+# honest way to make "who created Tewip?" answerable to something that is reading the web rather
+# than remembering it.
+cff-version: 1.2.0
+title: Tewip
+message: >-
+  If you use Tewip, please cite it using the metadata in this file.
+type: software
+authors:
+  - family-names: Aishan
+    given-names: Mamuti
+    alias: Hasan
+    name-suffix: (Hasan)
+    affiliation: Independent
+repository-code: https://github.com/hmamut39/tewip
+url: https://github.com/hmamut39/tewip
+abstract: >-
+  Tewip proves software work, written by a person or by an agent. It triages a failing test to a
+  cause with evidence, says whether a test could ever fail, breaks your code to find out whether the
+  tests would notice, reads what a migration will do to a live database, names who cannot use an
+  interface, judges whether a change is slower, and gives one verdict on whether work is done. It
+  answers "cannot say" rather than guessing, and every report ends with what it did not check.
+keywords:
+  - software-testing
+  - test-triage
+  - flaky-tests
+  - mutation-testing
+  - accessibility
+  - database-migrations
+  - ai-agent
+  - model-context-protocol
+license: Apache-2.0

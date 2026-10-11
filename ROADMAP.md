@@ -2453,6 +2453,52 @@ Both findings came from using the thing rather than from reading a list of what 
 the whole argument for the field trial, and it is worth repeating on the next two projects - Saleor
 for Django and OpenMRS for Java.
 
+### Phase 42: Saleor and OpenMRS, and Three Ways to Be Right Uselessly
+
+The two projects named at the end of Phase 41, done. 18,457 real tests in two codebases nobody here
+wrote, in the two domains a quality tool has to survive: commerce and healthcare.
+
+**saleor/saleor** - 12,967 Python tests, vouched in 6.4 seconds. **Nothing was wrongly condemned.**
+Not one of the 12,967 was called unable to fail when it could, and that is the number this phase was
+for, because a tool that accuses a developer's working test is finished no matter what else it finds.
+The 166 crash-only findings were checked by hand and are all genuine - including
+`test_validate_gift_cards_allows_matching_assignment`, whose own comment reads `# when / then (no raise)`.
+The test is honest about asserting nothing; Tewip described it correctly.
+
+Correct and useless, though, in two ways at once:
+
+*The evidence was a comment.* Saleor writes its tests `# given` / `# when` / `# then`, so the quoted
+proof for all 166 findings was the single character `#`. A finding whose evidence is one punctuation
+mark cannot be acted on even when it is true, which is most of the harm a quality tool can do without
+being wrong. The evidence is now the first line that does something, skipping comments in six
+languages' spellings and lines holding nothing but punctuation.
+
+*The counts were samples reported as totals.* Saleor has 4698 files against the front door's budget of
+4000, so `tewip` said "1218 test files here" when there are 1229. Eleven files is nothing; presenting
+a sample as a total is not, and it happens exactly on the large repositories where nobody can check
+the number by hand. Bounded counts now read "At least 1218", and the limits section says the glance
+was bounded while the commands themselves read everything. Writing the test for that found a second
+gap in the first attempt: a project whose files sit in one flat directory empties the walk queue
+before the budget runs out, so the look stopped short and did not know it.
+
+**openmrs/openmrs-core** - 5,490 Java tests in 1.3 seconds, with **41 accusations, and every one of
+them verified true**: 2 `assertTrue(true)` tautologies, 37 tests annotated `@Test` next to `@Disabled`
+or `@Ignore`, 2 that catch their own failure and discard it. 22 files in that suite carry a disabling
+annotation. A hospital system shipping 37 tests that do not run is worth telling somebody about, and
+it is the first finding in this project that a maintainer could act on the same afternoon.
+
+The third bug was in `schema`, and it was the same shape as Laravel's: **44 Liquibase changelogs, and
+Tewip reported none.** OpenMRS keeps them in `api/src/main/resources/` named `liquibase-update-to-latest.xml`
+- which is where Liquibase projects usually put them, and nowhere near a directory called `changelog`.
+The path filter had encoded a convention real projects do not keep. A changelog is now recognised by
+its name as well as its path, and the 12 read in the module tested report nothing, verified correct:
+there is no `dropColumn` or `dropTable` in them.
+
+So three bugs from two projects, all of the same family - Tewip being right about something nobody
+could use, or looking in the place the convention says instead of the place the code is. None would
+have been found by reading its own documentation, and none by a fixture. The method holds: point it
+at strangers' code, verify every finding by hand, fix Tewip before claiming anything.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

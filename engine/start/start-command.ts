@@ -31,6 +31,13 @@ export interface Found {
   hasWorkflows: boolean;
   hasStandards: boolean;
   filesSeen: boolean;
+  /**
+   * True when the walk stopped before it ran out of project. Saleor has 4698 files against a budget
+   * of 4000, so every count it produced was a sample reported as a total - "1218 test files here"
+   * when there are 1229. Small, and exactly the kind of over-claim this tool exists to refuse,
+   * on precisely the large repositories where nobody can check it by hand.
+   */
+  stoppedEarly: boolean;
 }
 
 /**
@@ -52,6 +59,7 @@ export function lookAround(root: string, limit = 4000): Found {
     hasWorkflows: existsSync(join(root, '.github', 'workflows')),
     hasStandards: existsSync(join(root, '.tewip', 'standards')),
     filesSeen: false,
+    stoppedEarly: false,
   };
   let seen = 0;
 
@@ -67,7 +75,13 @@ export function lookAround(root: string, limit = 4000): Found {
       continue;
     }
     for (const entry of entries) {
-      if (seen >= limit) break;
+      // Out of budget with entries still unread in *this* directory. Checking only the queue was
+      // not enough: a project whose files sit in one flat directory empties the queue before the
+      // budget runs out, so the look stopped short and did not know it.
+      if (seen >= limit) {
+        found.stoppedEarly = true;
+        break;
+      }
       if (SKIP.has(entry) || (entry.startsWith('.') && entry !== '.github')) continue;
       const full = join(dir, entry);
       let info;
@@ -89,7 +103,11 @@ export function lookAround(root: string, limit = 4000): Found {
       if (/\.jtl$/i.test(entry)) found.perfReports.push(rel);
       else if (/(k6|lighthouse|summary|lhr)[\w.-]*\.json$/i.test(entry) && info.size < 8_000_000) found.perfReports.push(rel);
 
-      const inMigrations = /(^|\/)(migrations?|db\/migrate|changelog)\//i.test(rel);
+      // A changelog is often not in a directory that says so: OpenMRS keeps 44 Liquibase files in
+      // `api/src/main/resources/` named `liquibase-*.xml`. The name counts as well as the path.
+      const inMigrations =
+        /(^|\/)(migrations?|migration|db\/migrate|changelogs?)\//i.test(rel) ||
+        /(^|\/)(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i.test(rel);
       // Reading a file is only worth it for the two questions a name cannot answer: is this a
       // test, and is this a migration. Both are cheap, and both are often wrong from the path.
       const language = languageOf(entry);
@@ -109,6 +127,7 @@ export function lookAround(root: string, limit = 4000): Found {
     }
   }
 
+  if (seen >= limit && queue.length > 0) found.stoppedEarly = true;
   return found;
 }
 
@@ -158,19 +177,19 @@ export function suggest(found: Found): Suggestion[] {
   if (tests > 0) {
     out.push({
       command: 'tewip vouch',
-      because: `${tests} test ${tests === 1 ? 'file' : 'files'} here (${named(found.tests)}). This reads them and names the ones that cannot fail - no model, a second or two.`,
+      because: `${found.stoppedEarly ? 'At least ' : ''}${tests} test ${tests === 1 ? 'file' : 'files'} here (${named(found.tests)}). This reads them and names the ones that cannot fail - no model, a second or two.`,
     });
   }
   if (migrations > 0) {
     out.push({
       command: 'tewip schema --diff main...HEAD',
-      because: `${migrations} ${migrations === 1 ? 'migration' : 'migrations'} here (${named(found.migrations)}). This says what a change would do to a live database before it runs.`,
+      because: `${found.stoppedEarly ? 'At least ' : ''}${migrations} ${migrations === 1 ? 'migration' : 'migrations'} here (${named(found.migrations)}). This says what a change would do to a live database before it runs.`,
     });
   }
   if (found.markup > 0) {
     out.push({
       command: 'tewip access',
-      because: `${found.markup} markup ${found.markup === 1 ? 'file' : 'files'} here. This names who cannot use the interface, against the WCAG criterion a regulator would cite.`,
+      because: `${found.stoppedEarly ? 'At least ' : ''}${found.markup} markup ${found.markup === 1 ? 'file' : 'files'} here. This names who cannot use the interface, against the WCAG criterion a regulator would cite.`,
     });
   }
   for (const report of found.perfReports.slice(0, 1)) {
@@ -214,6 +233,13 @@ export function renderStart(found: Found, root: string): string {
 
   lines.push('## What it will not do here', '');
   const cannot: string[] = [];
+  if (found.stoppedEarly) {
+    cannot.push(
+      'This project is larger than Tewip looks at from here, so the counts above are **at least** ' +
+        'that many rather than exactly. The commands themselves read everything; only this first ' +
+        'glance is bounded, so that it stays instant.',
+    );
+  }
   if (total(found.tests) === 0) cannot.push('No test files were found, so nothing can be said about whether your tests could fail or would catch a bug.');
   if (total(found.migrations) === 0) cannot.push('No migrations were found, so nothing is said about your database.');
   if (found.markup === 0) cannot.push('No markup was found, so nothing is said about accessibility.');

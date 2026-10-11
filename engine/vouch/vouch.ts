@@ -248,9 +248,15 @@ const stripLines = (body: string, lines: string[]): string =>
 
 /** The first line that does something, for the report to quote. */
 function firstRealLine(body: string): string {
-  const line = body
+  const lines = body
     .split(String.fromCharCode(10))
     .map((l) => l.trim())
-    .find((l) => l !== '' && l !== '{' && l !== '}');
-  return (line ?? '').slice(0, 120);
+    .filter((l) => l !== '' && l !== '{' && l !== '}');
+  // A comment is not the evidence. Saleor's tests are written `# given` / `# when / then`, so the
+  // quoted evidence for 166 real findings was the single character "#", which tells a reader
+  // nothing about the test it is accusing. The line that does something is the evidence.
+  // Nor is a line with nothing in it but punctuation: a lone quote closing a docstring, a stray
+  // bracket. Evidence has to be something a reader can recognise as the test doing work.
+  const code = lines.find((l) => !/^(#|\/\/|\/\*|\*|"""|'''|--)/.test(l) && /[A-Za-z0-9]/.test(l));
+  return (code ?? lines[0] ?? '').slice(0, 120);
 }

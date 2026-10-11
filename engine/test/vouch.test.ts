@@ -355,3 +355,47 @@ describe('Ruby, and what is not actually a skip or a test', () => {
     assert.equal(vouch(`describe X do\n  xit "later" do\n    expect(1).to eq 1\n  end\nend`)[0].verdict, 'never-runs');
   });
 });
+
+// Phase 42: the evidence has to be the test doing something.
+//
+// Found on saleor, 12,967 Python tests. Tewip condemned nothing it should not have - but all 166
+// crash-only findings quoted the same evidence: `#`. Saleor writes its tests `# given`, `# when`,
+// `# then`, and the reader was handed the comment marker as the proof. A finding whose evidence is
+// one punctuation character is unusable even when it is correct, which is most of the harm a
+// quality tool can do without being wrong.
+describe('what the report quotes as evidence', () => {
+  const evidenceFor = (file: string, text: string): string => vouchFile(file, text).judgements[0]?.evidence ?? '';
+
+  it('skips the comment Saleor actually writes', () => {
+    const evidence = evidenceFor(
+      'test_gift_cards.py',
+      [
+        'def test_validate_gift_cards_allows_matching_assignment():',
+        '    # given',
+        '    card = gift_card(tag="main")',
+        '    # when / then (no raise)',
+        '    validate_gift_cards(card)',
+      ].join('\n'),
+    );
+    assert.notEqual(evidence, '#');
+    assert.doesNotMatch(evidence, /^#/, `evidence was ${JSON.stringify(evidence)}`);
+    assert.match(evidence, /gift_card|validate/, 'the evidence should be a line that does something');
+  });
+
+  it('skips a JavaScript comment and a docstring the same way', () => {
+    for (const [file, body] of [
+      ['a.test.js', 'it("renders", () => {\n  // arrange\n  render(<App />);\n});'],
+      ['b_test.py', 'def test_renders():\n    """Docstring."""\n    render(App)'],
+    ] as const) {
+      const evidence = evidenceFor(file, body);
+      assert.doesNotMatch(evidence, /^(\/\/|""")/, `${file}: ${JSON.stringify(evidence)}`);
+    }
+  });
+
+  it('falls back to the first line rather than quoting nothing', () => {
+    // A test whose body is only comments has no line that does anything. Quoting the comment is
+    // then honest; quoting an empty string is not, because it reads as though Tewip found nothing.
+    const evidence = evidenceFor('c_test.py', 'def test_nothing():\n    # TODO\n    pass');
+    assert.notEqual(evidence, '');
+  });
+});

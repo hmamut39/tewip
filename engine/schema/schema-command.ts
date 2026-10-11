@@ -41,8 +41,12 @@ export interface StillUsed {
   files: string[];
 }
 
-const MIGRATION = /(^|\/)(migrations?|db\/migrate|prisma\/migrations|alembic|flyway|sql)\//i;
-const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|db\/migrate)\/.*\.(py|rb|js|ts)$/i;
+const MIGRATION = /(^|\/)(migrations?|migration|db\/migrate|prisma\/migrations|alembic|flyway|changelogs?|sql)\//i;
+// A changelog is often not in a directory that says so. OpenMRS keeps 44 Liquibase changelogs in
+// `api/src/main/resources/` named `liquibase-*.xml`, and the path filter saw none of them - so a
+// real healthcare system with 44 migration files was told it had none. The name counts too.
+const NAMED_MIGRATION = /(^|\/)(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i;
+const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate)\/.*\.(py|rb|js|ts|php|cs)$/i;
 
 /** The schema files in this change. */
 export function schemaFiles(cmd: SchemaCommand): string[] {
@@ -53,7 +57,7 @@ export function schemaFiles(cmd: SchemaCommand): string[] {
     // Asking for a file by name overrides the path filter: the filter exists to find migrations in
     // a diff of a hundred files, not to argue with somebody who pointed at one. A TypeORM migration
     // sitting outside a migrations/ directory was being answered with "no migration in this change".
-    .filter((f) => (named || SCHEMA_FILE.test(f) || MIGRATION.test(f)) && existsSync(resolve(cmd.root, f)));
+    .filter((f) => (named || SCHEMA_FILE.test(f) || MIGRATION.test(f) || NAMED_MIGRATION.test(f)) && existsSync(resolve(cmd.root, f)));
 }
 
 /**

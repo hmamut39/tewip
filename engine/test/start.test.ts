@@ -121,3 +121,31 @@ describe('what it says it cannot do', () => {
     assert.match(report, /cannot say.*rather than guessing/);
   });
 });
+
+// Phase 42: a count from a bounded look is a floor, not a total.
+//
+// Found on saleor: 4698 files against a budget of 4000, so the front door said "1218 test files
+// here" when there are 1229. Eleven files is nothing; reporting a sample as a total is not, and it
+// happens precisely on the large repositories where nobody can check the number by hand. The fix
+// is not a bigger budget - it is saying which kind of number this is.
+describe('counts from a look that stopped early', () => {
+  it('says "At least" and admits the bound, when it ran out of budget', () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 40; i += 1) files[`tests/test_${i}.py`] = 'def test_x():\n    assert 1 == 1\n';
+    const found = lookAround(project(files), 12);
+
+    assert.equal(found.stoppedEarly, true, 'the walk should know it stopped short');
+    const because = suggest(found).find((s) => s.command === 'tewip vouch')?.because ?? '';
+    assert.match(because, /^At least /, because);
+    assert.match(renderStart(found, '/x'), /larger than Tewip looks at from here/);
+  });
+
+  it('says nothing of the kind when it saw the whole project', () => {
+    const found = lookAround(project({ 'tests/test_one.py': 'def test_x():\n    assert 1 == 1\n' }));
+
+    assert.equal(found.stoppedEarly, false);
+    const because = suggest(found).find((s) => s.command === 'tewip vouch')?.because ?? '';
+    assert.doesNotMatch(because, /At least/, because);
+    assert.doesNotMatch(renderStart(found, '/x'), /larger than Tewip looks at/);
+  });
+});

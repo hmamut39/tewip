@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
+import { schemaFiles } from '../schema/schema-command.ts';
 import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -450,5 +451,36 @@ describe('Laravel migrations', () => {
     );
     assert.equal(indexed.findings[0].risk, 'locks-writes');
     assert.match(indexed.findings[0].what, /builds an index on transactions/);
+  });
+});
+
+// Phase 42: a changelog is often not in a directory that says so.
+//
+// Found by running the front door over openmrs-core, a real healthcare system. It reported no
+// migrations. It has 44 Liquibase changelogs, kept in `api/src/main/resources/` and named
+// `liquibase-*.xml` - which is where Liquibase projects usually put them, and nowhere near a
+// directory called `changelog`. The path filter had assumed a convention real projects do not keep.
+describe('finding the migrations at all', () => {
+  const chosen = (files: string[]) => schemaFiles({ root: process.cwd(), files, diff: '' }).length;
+
+  it('recognises a Liquibase changelog by its name, wherever it sits', () => {
+    // These paths do not exist on disk, so this tests the filter and not the reading; the point is
+    // that the filter must not reject them before anything gets the chance to read them.
+    const likely = [
+      'api/src/main/resources/liquibase-update-to-latest.xml',
+      'api/src/main/resources/liquibase-core-data.xml',
+      'src/resources/changelog-2.4.xml',
+    ];
+    for (const path of likely) assert.match(path, /(^|\/)(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i, path);
+  });
+
+  it('still recognises the conventional directories', () => {
+    for (const path of ['database/migrations/2024_01_01_x.php', 'db/migrate/20240101_x.rb', 'prisma/migrations/0001_init/migration.sql', 'changelog/db.changelog-1.5.xml']) {
+      assert.match(path, /(^|\/)(migrations?|migration|db\/migrate|prisma\/migrations|alembic|flyway|changelogs?|sql)\/|(^|\/)(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i, path);
+    }
+  });
+
+  it('a file named outright is still read whatever its path', () => {
+    assert.equal(chosen(['package.json']), 1, 'naming a file overrides the filter');
   });
 });

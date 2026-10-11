@@ -229,7 +229,16 @@ async function main(): Promise<void> {
     case '-v':
       console.log(version());
       return;
+    // `tewip` on its own used to print 233 lines of help, which is a reference for somebody who
+    // already knows what they want and a wall for everybody else. It now looks at the project and
+    // names the two or three commands that will tell *this* team something. --help is unchanged
+    // and still has all of it.
     case undefined:
+    case 'start': {
+      const { runStart } = await import('../engine/start/start-command.ts');
+      runStart(process.cwd());
+      return;
+    }
     case '--help':
     case '-h':
     case 'help':

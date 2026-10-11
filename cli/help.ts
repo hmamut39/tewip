@@ -4,6 +4,11 @@
 export const HELP = `Tewip - finds why each test failed, for any stack.
 
 Usage:
+  tewip                             Look at this project and name the two or three commands that
+  tewip start                       will tell you something about it, with your own paths in them,
+                                    and say plainly what Tewip cannot answer here. Reads the
+                                    directory and stops: nothing is run and nothing is written.
+                                    Start here. Everything below is the full list.
   tewip explain <report>            Explain a test report: a JUnit XML or .trx file, a folder of
                                     them, or a Playwright blob-report folder. Keeps history per
                                     project, so later runs are judged against earlier ones.

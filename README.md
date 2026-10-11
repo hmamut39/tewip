@@ -38,6 +38,36 @@ never goes to the model again.
 Tewip prints what every command costs, caps its own spend, and works with no key at all - the rules
 run on their own and everything they cannot settle is left as UNKNOWN rather than guessed.
 
+## Start here
+
+```bash
+npm i -g tewip-ai
+cd your-project
+tewip
+```
+
+`tewip` on its own looks at **your** project and names the two or three commands that will tell you
+something, with your own paths in them — and says plainly what it cannot answer here. It reads the
+directory and stops: nothing is run, nothing is written, about a second.
+
+```
+Here is what Tewip can tell you about **this** project, in the order worth doing.
+
+**1. `tewip vouch`**
+282 test files here (282 JavaScript or TypeScript). This reads them and names the ones
+that cannot fail - no model, a second or two.
+
+**2. `tewip schema --diff main...HEAD`**
+165 migrations here (165 SQL). This says what a change would do to a live database
+before it runs.
+
+## What it will not do here
+- No k6, JMeter or Lighthouse report was found. Tewip judges one you produce; it does
+  not run load tests itself.
+```
+
+Everything below is the full list, for when you want it.
+
 ## Use it in your project
 
 **Giving it to your team (or another company): [TEAM-GUIDE.md](TEAM-GUIDE.md)** — what to install, what each role uses it for, and what it never does.

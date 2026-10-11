@@ -2385,6 +2385,39 @@ Tewip says **cannot say**, which is the only correct answer about two halves of 
 statistic was then checked against a brute-force count of every pair, and matched exactly; shifting the
 same real samples by 500ms gives U = 625, complete separation, p = 1.3e-9.
 
+### Phase 40: The First Five Minutes
+
+Thirty-nine phases of capability, and the answer to "I installed it, now what" was **233 lines of help
+listing eleven commands**. That is a reference for somebody who already knows what they want and a wall
+for everybody else. Eleven commands is already more than most teams will run; the problem was never how
+many things Tewip can do, it was that none of them were connected to the repository the person was
+standing in.
+
+`tewip` on its own now looks at the project and names the two or three commands that will tell *this*
+team something, with their own paths in them - and says plainly what it cannot answer here. It reads
+the directory and stops: nothing is run, nothing is written. Half a second on a normal repository,
+three on a large one.
+
+Status (2026-10-11): **built**, as `tewip` with no arguments and as `tewip start`.
+
+Measured on real projects rather than fixtures: vitepress (94 test files, 72 markup files, 0.55s) and
+documenso (282 test files, 165 Prisma migrations, 3.1s). Both correct.
+
+**The bug worth recording** is the one the first version had. The walk was depth-first with a budget of
+4000 files, and pointed at Tewip itself it descended into `data/`, spent the entire budget on stored
+datasets, and reported **7 test files in a repository with 69**. A number that wrong is worse at the
+front door than anywhere else, because it is the one place a person has no way to check it. The walk is
+breadth-first now - every top-level directory read before any is descended into - so the budget is spent
+on breadth, which is what recognising a project needs.
+
+The same discipline as everywhere else applies to the front door, and more so: it names every gap rather
+than implying it can do everything, and a project with nothing Tewip can judge is told so plainly rather
+than handed a menu.
+
+This is the second of the three things that matter, and the only one of them that is code. The first is
+one real team for two weeks, which is still unmet and cannot be written. The third is Tewip learning
+from its own corrections across projects, which `learn` only half does.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

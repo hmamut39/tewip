@@ -2499,6 +2499,35 @@ could use, or looking in the place the convention says instead of the place the 
 have been found by reading its own documentation, and none by a fixture. The method holds: point it
 at strangers' code, verify every finding by hand, fix Tewip before claiming anything.
 
+### Phase 43 (planned): The Enterprise Java Trial
+
+Agreed 2026-10-11, to begin the next session. The field trial has found a genuine Tewip bug in four
+projects out of four, which is a better return than anything else available, so it continues - but
+pointed at the shape of system the organisations this is built for actually run.
+
+Every organisation named as the target - a pharmacy chain, an insurer, a bank, a government
+department - runs Java and Spring. Tewip has touched Java once, on OpenMRS, and the coverage there
+was thin in ways worth stating plainly:
+
+- `vouch` on Java: **one** project, 5,490 tests. A single sample.
+- `schema` on Liquibase: only **12 files** were actually read.
+- `access` on a real component framework: **never done**. GOV.UK was Nunjucks templates. No React,
+  Angular or Thymeleaf has ever been scanned, and every enterprise front end is one of those.
+- `perf` on a real JMeter run from a Java system: **never done**, though JMeter is the load tool of
+  that world and Phase 39 built the reader for it.
+
+The method does not change: a large Spring codebase nobody here wrote, all four commands, every
+finding verified by hand against the source before it is believed, and Tewip's own bugs fixed before
+anything is claimed. The expectation, from four previous trials, is two or three real defects in
+Tewip - most likely in `access`, which has the least exposure to real component markup.
+
+**Also queued for that session, smaller:**
+
+- A guard in the release path. Today's extension publish silently did nothing because the extension
+  version was bumped *after* the `v*` tag was pushed, so the workflow ran against the old number and
+  correctly skipped. The release path should refuse to tag when `extensions/vscode/` has changed and
+  its `package.json` version has not. It will recur otherwise.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

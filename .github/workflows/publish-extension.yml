@@ -76,6 +76,32 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Skipping is right when the extension genuinely did not change, and wrong - silently - when it
+      # changed and its version did not. That happened on 2026-10-11: the extension was bumped to
+      # 0.10.0 *after* the v0.50.0 tag was pushed, so this workflow ran against 0.9.0, found 0.9.0
+      # already published, skipped, and reported success. Nothing anywhere said the new extension had
+      # not shipped. A skip that is actually a miss has to be loud.
+      - name: Did the extension change without its version changing?
+        if: steps.already.outputs.published == 'true' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          git fetch --tags --quiet --depth=50 || true
+          previous="$(git tag --sort=-v:refname | grep -v "^${GITHUB_REF#refs/tags/}$" | head -1)"
+          if [ -z "$previous" ]; then
+            echo "No earlier tag to compare against; nothing to check."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$previous"..HEAD -- extensions/vscode/ || true)"
+          if [ -n "$changed" ]; then
+            echo "::error::extensions/vscode changed since $previous but its version is already on Open VSX."
+            echo "Changed files:"; echo "$changed"
+            echo ""
+            echo "Bump extensions/vscode/package.json BEFORE pushing the tag, then re-tag."
+            echo "To publish the current build now: gh workflow run publish-extension.yml"
+            exit 1
+          fi
+          echo "The extension did not change since $previous, so skipping it is correct."
+
+
       # Packaged on every run, even when Open VSX already has this version, because the file is also
       # what gets attached to the GitHub release - and that file is how the extension reaches the
       # Visual Studio Marketplace, which is uploaded by hand.

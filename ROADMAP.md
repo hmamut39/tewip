@@ -2499,34 +2499,76 @@ could use, or looking in the place the convention says instead of the place the 
 have been found by reading its own documentation, and none by a fixture. The method holds: point it
 at strangers' code, verify every finding by hand, fix Tewip before claiming anything.
 
-### Phase 43 (planned): The Enterprise Java Trial
+### Phase 43: Keycloak, and the Day Tewip Was Worst
 
-Agreed 2026-10-11, to begin the next session. The field trial has found a genuine Tewip bug in four
-projects out of four, which is a better return than anything else available, so it continues - but
-pointed at the shape of system the organisations this is built for actually run.
+**keycloak/keycloak** - Red Hat's identity server, the login layer inside banks, insurers and
+governments. Java, Liquibase and a React admin UI on PatternFly, which is three of the four gaps
+Phase 42 left open in one repository: 11,858 tests, 83 changelogs, 644 markup files. Quarkus rather
+than Spring, and that substitution was deliberate - no Spring application exercises Liquibase and a
+component framework together the way this one does.
 
-Every organisation named as the target - a pharmacy chain, an insurer, a bank, a government
-department - runs Java and Spring. Tewip has touched Java once, on OpenMRS, and the coverage there
-was thin in ways worth stating plainly:
+Ten bugs. One of them is the worst thing this project has done.
 
-- `vouch` on Java: **one** project, 5,490 tests. A single sample.
-- `schema` on Liquibase: only **12 files** were actually read.
-- `access` on a real component framework: **never done**. GOV.UK was Nunjucks templates. No React,
-  Angular or Thymeleaf has ever been scanned, and every enterprise front end is one of those.
-- `perf` on a real JMeter run from a Java system: **never done**, though JMeter is the load tool of
-  that world and Phase 39 built the reader for it.
+**`vouch` called 166 correct tests worthless.** Every one of them was this:
 
-The method does not change: a large Spring codebase nobody here wrote, all four commands, every
-finding verified by hand against the source before it is believed, and Tewip's own bugs fixed before
-anything is claimed. The expectation, from four previous trials, is two or three real defects in
-Tewip - most likely in `access`, which has the least exposure to real component markup.
+```java
+try { parse(bad); Assert.fail(); } catch (VerificationException expected) { }
+```
 
-**Also queued for that session, smaller:**
+which is how Java says "I expect this to throw". That test fails properly the day `parse` stops
+throwing. `Assert.fail()` raises `AssertionError`, which extends `Error` - and `Error` is **not** an
+`Exception`, so `catch (VerificationException)` cannot catch it, and neither could `catch (Exception)`.
+The rule had never read the caught type: it saw an empty `catch` and a test that asserted, and
+concluded the verdict was being discarded. Of the 166, **zero** could swallow an assertion.
 
-- A guard in the release path. Today's extension publish silently did nothing because the extension
-  version was bumped *after* the `v*` tag was pushed, so the workflow ran against the old number and
-  correctly skipped. The release path should refuse to tag when `extensions/vscode/` has changed and
-  its `package.json` version has not. It will recur otherwise.
+Telling a developer their working test is worthless is the one failure that ends the conversation
+whatever else the tool finds, and this is the first time Tewip has done it at scale. The caught type
+is now read, and only `Throwable`, `Error` and `AssertionError` swallow a verdict on the JVM. C# is
+deliberately untouched: NUnit, xUnit and MSTest all throw assertion failures deriving from
+`Exception`, so there `catch (Exception)` really does swallow. Same shape, opposite answer.
+
+**`schema` reported the first destructive change in each file and no others.** `find.exec(text)`
+returns one match; `jpa-changelog-26.0.0.xml` drops **eight** tables and Tewip named one. This was
+never a Liquibase problem - Django, Rails, Alembic, Laravel, Sequelize, Knex and EF Core all ran
+through the same loop. Under-reporting a destructive change is the worst direction to be wrong in,
+because the reader sees a finding, deals with it, and reasonably concludes that was all of them.
+
+Three smaller readers were wrong in the same area. The nested-form `dropColumn` rule looked ahead 300
+characters for a `<column name=` and, after a *self-closing* `dropColumn`, found one three lines later
+inside an unrelated `<createTable>` - so Tewip reported **"drops CLIENT.REALM_ID"** while quoting a
+line that says `ALLOWED_CLAIMS_MASK`, a headline contradicted by its own evidence. The attribute-form
+rule demanded `columnName` before `tableName`, an order Keycloak never uses. And the path filter,
+taught `liquibase-*.xml` only one phase ago, still required the word to **begin** the name, so all 83
+`jpa-changelog-<version>.xml` were invisible.
+
+Afterwards: **83 of 83 files read, 327 findings - and exactly 327 destructive operations exist**,
+counted independently with grep. 106 drops and renames, 25 dropped tables, 196 locking changes. Every
+one matched its own evidence.
+
+**`access` met a component framework for the first time and had five faults.** `<select>` and
+`<textarea>` were never checked for a name at all, though `select-name` was already in the axe table
+and both were already in `INTERACTIVE`; a screen reader announces an unnamed select as "combo box"
+and stops. Capitalised React components were read as the HTML elements they lowercase to, so
+PatternFly's `<Select onOpenChange={...}>` became an unnamed combo box - `image-alt` had always asked
+`!t.component`, this had never asked, and `<Input>` had therefore been falsely accused since the
+scanner was written. A `<FormGroup label={...} fieldId="x">` renders `<label for="x">` around its
+children, so a control inside one is not unnamed, it is one this file cannot answer for - now
+"cannot say" rather than a certain barrier. A control hidden with `display:none` - the standard way
+to build a file picker, and exactly Keycloak's `jarUpload` - is announced to nobody, so having no
+label stops nobody. And both new rules were missing from the WCAG catalogue, which rendered them as
+"unrated" with no line saying who they stop.
+
+What survived: **5 barriers, every one verified by hand**, two of them genuine defects in Red Hat's
+production interface - `<img src={application.logoUri} />` with no alt in the account console that
+end users see, and a bare `<input type="color">` with no label at all in the admin theme editor.
+
+**11,858 tests, 77 accusations after the fix, all 77 verified genuine** - 31 `@Ignore`, 21 `@Disabled`,
+19 `.skip`, 6 confirmed by hand. Zero false accusations once the 166 were gone.
+
+Three trials have now produced the same shape of finding: Tewip is right about something nobody can
+use, or it looks where the convention says instead of where the code is. The fourth shape appeared
+here and is worse than both - Tewip being confidently, specifically wrong about somebody else's
+correct work. All ten were invisible to 918 passing tests.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

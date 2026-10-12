@@ -85,13 +85,13 @@ export function vouchFile(file: string, text: string): FileVouch {
   );
   return {
     file,
-    judgements: tests.map((test) => judge(file, test, helpers)),
+    judgements: tests.map((test) => judge(file, test, helpers, language)),
     unread: '',
     focused: focus ? `${focus[0].trim()}…) is focused, so the rest of this file does not run` : '',
   };
 }
 
-function judge(file: string, test: FoundTest, helpers: Set<string>): Judgement {
+function judge(file: string, test: FoundTest, helpers: Set<string>, language: Language): Judgement {
   const at = { file, name: test.name, line: test.line };
   if (test.skipped) return { ...at, verdict: 'never-runs', evidence: test.name, why: MEANS['never-runs'] };
 
@@ -113,7 +113,7 @@ function judge(file: string, test: FoundTest, helpers: Set<string>): Judgement {
   if (unfinished.length > 0 && !checksSomething(stripLines(body, unfinished))) {
     return { ...at, verdict: 'unfinished-expectation', evidence: unfinished[0], why: MEANS['unfinished-expectation'] };
   }
-  const swallowed = swallowsFailure(body, checks);
+  const swallowed = swallowsFailure(body, checks, language);
   if (swallowed) return { ...at, verdict: 'swallows-failure', evidence: swallowed, why: MEANS['swallows-failure'] };
   if (checks) return { ...at, verdict: 'checks', evidence: '', why: MEANS.checks };
 
@@ -163,13 +163,42 @@ function withoutText(body: string): string {
 }
 
 /**
+ * On the JVM, the only catches that can swallow a failing assertion.
+ *
+ * `Assert.fail()` and every JUnit matcher throw `AssertionError`, which extends `Error`, which
+ * extends `Throwable` - and `Error` is **not** an `Exception`. So `catch (Exception e) { }` does not
+ * catch a failing assertion, and neither does `catch (NotFoundException e) { }`. Only these do.
+ *
+ * This is not a detail. It is the difference between the standard Java way of writing "I expect this
+ * to throw" -
+ *
+ *     try { parse(bad); Assert.fail(); } catch (VerificationException expected) { }
+ *
+ * - which is a correct test that fails properly when `parse` stops throwing, and a test that really
+ * does discard its own verdict. Tewip could not tell them apart and called **166 correct Keycloak
+ * tests worthless**, every one of them this idiom. Telling a developer their working test is
+ * worthless is the one failure this project cannot afford, so the caught type is now read.
+ *
+ * C# is deliberately not here: NUnit, xUnit and MSTest all throw assertion failures that derive from
+ * `Exception`, so `catch (Exception)` really does swallow them there. Same shape, opposite answer.
+ */
+const JVM_SWALLOWS = /^(?:java\.lang\.)?(?:Throwable|Error|AssertionError)$/;
+
+/**
  * Everything inside a `try` whose `catch` discards what it caught. An assertion failure is an
  * exception, so a test shaped this way reports success however the code behaves - and a `catch` that
  * asserts, re-throws or fails the test is the legitimate version, which this leaves alone.
  */
-function swallowsFailure(body: string, checks: boolean): string {
+function swallowsFailure(body: string, checks: boolean, language: Language): string {
   if (!checks) return ''; // nothing to swallow; judged as no-assertion instead
   for (const hit of body.matchAll(/catch\s*(\([^)]*\))?\s*\{/g)) {
+    // On the JVM the caught type decides it, and nearly every type leaves the assertion alone.
+    if (language === 'jvm') {
+      const caught = /\(\s*(?:final\s+)?([\w.]+)/.exec(hit[1] ?? '');
+      // A multi-catch - `catch (A | B e)` - swallows only if one of its types does.
+      const types = (hit[1] ?? '').replace(/[()]/g, '').split('|').map((t) => t.trim().split(/\s+/)[0]);
+      if (!types.some((t) => JVM_SWALLOWS.test(t)) && !(caught && JVM_SWALLOWS.test(caught[1]))) continue;
+    }
     const open = body.indexOf('{', hit.index ?? 0);
     const handler = balanced(body, open);
     if (handler === null) continue;

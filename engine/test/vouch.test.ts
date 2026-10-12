@@ -399,3 +399,51 @@ describe('what the report quotes as evidence', () => {
     assert.notEqual(evidence, '');
   });
 });
+
+// Phase 43: the single worst thing this project has done to date.
+//
+// Pointed at Keycloak - Red Hat's identity server, the login layer inside banks and governments -
+// `vouch` called **166 correct tests worthless**. Every one of them was this, the standard Java way
+// of writing "I expect this to throw":
+//
+//     try { parse(bad); Assert.fail(); } catch (VerificationException expected) { }
+//
+// That test fails properly the day `parse` stops throwing. `Assert.fail()` raises `AssertionError`,
+// which extends `Error`, and `Error` is not an `Exception` - so `catch (VerificationException)` does
+// not catch it, and neither would `catch (Exception)`. The rule had never read the caught type.
+//
+// Telling a developer their working test is worthless is the one failure that ends the conversation,
+// whatever else the tool finds. Of the 166, zero could swallow an assertion.
+describe('a catch that cannot catch an assertion', () => {
+  const java = (body: string) => `public class T {\n  @Test\n  public void t() {\n${body}\n  }\n}`;
+
+  it('leaves the expected-exception idiom alone', () => {
+    for (const caught of ['VerificationException', 'NotFoundException', 'Exception', 'IOException', 'jakarta.ws.rs.ForbiddenException']) {
+      const source = java(`    try {\n      parse("bad");\n      Assert.fail();\n    } catch (${caught} expected) {\n    }`);
+      assert.notEqual(verdictOf('T.java', source), 'swallows-failure', `catch (${caught}) cannot catch an AssertionError`);
+    }
+  });
+
+  it('still catches the one that really does discard the verdict', () => {
+    for (const caught of ['Throwable', 'Error', 'AssertionError', 'java.lang.Throwable']) {
+      const source = java(`    try {\n      Assert.assertEquals(2, compute());\n    } catch (${caught} t) {\n    }`);
+      assert.equal(verdictOf('T.java', source), 'swallows-failure', `catch (${caught}) does swallow it`);
+    }
+  });
+
+  it('reads a multi-catch, which swallows if any one of its types does', () => {
+    const safe = java('    try {\n      parse("x");\n      Assert.fail();\n    } catch (IOException | SQLException e) {\n    }');
+    assert.notEqual(verdictOf('T.java', safe), 'swallows-failure');
+    const unsafe = java('    try {\n      Assert.assertTrue(ok());\n    } catch (IOException | Error e) {\n    }');
+    assert.equal(verdictOf('T.java', unsafe), 'swallows-failure');
+  });
+
+  it('is not applied to the languages where catching Exception really does swallow it', () => {
+    // C# is the near miss: NUnit, xUnit and MSTest all throw assertion failures that derive from
+    // Exception, so `catch (Exception)` swallows them there. Same shape, opposite answer.
+    const cs = '[Test]\npublic void T() {\n  try {\n    Assert.AreEqual(2, Compute());\n  } catch (Exception) {\n  }\n}';
+    assert.equal(verdictOf('T.cs', cs), 'swallows-failure');
+    const js = 'it("works", () => {\n  try {\n    expect(compute()).toBe(2);\n  } catch (e) {\n  }\n});';
+    assert.equal(verdictOf('a.test.js', js), 'swallows-failure');
+  });
+});

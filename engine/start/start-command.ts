@@ -104,10 +104,11 @@ export function lookAround(root: string, limit = 4000): Found {
       else if (/(k6|lighthouse|summary|lhr)[\w.-]*\.json$/i.test(entry) && info.size < 8_000_000) found.perfReports.push(rel);
 
       // A changelog is often not in a directory that says so: OpenMRS keeps 44 Liquibase files in
-      // `api/src/main/resources/` named `liquibase-*.xml`. The name counts as well as the path.
+      // `api/src/main/resources/` named `liquibase-*.xml`. The name counts as well as the path - and
+      // the word may sit anywhere in it, because Keycloak's 83 are `jpa-changelog-<version>.xml`.
       const inMigrations =
         /(^|\/)(migrations?|migration|db\/migrate|changelogs?)\//i.test(rel) ||
-        /(^|\/)(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i.test(rel);
+        /(^|\/)[\w.-]*(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i.test(rel);
       // Reading a file is only worth it for the two questions a name cannot answer: is this a
       // test, and is this a migration. Both are cheap, and both are often wrong from the path.
       const language = languageOf(entry);

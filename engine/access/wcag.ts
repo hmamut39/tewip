@@ -42,6 +42,21 @@ export const RULES: Record<string, Rule> = {
     severity: 'blocker',
     stops: 'a screen reader announces "edit text" with no way to know what to type',
   },
+  // A select and a textarea are form controls like any other, and both were missing here. A rule the
+  // scanner can raise but this table does not describe renders as "WCAG 2.2, unrated" with no line
+  // saying who it stops - which is most of what makes an accessibility finding worth acting on.
+  'select-name': {
+    criterion: '4.1.2 Name, Role, Value',
+    level: 'A',
+    severity: 'blocker',
+    stops: 'a screen reader announces "combo box" and nothing else, so the user is told there is a choice but not what it decides',
+  },
+  'label': {
+    criterion: '3.3.2 Labels or Instructions',
+    level: 'A',
+    severity: 'blocker',
+    stops: 'a screen reader announces "edit text, multi line" with no way to know what to type',
+  },
   'button-name': {
     criterion: '4.1.2 Name, Role, Value',
     level: 'A',

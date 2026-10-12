@@ -299,3 +299,62 @@ describe('a template expression is code, not markup', () => {
     assert.deepEqual(rules(['<h1>One</h1>', '{{ something }}', '<h3>Three</h3>'].join(NL), 'a.njk'), ['heading-skip']);
   });
 });
+
+// Phase 43: Keycloak's admin UI, which is React on PatternFly - the first real component framework
+// this scanner has been pointed at. Four separate things were wrong, and three of them are the same
+// mistake in different clothes: reading a file as though it were the whole page.
+describe('form controls in a React codebase', () => {
+  it('a <select> and a <textarea> need a name, exactly as an <input> does', () => {
+    // Only <input> was ever checked. A screen reader announces an unnamed select as "combo box" and
+    // stops - the user is told there is a choice to make and nothing about what it decides.
+    assert.deepEqual(rules('<select><option>One</option></select>'), ['select-name']);
+    assert.deepEqual(rules('<textarea></textarea>'), ['label']);
+    assert.deepEqual(rules('<select aria-label="Country"><option>UK</option></select>'), []);
+    assert.deepEqual(rules('<label>Notes<textarea></textarea></label>'), []);
+  });
+
+  it('every rule it can raise is described in the catalogue', () => {
+    // A rule the scanner raises but the table does not describe renders as "WCAG 2.2, unrated" with
+    // no line saying who it stops - which is most of what makes a finding worth acting on.
+    for (const rule of [...rules('<select></select>'), ...rules('<textarea></textarea>')]) {
+      assert.ok(RULES[rule], `${rule} is raised but has no entry in RULES`);
+    }
+  });
+
+  it('a capitalised component is not the HTML element it lowercases to', () => {
+    // PatternFly's <Select> and <Input> are React components. What they render, and whether they
+    // label themselves, is not in this file. `image-alt` had always asked; this had never asked,
+    // so Keycloak's <Select onOpenChange={...}> was reported as an unnamed combo box.
+    assert.deepEqual(rules('<Select value={v} onChange={c} />'), []);
+    assert.deepEqual(rules('<Input value={x} />'), []);
+    assert.deepEqual(rules('<Textarea value={t} />'), []);
+    // and the real elements are still caught in the same file
+    assert.ok(rules('<Select /><select></select>').includes('select-name'));
+  });
+
+  it('says "cannot say" when a component in the file names the control by id', () => {
+    // <FormGroup label={...} fieldId="x"> renders <label for="x"> around its children. The label is
+    // real; it just is not in this file. Keycloak's admin UI is built this way throughout.
+    const source = '<FormGroup label={t("x")} fieldId="ssf"><select id="ssf"><option>a</option></select></FormGroup>';
+    assert.equal(confidenceOf(source, 'select-name'), 'ask-a-person');
+    // without the component naming it, it stays a barrier
+    assert.equal(confidenceOf('<div><select id="ssf"><option>a</option></select></div>', 'select-name'), 'barrier');
+  });
+
+  it('a control hidden from everybody needs no name', () => {
+    // A file picker styled out of sight and clicked by a button beside it is the standard way to
+    // build an upload control. `display:none` removes it from the accessibility tree, so "it has no
+    // label" stops nobody. Keycloak's jarUpload is exactly this.
+    assert.deepEqual(rules('<input type="file" style="display:none">'), []);
+    assert.deepEqual(rules('<input type="text" hidden>'), []);
+    assert.deepEqual(rules('<select style="visibility: hidden"></select>'), []);
+    // visible again, and it is a barrier again
+    assert.deepEqual(rules('<input type="file" style="color:red">'), ['input-label']);
+  });
+
+  it('will not call it certain when the style is an expression it cannot read', () => {
+    // `style={{ display: "none" }}` keeps none of its text, so whether this is displayed at all
+    // cannot be read here. That is a reason to say so, not a reason to be certain.
+    assert.equal(confidenceOf('<input type="file" style={{ display: "none" }} />', 'input-label'), 'ask-a-person');
+  });
+});

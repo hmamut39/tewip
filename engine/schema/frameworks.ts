@@ -50,27 +50,49 @@ const BY_DIALECT: Record<Exclude<Dialect, 'sql' | 'unknown'>, Operation[]> = {
   laravel: LARAVEL,
 };
 
-/** Findings from a framework migration, with the line each one sits on. */
+/**
+ * Findings from a framework migration, with the line each one sits on.
+ *
+ * Every occurrence, not the first. `find.exec(text)` returns a single match, so a migration that
+ * dropped five tables reported one of them - and the other four were not mentioned anywhere, not
+ * even as "and more". Keycloak's `jpa-changelog-26.0.0.xml` drops **eight** tables; Tewip named one.
+ * Under-reporting a destructive change is the worst direction to be wrong in, because the reader
+ * sees a finding, deals with it, and reasonably concludes that was all of them.
+ *
+ * Found in Phase 43 and it was never dialect-specific: Django, Rails, Alembic, Laravel, Sequelize,
+ * Knex and EF Core all ran through this same loop.
+ */
 export function readFramework(dialect: Exclude<Dialect, 'sql' | 'unknown'>, text: string): Finding[] {
   const lines = text.split(String.fromCharCode(10));
   const out: Finding[] = [];
+  // One line can only hold one finding of a given kind, and two rules often describe the same
+  // statement - Liquibase writes `dropColumn` in an attribute form and a nested form, and both
+  // rules exist to read it. Keyed by line and risk so the same drop is not reported twice.
+  const seen = new Set<string>();
   for (const operation of BY_DIALECT[dialect]) {
-    const hit = operation.find.exec(text);
-    if (!hit) continue;
     if (operation.unless?.test(text)) continue;
-    // The line the match starts on, so the reader can go straight to it.
-    const before = text.slice(0, hit.index ?? 0).split(String.fromCharCode(10)).length;
-    out.push({
-      statement: (lines[before - 1] ?? hit[0]).trim().slice(0, 300),
-      line: before,
-      risk: operation.risk,
-      what: operation.what(hit),
-      instead: operation.instead,
-      table: operation.table?.(hit) ?? '',
-      column: operation.column?.(hit) ?? '',
-    });
+    // A fresh global copy: the rules are shared module-level objects, and a global regex carries
+    // `lastIndex` between calls, so reusing one would start the next file mid-way through.
+    const all = new RegExp(operation.find.source, operation.find.flags.replace('g', '') + 'g');
+    for (const hit of text.matchAll(all)) {
+      // The line the match starts on, so the reader can go straight to it.
+      const before = text.slice(0, hit.index ?? 0).split(String.fromCharCode(10)).length;
+      const key = `${before}:${operation.risk}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        statement: (lines[before - 1] ?? hit[0]).trim().slice(0, 300),
+        line: before,
+        risk: operation.risk,
+        what: operation.what(hit),
+        instead: operation.instead,
+        table: operation.table?.(hit) ?? '',
+        column: operation.column?.(hit) ?? '',
+      });
+    }
   }
-  return out;
+  // In file order, because a reader works down the file rather than down a list of rules.
+  return out.sort((a, b) => a.line - b.line);
 }
 
 /** A migration that cannot be rolled back by running its own down step. */

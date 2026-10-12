@@ -484,3 +484,106 @@ describe('finding the migrations at all', () => {
     assert.equal(chosen(['package.json']), 1, 'naming a file overrides the filter');
   });
 });
+
+// Phase 43: Keycloak, 83 Liquibase changelogs, and a reader that stopped after the first hit.
+describe('every destructive change in the file, not the first one', () => {
+  it('reports all of them, in file order', () => {
+    // `jpa-changelog-26.0.0.xml` drops eight tables and Tewip named one. Under-reporting a
+    // destructive change is the worst direction to be wrong in: the reader sees a finding, deals
+    // with it, and reasonably concludes that was all of them.
+    const text = [
+      '<databaseChangeLog>',
+      '  <changeSet id="1">',
+      '    <dropTable tableName="USER_SOCIAL_LINK" />',
+      '    <dropTable tableName="REALM_SOCIAL_CONFIG" />',
+      '    <dropTable tableName="THIRD" />',
+      '  </changeSet>',
+      '</databaseChangeLog>',
+    ].join('\n');
+    const found = readFramework('liquibase', text);
+    assert.deepEqual(found.map((f) => f.table), ['USER_SOCIAL_LINK', 'REALM_SOCIAL_CONFIG', 'THIRD']);
+    assert.deepEqual(found.map((f) => f.line), [3, 4, 5]);
+  });
+
+  it('does not report the same statement twice when two rules describe it', () => {
+    // Liquibase writes a dropped column two ways and there is a rule for each; a statement matching
+    // both is still one statement.
+    const text = '<databaseChangeLog>\n  <dropColumn tableName="CLIENT" columnName="MASK" />\n</databaseChangeLog>';
+    const found = readFramework('liquibase', text);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].column, 'MASK');
+  });
+
+  it('is not left mid-way through the previous file', () => {
+    // A global regex carries `lastIndex` between calls, and these rules are shared module-level
+    // objects. Reading the same text twice must give the same answer.
+    const text = '<databaseChangeLog>\n  <dropTable tableName="A" />\n  <dropTable tableName="B" />\n</databaseChangeLog>';
+    assert.deepEqual(readFramework('liquibase', text).map((f) => f.table), ['A', 'B']);
+    assert.deepEqual(readFramework('liquibase', text).map((f) => f.table), ['A', 'B']);
+  });
+
+  it('every dialect gained this, not only Liquibase', () => {
+    const django = [
+      'class Migration(migrations.Migration):',
+      '    operations = [',
+      '        migrations.RemoveField(model_name="order", name="code"),',
+      '        migrations.RemoveField(model_name="order", name="note"),',
+      '    ]',
+    ].join(String.fromCharCode(10));
+    const removed = readFramework('django', django);
+    assert.equal(removed.length, 2, 'both removals, not just the first');
+    assert.deepEqual(removed.map((f) => f.column), ['code', 'note']);
+  });
+});
+
+describe('the column a drop names, and the column its evidence names', () => {
+  it('reads the attribute form in either attribute order', () => {
+    // Keycloak writes `tableName` first and the rule demanded `columnName` first, so sixty-seven
+    // dropped columns were read by a rule that then reached elsewhere for the name.
+    for (const tag of [
+      '<dropColumn tableName="CLIENT" columnName="ALLOWED_CLAIMS_MASK" />',
+      '<dropColumn columnName="ALLOWED_CLAIMS_MASK" tableName="CLIENT" />',
+    ]) {
+      const [found] = readFramework('liquibase', `<databaseChangeLog>\n  ${tag}\n</databaseChangeLog>`);
+      assert.equal(found?.table, 'CLIENT', tag);
+      assert.equal(found?.column, 'ALLOWED_CLAIMS_MASK', tag);
+    }
+  });
+
+  it('does not reach past a self-closing tag for a column that belongs to something else', () => {
+    // The nested-form rule looked ahead 300 characters for a `<column name=`. After a self-closing
+    // dropColumn it found one three lines later inside an unrelated <createTable>, and Tewip
+    // reported "drops CLIENT.REALM_ID" while quoting a line that says ALLOWED_CLAIMS_MASK.
+    const text = [
+      '<databaseChangeLog>',
+      '  <dropColumn tableName="CLIENT" columnName="ALLOWED_CLAIMS_MASK" />',
+      '  <createTable tableName="REALM_ENABLED_EVENT_TYPES">',
+      '    <column name="REALM_ID" type="VARCHAR(36)" />',
+      '  </createTable>',
+      '</databaseChangeLog>',
+    ].join('\n');
+    const [found] = readFramework('liquibase', text);
+    assert.equal(found?.column, 'ALLOWED_CLAIMS_MASK');
+    assert.match(found?.what ?? '', /CLIENT\.ALLOWED_CLAIMS_MASK/);
+  });
+
+  it('still reads the nested form, which is what that rule is for', () => {
+    const text = '<databaseChangeLog>\n  <dropColumn tableName="CLIENT">\n    <column name="MASK"/>\n  </dropColumn>\n</databaseChangeLog>';
+    const [found] = readFramework('liquibase', text);
+    assert.equal(found?.table, 'CLIENT');
+    assert.equal(found?.column, 'MASK');
+  });
+
+  it('finds a changelog whose name carries a prefix', () => {
+    // Phase 42 taught the filter `liquibase-*.xml` and it still missed Keycloak's 83 files, every
+    // one called `jpa-changelog-<version>.xml`: the word had to *begin* the name. Prefixes are the
+    // norm once a project has more than one database.
+    const NAMED = /(^|\/)[\w.-]*(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i;
+    for (const path of [
+      'model/jpa/src/main/resources/META-INF/jpa-changelog-1.0.0.Final.xml',
+      'api/src/main/resources/liquibase-update-to-latest.xml',
+      'src/db.changelog-master.yaml',
+    ]) assert.match(path, NAMED, path);
+    assert.doesNotMatch('src/main/resources/application.xml', NAMED);
+  });
+});

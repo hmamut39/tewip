@@ -7,6 +7,7 @@
 // whether alt text is any good) are not attempted here and are listed in NOT_CHECKED instead.
 import { inside, labelledBy, type Tag } from './markup.ts';
 import type { Confidence } from './wcag.ts';
+import { ARIA, INTERACTIVE, UNLABELLED_TYPES, at, clickHandler, decorative, hiddenFromEveryone, keyHandler, show, tabIndexOf } from './element.ts';
 
 export interface Finding {
   rule: string;
@@ -20,65 +21,8 @@ export interface Finding {
   next: string;
 }
 
-/** Elements that already answer to the keyboard and already carry a role. */
-const INTERACTIVE = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary', 'details']);
-
-/** `role="presentation"` and friends: the author has said this is decoration. */
-function decorative(t: Tag): boolean {
-  return t.attrs['aria-hidden'] === 'true' || t.attrs.role === 'presentation' || t.attrs.role === 'none';
-}
-
-function show(t: Tag): string {
-  const keep = ['src', 'href', 'type', 'name', 'id', 'class', 'role'];
-  const shown = keep
-    .filter((k) => typeof t.attrs[k] === 'string' && t.attrs[k] !== '')
-    .slice(0, 2)
-    .map((k) => ` ${k}="${t.attrs[k].slice(0, 40)}"`)
-    .join('');
-  return `<${t.name}${shown}${t.spread ? ' {...}' : ''}>`;
-}
-
-function at(t: Tag, file: string): Pick<Finding, 'file' | 'line' | 'element'> {
-  return { file, line: t.line, element: show(t) };
-}
-
-/** Every real `aria-*` attribute. A name outside this set is a typo, and a typo does nothing at all. */
-const ARIA = new Set([
-  'aria-activedescendant', 'aria-atomic', 'aria-autocomplete', 'aria-braillelabel', 'aria-brailleroledescription',
-  'aria-busy', 'aria-checked', 'aria-colcount', 'aria-colindex', 'aria-colindextext', 'aria-colspan',
-  'aria-controls', 'aria-current', 'aria-describedby', 'aria-description', 'aria-details', 'aria-disabled',
-  'aria-dropeffect', 'aria-errormessage', 'aria-expanded', 'aria-flowto', 'aria-grabbed', 'aria-haspopup',
-  'aria-hidden', 'aria-invalid', 'aria-keyshortcuts', 'aria-label', 'aria-labelledby', 'aria-level', 'aria-live',
-  'aria-modal', 'aria-multiline', 'aria-multiselectable', 'aria-orientation', 'aria-owns', 'aria-placeholder',
-  'aria-posinset', 'aria-pressed', 'aria-readonly', 'aria-relevant', 'aria-required', 'aria-roledescription',
-  'aria-rowcount', 'aria-rowindex', 'aria-rowindextext', 'aria-rowspan', 'aria-selected', 'aria-setsize',
-  'aria-sort', 'aria-valuemax', 'aria-valuemin', 'aria-valuenow', 'aria-valuetext',
-]);
-
-/** A click handler, in any of the four dialects this scanner reads. */
-function clickHandler(t: Tag): boolean {
-  return ['onclick', '@click', 'v-on:click', 'on:click'].some((a) => a in t.attrs || t.dynamic.has(a));
-}
-
-function keyHandler(t: Tag): boolean {
-  return Object.keys(t.attrs).concat([...t.dynamic]).some((a) => /key(down|up|press)/i.test(a));
-}
-
-function tabIndexOf(t: Tag): number | null {
-  const raw = t.attrs.tabindex ?? t.attrs.tabIndex;
-  if (raw === undefined) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-/**
- * Fields that take typing, and therefore need a label. Buttons and hidden fields are excluded: a
- * submit button is named by its value, and a hidden field is not announced at all.
- */
-const UNLABELLED_TYPES = new Set(['hidden', 'submit', 'reset', 'button', 'image']);
-
 /** Checks that look at one element at a time. */
-function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean): Finding[] {
+function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean, namedByComponent: Set<string> = new Set()): Finding[] {
   const out: Finding[] = [];
   const place = at(t, file);
   const name = labelledBy(t);
@@ -99,15 +43,33 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
     }
   }
 
-  if (t.name === 'input' && !UNLABELLED_TYPES.has(t.attrs.type ?? 'text')) {
+  // A <select> and a <textarea> need a name exactly as much as an <input> does, and this checked
+  // only <input>. A screen reader announces an unnamed select as "combo box" and stops - the user is
+  // told there is a choice to make and nothing about what it decides. Found in Phase 43 by putting a
+  // deliberately broken React component in front of the scanner: it caught the bare <img>, <input>,
+  // <button>, <a> and click-only <div>, and walked straight past <select>. `select-name` was already
+  // in the axe rule table and already in INTERACTIVE; only this line had never been widened.
+  const NEEDS_NAME: Record<string, string> = { input: 'input-label', select: 'select-name', textarea: 'label' };
+  const nameRule = NEEDS_NAME[t.name];
+  // `!t.component` matters as much as the element name. React names its components with a capital,
+  // so PatternFly's `<Select>` and `<Input>` lowercase to the same string as the HTML elements - and
+  // this check, unlike `image-alt` beside it, never asked. Keycloak's admin UI is built on PatternFly
+  // and `<Select onOpenChange={...}>` was reported as an unnamed combo box; what that component
+  // renders, and whether it labels itself, is not in this file and cannot be read from it.
+  if (nameRule && !t.component && !hiddenFromEveryone(t) && (t.name !== 'input' || !UNLABELLED_TYPES.has(t.attrs.type ?? 'text'))) {
     const linked = typeof t.attrs.id === 'string' && labelFor.has(t.attrs.id);
     if (!name.named && !linked && openLabels === 0) {
-      if (name.unknown || t.dynamic.has('id')) {
-        out.push({ rule: 'input-label', confidence: 'ask-a-person', ...place,
-          why: 'no label, aria-label or wrapping <label> can be read here, and part of the element is an expression',
+      if (name.unknown || t.dynamic.has('id') || t.dynamic.has('style') || (typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id))) {
+        out.push({ rule: nameRule, confidence: 'ask-a-person', ...place,
+          why:
+            typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id)
+              ? `no <label for> is written here, but a component in this file names id="${t.attrs.id}" in one of its props, so the label may be rendered there`
+              : t.dynamic.has('style')
+                ? 'no label can be read here, and its style is an expression, so whether this is displayed at all cannot be read from the markup'
+              : 'no label, aria-label or wrapping <label> can be read here, and part of the element is an expression',
           next: 'confirm the field is labelled at runtime; if not, add aria-label or a <label for>' });
       } else {
-        out.push({ rule: 'input-label', confidence: 'barrier', ...place,
+        out.push({ rule: nameRule, confidence: 'barrier', ...place,
           why: 'no aria-label, no title, no id matching a <label for>, and not inside a <label>',
           next: 'wrap it in a <label>, or give it an id and point a <label for> at it' });
       }
@@ -181,6 +143,18 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
 export function checkFile(source: string, all: Tag[], file: string, isDocument = false): Finding[] {
   const out: Finding[] = [];
   const labelFor = new Set(all.filter((t) => t.name === 'label' && t.attrs.for).map((t) => t.attrs.for));
+  // Ids that a *component* names in one of its props. A design system labels a field by being told
+  // which field it is for - PatternFly's `<FormGroup label={...} fieldId="x">` renders `<label for="x">`
+  // around its children - and that label exists only in the component's own source, not here.
+  // Keycloak's admin UI is built this way throughout, so a control inside one is not an unnamed
+  // control; it is a control this file cannot answer for, which is a different verdict.
+  const namedByComponent = new Set<string>();
+  for (const t of all) {
+    if (!t.component) continue;
+    for (const [key, value] of Object.entries(t.attrs)) {
+      if (typeof value === 'string' && value !== '' && /(^|[a-z])(id|for)$/i.test(key)) namedByComponent.add(value);
+    }
+  }
   const seenIds = new Set<string>();
   let openLabels = 0;
   let interactiveDepth = 0;
@@ -199,7 +173,7 @@ export function checkFile(source: string, all: Tag[], file: string, isDocument =
       continue;
     }
 
-    out.push(...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys)));
+    out.push(...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys), namedByComponent));
     if (!t.selfClosing) open.push({ name: t.name, keys: keyHandler(t) });
 
     const id = t.attrs.id;

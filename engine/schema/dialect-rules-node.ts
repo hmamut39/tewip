@@ -158,14 +158,31 @@ const EFCORE: Operation[] = [
  */
 const XML_TABLE = String.raw`tableName\s*=\s*["']([\w.]+)["']`;
 const LIQUIBASE: Operation[] = [
+  // Liquibase writes a dropped column two ways, and both of these rules are needed. The order they
+  // are tried in does not matter now that neither can match the other's shape.
+  //
+  // The nested form, where the columns are children of the element:
+  //   <dropColumn tableName="CLIENT">
+  //     <column name="ALLOWED_CLAIMS_MASK"/>
+  //   </dropColumn>
+  //
+  // `(?:(?!\/>)[^>])*>` is the important part: it matches the opening tag only when that tag is not
+  // self-closing. Without it the rule matched a self-closing `<dropColumn ... />` and then went on
+  // looking for a `<column name=` for up to 300 characters, which in Keycloak's changelog found one
+  // three lines later inside an unrelated `<createTable>`. Tewip reported "drops CLIENT.REALM_ID"
+  // while quoting a line that says `columnName="ALLOWED_CLAIMS_MASK"` - a headline contradicted by
+  // its own evidence, and the wrong column to go looking for.
   {
-    find: new RegExp(String.raw`<dropColumn[^>]*${XML_TABLE}[\s\S]{0,300}?<column[^>]*name\s*=\s*["']([\w.]+)["']`, 'i'),
+    find: new RegExp(String.raw`<dropColumn(?:(?!\/>)[^>])*${XML_TABLE}(?:(?!\/>)[^>])*>[\s\S]{0,300}?<column[^>]*name\s*=\s*["']([\w.]+)["']`, 'i'),
     risk: 'breaks-old-code',
     what: (m) => `drops ${m[1]}.${m[2]}`,
     instead: 'deploy code that no longer selects or writes the column, then drop it in a later changeSet',
     table: (m) => m[1],
     column: (m) => m[2],
   },
+  // The attribute form. Both orders, because XML attributes have no required order and Keycloak
+  // writes `tableName` first - which the old rule, demanding `columnName` first, could never match.
+  // Sixty-seven dropped columns in that repository and this is the spelling nearly all of them use.
   {
     find: new RegExp(String.raw`<dropColumn[^>]*columnName\s*=\s*["']([\w.]+)["'][^>]*${XML_TABLE}`, 'i'),
     risk: 'breaks-old-code',
@@ -173,6 +190,14 @@ const LIQUIBASE: Operation[] = [
     instead: 'deploy code that no longer selects or writes the column, then drop it in a later changeSet',
     table: (m) => m[2],
     column: (m) => m[1],
+  },
+  {
+    find: new RegExp(String.raw`<dropColumn[^>]*${XML_TABLE}[^>]*columnName\s*=\s*["']([\w.]+)["']`, 'i'),
+    risk: 'breaks-old-code',
+    what: (m) => `drops ${m[1]}.${m[2]}`,
+    instead: 'deploy code that no longer selects or writes the column, then drop it in a later changeSet',
+    table: (m) => m[1],
+    column: (m) => m[2],
   },
   {
     find: new RegExp(String.raw`<dropTable[^>]*${XML_TABLE}`, 'i'),

@@ -2,6 +2,8 @@
 
 **Tewip** (Uyghur for *healer*) answers the questions a team actually argues about before a release: is this done, can these tests fail at all, what will this migration do to the live database, who cannot use this interface, and is it slower than it was.
 
+**The question in the title is the one no other tool asks.** A test that cannot fail still passes, still counts towards coverage, and still looks like work. Tewip reads the tests in front of it and names the ones that assert nothing, compare a value with itself, swallow their own failure, or are quietly skipped - and it is measured on strangers' code, not on fixtures: **41,523 real tests across six public projects, with every accusation verified by hand**.
+
 Every answer carries its evidence, names its source - a rule, a model, or a person's correction - and says what it did **not** check. It answers "cannot say" rather than guessing, and it never rounds "cannot say" up to ready.
 
 Tewip never changes your code from the editor.

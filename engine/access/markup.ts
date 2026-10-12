@@ -58,6 +58,28 @@ const ATTRIBUTE =
 const SPREAD = /\{\s*\.\.\./;
 
 /**
+ * A template language's version of a spread: an expression standing where an attribute *name*
+ * would go, rather than inside a value.
+ *
+ * GOV.UK's own input component is written this way - every attribute, `id` included, comes out of
+ * one macro call:
+ *
+ *     <input
+ *       {{- govukAttributes({ class: classNames, id: id, name: params.name, ... }) }}
+ *
+ * so after the expressions are blanked the element reads as a bare `<input>` with nothing on it,
+ * and the scanner called the UK government's accessible-by-obligation text input a certain
+ * barrier. It is not: it is an element this file cannot answer for, which is a different verdict.
+ *
+ * Quoted values are removed first, because `id="{{ params.id }}"` is a dynamic attribute - which
+ * is already handled, and separately - rather than attributes arriving from somewhere else.
+ */
+function templateSpread(blob: string): boolean {
+  const withoutValues = blob.replace(/"[^"]*"|'[^']*'/g, '""');
+  return /\{\{|\{%|<%|#{/.test(withoutValues);
+}
+
+/**
  * Comments, and the bodies of script and style, hold things shaped like tags that are not tags.
  *
  * `jsLike` additionally blanks template literals, which is not optional in a .tsx file: real
@@ -101,7 +123,7 @@ export const JS_LIKE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
 function readAttributes(blob: string): Pick<Tag, 'attrs' | 'dynamic' | 'spread'> {
   const attrs: Record<string, string> = {};
   const dynamic = new Set<string>();
-  const spread = SPREAD.test(blob);
+  const spread = SPREAD.test(blob) || templateSpread(blob);
   // A spread's contents would otherwise be read as attribute names: `{...props}` becomes `props`.
   const readable = blob.replace(/\{\s*\.\.\.(?:[^{}]|\{[^{}]*\})*\}/g, ' ');
   for (const m of readable.matchAll(ATTRIBUTE)) {

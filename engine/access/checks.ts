@@ -7,7 +7,7 @@
 // whether alt text is any good) are not attempted here and are listed in NOT_CHECKED instead.
 import { inside, labelledBy, type Tag } from './markup.ts';
 import type { Confidence } from './wcag.ts';
-import { ARIA, INTERACTIVE, UNLABELLED_TYPES, at, clickHandler, decorative, hiddenFromEveryone, keyHandler, show, tabIndexOf } from './element.ts';
+import { ARIA, INTERACTIVE, UNLABELLED_TYPES, at, clickHandler, decorative, hiddenFromEveryone, keyHandler, notRendered, show, tabIndexOf } from './element.ts';
 
 export interface Finding {
   rule: string;
@@ -22,7 +22,7 @@ export interface Finding {
 }
 
 /** Checks that look at one element at a time. */
-function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean, namedByComponent: Set<string> = new Set()): Finding[] {
+function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean, namedByComponent: Set<string> = new Set(), boundLabels: Set<string> = new Set()): Finding[] {
   const out: Finding[] = [];
   const place = at(t, file);
   const name = labelledBy(t);
@@ -57,7 +57,10 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
   // and `<Select onOpenChange={...}>` was reported as an unnamed combo box; what that component
   // renders, and whether it labels itself, is not in this file and cannot be read from it.
   if (nameRule && !t.component && !hiddenFromEveryone(t) && (t.name !== 'input' || !UNLABELLED_TYPES.has(t.attrs.type ?? 'text'))) {
-    const linked = typeof t.attrs.id === 'string' && labelFor.has(t.attrs.id);
+    const bound = ['asp-for', 'formControlName', 'v-model', 'data-valmsg-for'].some(
+      (key) => typeof t.attrs[key] === 'string' && boundLabels.has(`${key}=${t.attrs[key]}`),
+    );
+    const linked = bound || (typeof t.attrs.id === 'string' && labelFor.has(t.attrs.id));
     if (!name.named && !linked && openLabels === 0) {
       if (name.unknown || t.dynamic.has('id') || t.dynamic.has('style') || (typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id))) {
         out.push({ rule: nameRule, confidence: 'ask-a-person', ...place,
@@ -89,7 +92,11 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
       next: 'use tabindex="0" and let the source order decide, or move the element in the markup' });
   }
 
-  if (t.attrs['aria-hidden'] === 'true' && (INTERACTIVE.has(t.name) || (tabindex !== null && tabindex >= 0))) {
+  // `hidden` takes the element out of the tab order as well as out of the page, so aria-hidden on it
+  // hides nothing that was reachable. GOV.UK's service-navigation toggle is written
+  // `<button ... hidden aria-hidden="true">` and uncovered by JavaScript when the menu is enabled -
+  // progressive enhancement done properly, reported as a barrier.
+  if (t.attrs['aria-hidden'] === 'true' && !notRendered(t) && (INTERACTIVE.has(t.name) || (tabindex !== null && tabindex >= 0))) {
     out.push({ rule: 'aria-hidden-focusable', confidence: 'barrier', ...place,
       why: 'hidden from screen readers but still reachable by the tab key',
       next: 'also remove it from the tab order with tabindex="-1", or stop hiding it' });
@@ -143,6 +150,20 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
 export function checkFile(source: string, all: Tag[], file: string, isDocument = false): Finding[] {
   const out: Finding[] = [];
   const labelFor = new Set(all.filter((t) => t.name === 'label' && t.attrs.for).map((t) => t.attrs.for));
+  // A framework can bind a label to a field without either of them spelling `for` or `id`. ASP.NET
+  // Core Tag Helpers do it with the model property: `asp-for="Name"` on the <label> renders
+  // `for="Name"`, and the same on the <input> renders `id="Name"`. bitwarden/server's admin views
+  // are written this way throughout, and 111 correctly labelled fields were called unlabelled.
+  // The same shape as PatternFly's FormGroup in Phase 43: the label is real, it is just not here.
+  const BINDS = ['asp-for', 'formControlName', 'v-model', 'data-valmsg-for'];
+  const boundLabels = new Set<string>();
+  for (const t of all) {
+    if (t.name !== 'label') continue;
+    for (const key of BINDS) {
+      const value = t.attrs[key];
+      if (typeof value === 'string' && value !== '') boundLabels.add(`${key}=${value}`);
+    }
+  }
   // Ids that a *component* names in one of its props. A design system labels a field by being told
   // which field it is for - PatternFly's `<FormGroup label={...} fieldId="x">` renders `<label for="x">`
   // around its children - and that label exists only in the component's own source, not here.
@@ -173,7 +194,7 @@ export function checkFile(source: string, all: Tag[], file: string, isDocument =
       continue;
     }
 
-    out.push(...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys), namedByComponent));
+    out.push(...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys), namedByComponent, boundLabels));
     if (!t.selfClosing) open.push({ name: t.name, keys: keyHandler(t) });
 
     const id = t.attrs.id;

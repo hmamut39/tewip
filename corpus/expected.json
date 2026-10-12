@@ -26,12 +26,12 @@
           "command": "schema",
           "expect": {
             "filesRead": 89,
-            "findings": 327,
+            "findings": 293,
             "breaks-old-code": 106,
             "destroys-data": 25,
-            "locks-writes": 196
+            "locks-writes": 162
           },
-          "verified": "2026-10-12: the 327 findings were counted independently with grep across the changelogs - 67 dropColumn + 39 renameColumn = 106, 25 dropTable, 26 addNotNullConstraint + 170 createIndex = 196. Tewip found exactly those and invented none. filesRead is 89 rather than the 83 changelogs: the other six are real .sql files - database init scripts and test schemas - correctly read and correctly reporting nothing. The first corpus run is what surfaced that, because the hand count had only listed *.xml."
+          "verified": "2026-10-12. 293 findings. The destructive ones were counted independently with grep across the 83 changelogs and match exactly: 67 dropColumn + 39 renameColumn = 106 breaks-old-code, 25 dropTable = destroys-data. filesRead is 89 rather than the 83 changelogs because six real .sql init scripts are read too, correctly reporting nothing. locks-writes was 196 and is 162: the 34 that went were indexes built on tables created in the same changeSet, which hold no rows, and a script confirmed none of the 162 that remain is on a table created in its own file. That suppression existed from Phase 33 and had never worked for Liquibase, because it knew only SQL's CREATE TABLE and not <createTable tableName=\"...\">."
         },
         {
           "command": "access",
@@ -60,9 +60,116 @@
             "cannot-tell": 150,
             "tautology": 1,
             "crash-only": 60,
-            "never-runs": 39
+            "never-runs": 39,
+            "swallows-failure": 0,
+            "unfinished-expectation": 0
           },
           "verified": "2026-10-12. 39 never-runs and 1 tautology checked against the source: 37 carry @Disabled or @Ignore directly, VisitValidatorTest has @Disabled after a three-line comment, CreateConceptDictionaryDataSet is disabled at class level, and the tautology is StartModuleAnnotationReuseTest.shouldPass, which is assertTrue(true) and nothing else. swallows-failure is 0, correcting Phase 42, which recorded 2 here as genuine: both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly on the JVM. tautology was 2 until RefByUuidTest was re-read - its assertTrue(true) sits beside a fail() in the catch, so the test can fail. These counts are from after line endings were normalised on read; before that they differed between Windows and Linux."
+        }
+      ]
+    },
+    {
+      "name": "bitwarden-server",
+      "url": "https://github.com/bitwarden/server.git",
+      "commit": "0d4d989ebf1ba827ca431313959150bd6c0e7f71",
+      "why": "Enterprise password management: the .NET stack that insurance and banking back offices run on. C# with xUnit, 456 EF Core migrations beside 1,264 T-SQL files, and Razor views - three dialects Tewip had never been measured against.",
+      "checks": [
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 1129,
+            "tests": 10875,
+            "checks": 9295,
+            "crash-only": 1275,
+            "cannot-tell": 262,
+            "never-runs": 43,
+            "swallows-failure": 0,
+            "unfinished-expectation": 0,
+            "tautology": 0
+          },
+          "verified": "2026-10-12. 43 never-runs, matching an independent grep for [Fact(Skip= and [Theory(Skip= exactly. swallows-failure is 0 and that is correct rather than missed: bitwarden's test suite contains no empty catch block at all, checked with grep. That is the measurement Phase 43 shipped as an assumption - C# was deliberately excluded from the JVM rule because NUnit, xUnit and MSTest all throw assertion failures deriving from Exception, so catch (Exception) really does swallow them there. If swallows-failure stops being 0, read the new ones. never-runs was 1 before this trial: xUnit's skip attribute was unknown, and the one finding it did have was `collections.Skip(1).ToList()`, which is LINQ."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 1720,
+            "findings": 558,
+            "slow": 38,
+            "destroys-data": 20,
+            "breaks-old-code": 147,
+            "locks-writes": 353
+          },
+          "verified": "2026-10-12. 558 findings, down from 919, with 361 false positives removed and every survivor checked. locks-writes was 714: no table was recognised as freshly created, because the pattern read PostgreSQL's \"quoted\" form but not SQL Server's [dbo].[Grant], and knew no framework's way of saying it - so EF Core's CreateTable followed by CreateIndex, which is what Prisma does, counted every index as blocking writes. All 339 EF Core locks-writes that remain were confirmed by script to be on tables not created in the same migration, and the src/Sql/dbo/Tables definitions now report none at all."
+        },
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 257,
+            "findings": 251,
+            "barrier": 230,
+            "ask-a-person": 21
+          },
+          "verified": "2026-10-12. 251 findings, down from 374. The 111 input-label barriers that went were ASP.NET Core Tag Helpers: asp-for=\"Name\" renders for=\"Name\" on the label and id=\"Name\" on the input, so the association is real and simply not written here. The 3 input-label that remain were opened and read - two labels carrying neither for nor asp-for, and one input whose only description is a placeholder, which is not a label. The link-name findings are genuine: social icon links in the email templates whose only content is an <img alt>, so a screen reader announces 'link' and nothing else."
+        }
+      ]
+    },
+    {
+      "name": "saleor",
+      "url": "https://github.com/saleor/saleor.git",
+      "commit": "782a751f622c4a047798ce7084b7c66c0877ec6f",
+      "why": "Commerce, and the largest Python test suite in the corpus. Phase 42 verified it by hand and the numbers then lived only in a commit message.",
+      "checks": [
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 1229,
+            "tests": 12982,
+            "crash-only": 187,
+            "checks": 12772,
+            "cannot-tell": 23,
+            "swallows-failure": 0,
+            "unfinished-expectation": 0,
+            "tautology": 0,
+            "never-runs": 0
+          },
+          "verified": "2026-10-12. Zero accusations across 12,982 tests - no tautology, no unfinished expectation, no swallowed failure, nothing skipped - and that agrees with the hand verification in Phase 42, which read the condemned list and found it empty. The four zeros are the measurement here: Saleor is the largest Python suite in the corpus and the one most likely to surface a false accusation, so any of them moving off zero needs reading before it is believed."
+        }
+      ]
+    },
+    {
+      "name": "govuk-frontend",
+      "url": "https://github.com/alphagov/govuk-frontend.git",
+      "commit": "dacc29dd045c8c3e2d7245616215da6515b8b5ab",
+      "why": "The UK government's design system, built by accessibility specialists under a legal obligation. The harshest test available for `access`, and the one place a false barrier is most embarrassing.",
+      "checks": [
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 175,
+            "findings": 35,
+            "ask-a-person": 29,
+            "barrier": 6
+          },
+          "verified": "2026-10-12. All 6 barriers opened and read, and all 6 are in the review app rather than the shipped component library: the colour input and two checkboxes whose label points at an id that does not exist (verified in Phase 41 too), two <img> with no alt on the product-page example, and an <iframe> with no title. The component library itself reports none, which is the right answer for a design system built under a legal obligation - and it was reporting six until Phase 45, when `{{- govukAttributes({ id: id, ... }) }}` was understood as a spread rather than as an element with no attributes at all."
+        }
+      ]
+    },
+    {
+      "name": "firefly-iii",
+      "url": "https://github.com/firefly-iii/firefly-iii.git",
+      "commit": "ba26768619842a4926655f315716f1b7788933d7",
+      "why": "A real finance application, and the only Laravel project in the corpus. Phase 41 taught `schema` to read its 61 migrations; nothing has held that in place since.",
+      "checks": [
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 61,
+            "findings": 32,
+            "breaks-old-code": 8,
+            "locks-writes": 16,
+            "destroys-data": 8
+          },
+          "verified": "2026-10-12. 61 migrations read, which is the number Phase 41 established by hand after Laravel was added as a dialect - it had been 0. This entry exists to hold that: Laravel is the only PHP dialect in the corpus, and its rollback is commonly written above the forward path, which is the shape that made it worth testing at all."
         }
       ]
     }

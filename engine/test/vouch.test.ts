@@ -543,3 +543,36 @@ describe('line endings', () => {
     assert.equal(verdictOf('T.java', lf), verdictOf('T.java', lf.split('\n').join('\r\n')));
   });
 });
+
+// Phase 45: .NET. The assumption shipped in Phase 43 - that C# is different because its assertion
+// failures derive from Exception - held up: bitwarden/server's 10,875 tests produced no false
+// accusation. What did not hold up was everything about skipping.
+describe('a skipped test in .NET', () => {
+  const cs = (body: string) => `using Xunit;\npublic class CollectionsControllerTests {\n${body}\n}`;
+
+  it('reads xUnit, which skips by giving the test attribute a reason', () => {
+    // Only `[Ignore]` was read, which is NUnit and MSTest. xUnit is the most used .NET framework by
+    // a distance and has no separate attribute, so bitwarden's 43 skipped tests were reported as 1.
+    for (const attribute of ['[Fact(Skip = "broken")]', '[Theory(Skip = "unreachable"), BitAutoData]', '[Fact(DisplayName = "x", Skip = "y")]']) {
+      const source = cs(`  ${attribute}\n  public void T() {\n    Assert.Equal(1, x);\n  }`);
+      assert.equal(verdictOf('CollectionsControllerTests.cs', source), 'never-runs', attribute);
+    }
+  });
+
+  it('still reads the NUnit and MSTest spelling', () => {
+    assert.equal(verdictOf('CollectionsControllerTests.cs', cs('  [Test]\n  [Ignore("later")]\n  public void T() {\n    Assert.AreEqual(1, x);\n  }')), 'never-runs');
+  });
+
+  it('does not read LINQ .Skip() as a test turning itself off', () => {
+    // `collections.Skip(1).ToList()` is how .NET pages a sequence. The rule was written for Go's
+    // `t.Skip()` and matched any identifier at all, so bitwarden's one and only never-runs finding,
+    // before xUnit was understood, was a correct test that pages a list.
+    const source = cs('  [Theory, BitAutoData]\n  public void T() {\n    collections.Skip(1).ToList().ForEach(c => c.Id = id);\n    Assert.Equal(1, x);\n  }');
+    assert.equal(verdictOf('CollectionsControllerTests.cs', source), 'checks');
+  });
+
+  it('still reads Go, which is what that rule was for', () => {
+    const go = 'func TestThing(t *testing.T) {\n\tt.Skip("flaky")\n\tif x != y { t.Fatal("no") }\n}';
+    assert.equal(verdictOf('a_test.go', go), 'never-runs');
+  });
+});

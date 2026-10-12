@@ -2629,7 +2629,9 @@ Keycloak gave **0 swallows-failure findings on Windows and 3 on Linux**, and Ope
 seven crash-only tests. Git for Windows checks source out with CRLF, so the text being judged was not
 the text the project wrote. A scanner whose answer depends on which machine ran it is not giving an
 answer; it is giving an opinion with a hostname attached. Line endings are now normalised at the
-read boundary rather than with a `?` in each pattern, because one forgotten `?` is this bug again.
+read boundary rather than with a `
+?` in each pattern, because one forgotten `
+?` is this bug again.
 
 The three that Windows had been hiding were worth the trouble. Two were false: Keycloak's admin
 client opens its tests by deleting what they are about to create -
@@ -2657,6 +2659,77 @@ Two repositories, four checks, every number carrying the sentence that says who 
 The corpus runs weekly, on every release tag, and on request - not on every push, because these are
 large clones. Every field trial from here adds a row instead of producing a number nobody checks
 again.
+
+### Phase 45: .NET, and an Assumption That Had Been Shipped
+
+Phase 43 fixed 166 false accusations by reading the caught exception type on the JVM, and
+**deliberately left C# out** - because NUnit, xUnit and MSTest all throw assertion failures deriving
+from `Exception`, so there `catch (Exception)` really does swallow one. That was reasoning, not
+measurement. It was shipped to everybody, about a language `vouch` had never been run against on
+real code, in the stack that insurance and banking back offices are built on.
+
+**bitwarden/server** - enterprise password management, 5,727 C# files, 1,214 test files, 456 EF Core
+migrations beside 1,264 T-SQL files, and Razor views. Three dialects, none of them ever measured.
+
+**The assumption held.** 10,875 tests, no false accusation, and `swallows-failure` is 0 because the
+suite contains no empty catch block at all - checked with grep, not assumed. What did not hold was
+everything about skipping.
+
+**43 skipped tests were reported as 1.** xUnit is the most used .NET framework by a distance and has
+no separate attribute for this: it skips by giving the test attribute a reason, `[Fact(Skip = "...")]`.
+Only `[Ignore]` was read, which is NUnit and MSTest. And the single finding it did have was wrong -
+`collections.Skip(1).ToList()`, which is LINQ, the ordinary way .NET pages a sequence. The rule was
+written for Go's `t.Skip()` and matched any identifier at all. A team told their suite is sound while
+43 of its tests never run is worse off than a team told nothing.
+
+**361 of 919 schema findings were false.** `createdHere` - the Phase 33 rule that stops an index on a
+table created two statements earlier from being called a lock, because a table with no rows holds
+nobody up - read PostgreSQL's `"quoted"` form and plain names. Not SQL Server's `[dbo].[Grant]`,
+which is standard T-SQL and what bitwarden is written in throughout. And not any framework's way of
+saying it, so EF Core's `CreateTable` followed by `CreateIndex` - exactly what Prisma does, the case
+that motivated the rule - counted every index as blocking writes. Both are fixed, and a script
+confirmed that all 339 EF Core locks that remain are on tables not created in the same migration.
+It moved Keycloak too: 196 locks became 162, and the rule had never once worked for Liquibase.
+
+**111 correctly labelled fields were called unlabelled.** ASP.NET Core Tag Helpers bind a label to a
+field through the model property - `asp-for="Name"` renders `for="Name"` on the `<label>` and
+`id="Name"` on the `<input>` - so the association is real and simply not written in the source. The
+same shape as PatternFly's `FormGroup` in Phase 43 and, it turned out, as GOV.UK's macros.
+
+### Folding the earlier trials into the corpus
+
+Phase 44 built the harness with two repositories. Saleor, GOV.UK and firefly-iii had all been
+verified by hand in Phases 41 and 42, and none of them was in it - so those numbers were still
+evaporating exactly the way the harness exists to stop. Adding them found one more thing, in the
+worst possible place.
+
+**GOV.UK reported 13 barriers where Phase 41 had verified 3**, six of them inside the shipped
+component library of a design system built by accessibility specialists under a legal obligation.
+Every one was Tewip's. GOV.UK writes its components like this:
+
+```njk
+<input
+  {{- govukAttributes({ class: classNames, id: id, name: params.name, ... }) }}
+```
+
+Every attribute, `id` included, arrives from one macro call. After the template expressions are
+blanked the element reads as a bare `<input>` with nothing on it, and an element with no `id` and no
+label is a certain barrier. It is not: it is an element this file cannot answer for. JSX's
+`{...props}` had been understood as a spread since Phase 28; the template languages' version of it
+had not, in any of the eleven template dialects Phase 37 added.
+
+The seventh was `<button ... hidden aria-hidden="true">` - GOV.UK's service-navigation toggle, hidden
+until JavaScript enables the menu. `aria-hidden` on a focusable element is a real barrier, which is
+why the rule exists, but `hidden` takes the element out of the tab order as well as off the page.
+Progressive enhancement done properly, reported as a defect.
+
+**6 barriers remain, all verified by hand, all in the review app rather than the shipped library** -
+the three Phase 41 found, two `<img>` with no alt, and an `<iframe>` with no title.
+
+The corpus is now **six real projects and nine checks**: Keycloak, OpenMRS, bitwarden, Saleor,
+GOV.UK and firefly-iii. Java, C#, Python, PHP, TypeScript and Nunjucks; Liquibase, EF Core, T-SQL and
+Laravel; React, Razor and a government design system. Every number carries the sentence saying who
+checked it and how.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

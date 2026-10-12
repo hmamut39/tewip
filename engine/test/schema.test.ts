@@ -618,3 +618,21 @@ describe('choosing which files are migrations', () => {
     ]) assert.equal(MIGRATION.test(path), true, path);
   });
 });
+
+// Phase 45: a lock is only expensive because of the rows it holds up.
+describe('an index on a table that did not exist a moment ago', () => {
+  const findings = (text: string) => droppingWhatIsNew(readSql(text), text);
+
+  it('reads SQL Server brackets, which is how T-SQL quotes a name', () => {
+    // This read PostgreSQL's "quoted" form and plain names, and not [dbo].[Grant] - so in
+    // bitwarden/server, which is T-SQL throughout, no table was ever recognised as freshly created
+    // and every index built two statements after its table was reported as blocking writes.
+    const fresh = 'CREATE TABLE [dbo].[Grant] (\n  [Id] INT NOT NULL\n);\nGO\nCREATE UNIQUE INDEX [IX_Grant_Key] ON [dbo].[Grant]([Key]);';
+    assert.deepEqual(findings(fresh), [], 'the table is created in this same file');
+  });
+
+  it('still reports an index on a table that already has rows', () => {
+    const existing = 'CREATE UNIQUE INDEX [IX_Old_Key] ON [dbo].[Existing]([Key]);';
+    assert.equal(findings(existing).length, 1);
+  });
+});

@@ -70,8 +70,31 @@ export function schemaFiles(cmd: SchemaCommand): string[] {
  */
 function createdHere(text: string): Set<string> {
   const names = new Set<string>();
-  for (const m of text.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([\w$.]+)"?/gi)) {
-    names.add(m[1].toLowerCase().replace(/^.*\./, ''));
+  // The frameworks say "create this table" in their own words, and the suppression is worth nothing
+  // in a dialect it cannot read. Only SQL was read, so bitwarden/server's 456 EF Core migrations -
+  // which do exactly what Prisma does, a CreateTable followed by a CreateIndex for every relation -
+  // produced 647 "blocks writes" findings about tables that had not existed a statement earlier.
+  // EF Core puts the name on the line after the call, so these have to reach across a newline.
+  const FRAMEWORK_CREATES = [
+    /migrationBuilder\s*\.\s*CreateTable\s*\([\s\S]{0,80}?name\s*:\s*["']([\w$.]+)["']/gi,
+    /queryInterface\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
+    /knex\s*\.\s*schema\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
+    /Schema\s*::\s*create\s*\(\s*["']([\w$.]+)["']/gi,
+    /\bcreate_table\s+[:'"]([\w$.]+)/gi,
+    /\bop\s*\.\s*create_table\s*\(\s*["']([\w$.]+)["']/gi,
+    /<createTable[^>]*tableName\s*=\s*["']([\w$.]+)["']/gi,
+  ];
+  for (const pattern of FRAMEWORK_CREATES)
+    for (const m of text.matchAll(pattern)) names.add(m[1].toLowerCase().replace(/^.*\./, ''));
+  // Every dialect's way of quoting a name, because the suppression is useless in the one that does
+  // not match. This read PostgreSQL's "quoted" form and plain names, and not SQL Server's
+  // [dbo].[Grant] - which is standard T-SQL and what bitwarden/server is written in throughout. No
+  // table was ever recognised as freshly created there, so every index built on a table created two
+  // statements earlier was reported as blocking writes: 714 findings, nearly all of them free.
+  for (const m of text.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w$.\"\[\]`]+)/gi)) {
+    // `[dbo].[Grant]` and `"public"."grant"` and `grant` all have to arrive here as the same word,
+    // because that is the form the findings report a table in.
+    names.add(m[1].replace(/[\"\[\]`]/g, '').toLowerCase().replace(/^.*\./, ''));
   }
   return names;
 }

@@ -233,7 +233,15 @@ function bracedTests(language: Language, text: string): FoundTest[] {
     // An annotation disables a test outright. A `t.Skip()` may be conditional - cobra's
     // TestDeadcodeElimination skips on Windows and runs everywhere else - so it counts only when it
     // is unconditional, at the top level of the body.
-    const skipped = /@(Disabled|Ignore)\b|\[\s*Ignore\b/.test(around) || skipsUnconditionally(body);
+    // xUnit - the most used .NET framework by a distance - has no separate attribute for this. It
+    // skips by giving the test attribute a reason: `[Fact(Skip = "...")]`, `[Theory(Skip = ...)]`.
+    // Only `[Ignore]` was read, which is NUnit and MSTest, so bitwarden/server's **43 skipped tests
+    // were reported as 1**. A team told their suite is sound while 43 of its tests never run is
+    // worse off than a team told nothing at all.
+    const skipped =
+      /@(Disabled|Ignore)\b|\[\s*Ignore\b/.test(around) ||
+      /\[\s*\w*(?:Fact|Theory)\s*\([^)]*\bSkip\s*=/.test(around) ||
+      skipsUnconditionally(body);
     found.push({ name, line: lineAt(text, at), body, skipped, callback: '' });
   }
   return found;
@@ -248,7 +256,12 @@ function skipsUnconditionally(body: string): boolean {
   let depth = 0;
   for (const line of body.split(String.fromCharCode(10))) {
     const text = line.trim();
-    if (depth === 0 && /^\w+\s*\.\s*Skip(Now)?\s*\(/.test(text)) return true;
+    // `t.Skip(...)` in Go: a short receiver, and a whole statement with nothing chained onto it.
+    // `\w+\.Skip(` matched any identifier at all, so C#'s LINQ - `collections.Skip(1).ToList()`,
+    // which is how .NET pages a sequence - read as a test turning itself off. bitwarden/server has
+    // one, and it was the only never-runs Tewip reported there until xUnit's `[Fact(Skip = ...)]`
+    // was understood; the real number was 43 and the one it had was wrong.
+    if (depth === 0 && /^\w{1,3}\s*\.\s*Skip(f|Now)?\s*\([^)]*\)\s*;?\s*$/.test(text)) return true;
     depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
   }
   return false;

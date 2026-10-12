@@ -76,8 +76,21 @@ export const UNLABELLED_TYPES = new Set(['hidden', 'submit', 'reset', 'button', 
  * When the style is a JSX expression its text is not kept, so whether it hides the element cannot be
  * read. That is not a reason to call it a certain barrier - it is a reason to say so.
  */
-export function hiddenFromEveryone(t: Tag): boolean {
+/**
+ * Not rendered at all, and therefore not in the tab order either.
+ *
+ * Separate from `hiddenFromEveryone` because `aria-hidden` hides an element from a screen reader
+ * while leaving it perfectly focusable - that gap is a real barrier and has its own rule. The
+ * `hidden` attribute and `display:none` close the gap: nothing can reach the element by any route.
+ */
+export function notRendered(t: Tag): boolean {
   if ('hidden' in t.attrs && t.attrs.hidden !== 'false') return true;
+  const style = typeof t.attrs.style === 'string' ? t.attrs.style : '';
+  return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(style);
+}
+
+export function hiddenFromEveryone(t: Tag): boolean {
+  if (notRendered(t)) return true;
   if (t.attrs['aria-hidden'] === 'true') return true;
   const style = typeof t.attrs.style === 'string' ? t.attrs.style : '';
   return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(style);

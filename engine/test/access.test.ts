@@ -358,3 +358,21 @@ describe('form controls in a React codebase', () => {
     assert.equal(confidenceOf('<input type="file" style={{ display: "none" }} />', 'input-label'), 'ask-a-person');
   });
 });
+
+// Phase 45: a framework can bind a label to a field without either of them spelling `for` or `id`.
+describe('labels a framework binds at render time', () => {
+  it('reads ASP.NET Core Tag Helpers', () => {
+    // `asp-for="Name"` renders `for="Name"` on the <label> and `id="Name"` on the <input>.
+    // bitwarden/server's admin views are written this way, and 111 correctly labelled fields were
+    // called unlabelled. The same shape as PatternFly's FormGroup: the label is real, not here.
+    assert.deepEqual(rules('<label asp-for="Name">Name</label><input type="text" asp-for="Name" name="name">', 'v.cshtml'), []);
+    assert.deepEqual(rules('<label asp-for="Paid">Customer</label><select asp-for="Paid"><option>a</option></select>', 'v.cshtml'), []);
+  });
+
+  it('still reports a field the framework did not bind', () => {
+    // A label with neither `for` nor `asp-for` is next to the input, not attached to it.
+    assert.deepEqual(rules('<label class="form-label">Client Owner Email</label><input type="email" asp-for="Owners">', 'v.cshtml'), ['input-label']);
+    // and a placeholder is not a label
+    assert.deepEqual(rules('<input type="text" name="name" placeholder="Name">', 'v.cshtml'), ['input-label']);
+  });
+});

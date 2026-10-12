@@ -2481,10 +2481,17 @@ was bounded while the commands themselves read everything. Writing the test for 
 gap in the first attempt: a project whose files sit in one flat directory empties the walk queue
 before the budget runs out, so the look stopped short and did not know it.
 
-**openmrs/openmrs-core** - 5,490 Java tests in 1.3 seconds, with **41 accusations, and every one of
-them verified true**: 2 `assertTrue(true)` tautologies, 37 tests annotated `@Test` next to `@Disabled`
-or `@Ignore`, 2 that catch their own failure and discard it. 22 files in that suite carry a disabling
-annotation. A hospital system shipping 37 tests that do not run is worth telling somebody about, and
+**openmrs/openmrs-core** - 5,490 Java tests in 1.3 seconds, with 41 accusations: 2 `assertTrue(true)`
+tautologies, 37 tests annotated `@Test` next to `@Disabled` or `@Ignore`, 2 that catch their own
+failure and discard it. 22 files in that suite carry a disabling annotation.
+
+> **Corrected 2026-10-12.** This paragraph said all 41 were verified true. Three were not. The two
+> "catch their own failure" findings are `try { ...; fail(); } catch (Exception e) {}` - the Java
+> expected-exception idiom, which fails properly, and which Phase 43 found 166 more of in Keycloak.
+> One of the two tautologies, `RefByUuidTest`, has its `assertTrue(true)` beside a `fail()` in the
+> catch, so the test can fail and is not a tautology. The hand verification behind the original claim
+> asked "is there an empty catch?" rather than "can that catch catch an assertion?", and 38 right
+> answers made the method look sound. The corpus harness in Phase 44 found all three. A hospital system shipping 37 tests that do not run is worth telling somebody about, and
 it is the first finding in this project that a maintainer could act on the same afternoon.
 
 The third bug was in `schema`, and it was the same shape as Laravel's: **44 Liquibase changelogs, and
@@ -2569,6 +2576,58 @@ Three trials have now produced the same shape of finding: Tewip is right about s
 use, or it looks where the convention says instead of where the code is. The fourth shape appeared
 here and is worse than both - Tewip being confidently, specifically wrong about somebody else's
 correct work. All ten were invisible to 918 passing tests.
+
+### Phase 44: The Corpus - Numbers Somebody Checked, Held in Place
+
+Phase 43 shipped 166 false accusations against Keycloak, and the only reason anybody found out is
+that the repository was cloned and 166 tests were read one at a time. **918 unit tests passed before
+that and after it.** A suite that cannot see its own worst failure is not measuring the thing that
+matters, and the thing that matters is what Tewip says about other people's code.
+
+So the verified numbers now live in `corpus/expected.json` against a pinned commit, and
+`npm run corpus` re-derives them. Counts come from the engine - verdicts and risks, counted - rather
+than from the words of a report, so a rewording cannot break the harness and a silent change of
+meaning cannot slip past it. Each expectation carries **how it was checked**, because a number nobody
+verified is not evidence, it is what the tool said that day. A number that moves is not automatically
+a bug: a real fix moves numbers, which is the point. It has to be re-verified and explained rather
+than discovered a phase later by a stranger.
+
+Nothing in it is a fixture. These are other people's repositories at a known commit.
+
+It earned its place three times before it was finished.
+
+**It found the sixth migration file.** The hand count behind Phase 43's schema number had listed
+`*.xml` and nothing else; the harness walks for every migration and found 89, the extra six being
+real `.sql` init scripts, correctly read and correctly reporting nothing. Writing the walk exposed a
+worse thing beside it: `MIGRATION` matched *any* file under a directory called `migration/`, so
+Keycloak's `docs/guides/migration/index.adoc` and its 113 `MigrateTo12_0_0.java` classes - application
+code for moving data between Keycloak versions - were selected as migrations and then listed as ones
+Tewip could not read. 205 files chosen to read 89. A "could not read" list that is mostly
+documentation teaches the reader to skip the list. The directory now decides *where* and the
+extension decides *whether it could hold DDL at all*, with Flyway's `V2__add_index.java` naming kept
+because those are real. 205 became 105, unread 116 became 16, and **the 89 that matter did not move**.
+
+**It found a false accusation in a test nobody would have re-read.** OpenMRS's `RefByUuidTest` was
+called a tautology - "the check compares a value with itself, which no change to the code can
+falsify" - and its `assertTrue(true)` does indeed compare nothing. But the real check is the `fail()`
+in its catch: make `getRefByUuid` throw and the test falsifies immediately. A bare `fail(...)`, which
+is how JUnit, TestNG and Go spell "this must not be reached" once the assertion is statically
+imported, had never counted as a check. `Assert.fail(...)` had. In Keycloak that was 44 more tests
+ending in `if (bad) fail(...)` being called crash-only, among them
+`EventOptionsTest.testDeprecatedArePresent`, which fails whenever an event type goes missing.
+
+**It found that the previous phase's hand verification was wrong.** Phase 42 recorded all 41 of
+OpenMRS's accusations as verified true. Three were not: the two "discards its own failure" findings
+are the same expected-exception idiom Phase 43 found 166 of, and one of the two tautologies is the
+`RefByUuidTest` above. That entry has been corrected in place rather than quietly adjusted. The
+verification asked "is there an empty catch?" instead of "can that catch catch an assertion?", and 38
+right answers out of 41 made the method look sound. Hand verification is necessary and it is not
+sufficient; this is what it looks like when it fails.
+
+Two repositories, four checks, every number carrying the sentence that says who checked it and how.
+The corpus runs weekly, on every release tag, and on request - not on every push, because these are
+large clones. Every field trial from here adds a row instead of producing a number nobody checks
+again.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

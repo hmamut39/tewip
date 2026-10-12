@@ -1,0 +1,70 @@
+{
+  "note": "Real projects at a pinned commit, with answers somebody checked by hand. Run with `npm run corpus`. A number that moves is not automatically a bug - a real fix moves numbers - but it must be re-verified and explained, never recorded blindly. `verified` says how each one was checked; an expectation with no verification behind it is not evidence, it is what the tool said that day.",
+  "repos": [
+    {
+      "name": "keycloak",
+      "url": "https://github.com/keycloak/keycloak.git",
+      "commit": "74c301ef0ac6ba36e29a5da5943ff335a90beb11",
+      "why": "Red Hat's identity server - the login layer inside banks, insurers and governments. Java, Liquibase and a React admin UI on PatternFly, which is three stacks in one repository.",
+      "checks": [
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 1580,
+            "tests": 11858,
+            "checks": 9568,
+            "cannot-tell": 1213,
+            "crash-only": 1000,
+            "never-runs": 77,
+            "swallows-failure": 0,
+            "unfinished-expectation": 0,
+            "tautology": 0
+          },
+          "verified": "2026-10-12: all 77 never-runs read by hand - 31 @Ignore, 21 @Disabled, 19 .skip, 6 confirmed with grep where a Windows path defeated the reader. The three zeros are the guard, not an absence: Phase 43 shipped 166 swallows-failure accusations here and every one was the Java expected-exception idiom, which cannot swallow an AssertionError. If any of them stops being 0, read the new ones before believing them. checks/crash-only moved on 2026-10-12 when a bare `fail(...)` began counting as a check - 44 tests that end in `if (bad) fail(...)` were being called crash-only, and EventOptionsTest.testDeprecatedArePresent was read by hand to confirm it."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 89,
+            "findings": 327,
+            "breaks-old-code": 106,
+            "destroys-data": 25,
+            "locks-writes": 196
+          },
+          "verified": "2026-10-12: the 327 findings were counted independently with grep across the changelogs - 67 dropColumn + 39 renameColumn = 106, 25 dropTable, 26 addNotNullConstraint + 170 createIndex = 196. Tewip found exactly those and invented none. filesRead is 89 rather than the 83 changelogs: the other six are real .sql files - database init scripts and test schemas - correctly read and correctly reporting nothing. The first corpus run is what surfaced that, because the hand count had only listed *.xml."
+        },
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 644,
+            "findings": 13,
+            "barrier": 5,
+            "ask-a-person": 8
+          },
+          "verified": "2026-10-12: all 5 barriers opened and read in the source. Two are real defects in Red Hat's production interface - an unlabelled <img src={application.logoUri}> in the account console users see, and a bare <input type=\"color\"> in the admin theme editor. The other three are a missing alt and two <html> elements with no lang."
+        }
+      ]
+    },
+    {
+      "name": "openmrs-core",
+      "url": "https://github.com/openmrs/openmrs-core.git",
+      "commit": "ee18bf341b68364e78adf1e434ce06934e289a10",
+      "why": "A real hospital system. Java and Liquibase, and the second JVM project in the corpus - one sample of a language is not a measurement.",
+      "checks": [
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 405,
+            "tests": 5808,
+            "checks": 5559,
+            "cannot-tell": 142,
+            "tautology": 1,
+            "crash-only": 67,
+            "never-runs": 39
+          },
+          "verified": "2026-10-12: 39 never-runs and 1 tautology checked against the source. 37 carry @Disabled or @Ignore directly; the other two are real but sat outside a narrow search window - VisitValidatorTest has @Disabled after a three-line comment, and CreateConceptDictionaryDataSet is disabled at class level. The tautology is StartModuleAnnotationReuseTest.shouldPass, which is `assertTrue(true)` and nothing else. swallows-failure is 0 and that is a correction: Phase 42 recorded 2 here as genuine and they were not - both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly. tautology was 2 until RefByUuidTest was re-read: its `assertTrue(true)` sits beside a `fail()` in the catch, so the test can fail and is not a tautology."
+        }
+      ]
+    }
+  ]
+}

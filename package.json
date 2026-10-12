@@ -1,6 +1,6 @@
 {
   "name": "tewip-ai",
-  "version": "0.51.0",
+  "version": "0.52.0",
   "mcpName": "io.github.hmamut39/tewip",
   "description": "Tewip finds why each failing test failed - real bug, flaky test, environment, test data or changed selector - for any stack, from the command line, CI, or your editor.",
   "keywords": [
@@ -64,7 +64,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "tewip": "node cli/tewip.ts",
-    "version": "node scripts/sync-version.ts && git add server.json"
+    "version": "node scripts/sync-version.ts && git add server.json",
+    "corpus": "node scripts/corpus.ts"
   },
   "license": "Apache-2.0",
   "devDependencies": {

@@ -30,6 +30,13 @@ const CHECKS: RegExp[] = [
   /\bpytest\s*\.\s*(raises|warns|approx|fail)\b/,
   /\bnp\s*\.\s*testing\s*\.\s*assert/,
   /\bassert_(frame|series|index)_equal\b/,
+  // A bare `fail(...)`, which is how JUnit, TestNG and Go spell "this must not be reached" once the
+  // assertion is statically imported. `Assert.fail(...)` was already read by the pattern below;
+  // `fail(...)` on its own was not, so OpenMRS's RefByUuidTest - whose only real check is a `fail()`
+  // in the catch, beside a deliberate `assertTrue(true)` in the try - was called a tautology that
+  // "no change to the code can falsify". Make `getRefByUuid` throw and it falsifies immediately.
+  // The leading class keeps `shouldFail(` and `canFail(` out, and the paren must come next.
+  /(^|[^\w.])(?:Assert(?:ions)?\s*\.\s*)?fail\s*\(/,
   // Java, Kotlin, C#, Scala.
   /\bAssert(ions)?\s*\./,
   /\bassertThat\s*\(/,

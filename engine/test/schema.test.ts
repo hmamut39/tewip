@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
 import { schemaFiles } from '../schema/schema-command.ts';
+import { MIGRATION } from '../schema/migration-files.ts';
 import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -585,5 +586,35 @@ describe('the column a drop names, and the column its evidence names', () => {
       'src/db.changelog-master.yaml',
     ]) assert.match(path, NAMED, path);
     assert.doesNotMatch('src/main/resources/application.xml', NAMED);
+  });
+});
+
+// Phase 44: a directory called `migration/` says what is probably in it, not what every file is.
+describe('choosing which files are migrations', () => {
+  it('leaves documentation and application code out of a migration directory', () => {
+    // Keycloak selected 205 files in order to read 89, and listed the other 116 as migrations it
+    // could not read - among them `docs/guides/migration/index.adoc` and 113 `MigrateTo12_0_0.java`
+    // classes. A "could not read" list that is mostly documentation teaches the reader to skip it.
+    for (const path of ['docs/guides/migration/index.adoc', 'docs/guides/migration/img/diagram.png']) {
+      assert.equal(MIGRATION.test(path), false, path);
+    }
+    assert.equal(MIGRATION.test('model/storage/src/main/java/org/keycloak/migration/migrators/MigrateTo12_0_0.java'), false);
+  });
+
+  it('keeps a Flyway Java migration, which is named the way Flyway requires', () => {
+    for (const path of ['db/migration/V2__add_index.java', 'src/migrations/V1.1__seed.kt', 'db/migration/R__rebuild_views.java']) {
+      assert.equal(MIGRATION.test(path), true, path);
+    }
+  });
+
+  it('still takes everything that really can hold DDL', () => {
+    for (const path of [
+      'migrations/0002_add_column.sql',
+      'db/migrate/20240101_x.rb',
+      'alembic/versions/abc_add.py',
+      'database/migrations/2024_01_01_x.php',
+      'prisma/migrations/0001_init/migration.sql',
+      'migrations/0003.xml',
+    ]) assert.equal(MIGRATION.test(path), true, path);
   });
 });

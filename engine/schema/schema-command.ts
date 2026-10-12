@@ -13,6 +13,9 @@ import { dirname, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { dialectOf, forwardOnly, irreversible, readFramework, type Dialect } from './frameworks.ts';
 import { readSql, type Finding, type Risk } from './statements.ts';
+import { MIGRATION, NAMED_MIGRATION, SCHEMA_FILE, migrationsUnder } from './migration-files.ts';
+
+export { migrationsUnder };
 
 export interface SchemaCommand {
   root: string;
@@ -41,18 +44,6 @@ export interface StillUsed {
   files: string[];
 }
 
-const MIGRATION = /(^|\/)(migrations?|migration|db\/migrate|prisma\/migrations|alembic|flyway|changelogs?|sql)\//i;
-// A changelog is often not in a directory that says so. OpenMRS keeps 44 Liquibase changelogs in
-// `api/src/main/resources/` named `liquibase-*.xml`, and the path filter saw none of them - so a
-// real healthcare system with 44 migration files was told it had none. The name counts too.
-// A changelog is named for what it is, but hardly ever *only* that. Phase 42 taught this filter to
-// read `liquibase-update-to-latest.xml` and it still missed Keycloak's 83 files, every one of them
-// called `jpa-changelog-<version>.xml`: the name was required to *begin* with the word. Prefixes are
-// the norm - a project with more than one database names each changelog after its module. So the
-// word may sit anywhere in the name. Letting a release-notes `CHANGELOG.xml` through costs nothing,
-// because `dialectOf` still has to find `<databaseChangeLog` in it before it is read as a migration.
-const NAMED_MIGRATION = /(^|\/)[\w.-]*(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i;
-const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate)\/.*\.(py|rb|js|ts|php|cs)$/i;
 
 /** The schema files in this change. */
 export function schemaFiles(cmd: SchemaCommand): string[] {

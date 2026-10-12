@@ -447,3 +447,54 @@ describe('a catch that cannot catch an assertion', () => {
     assert.equal(verdictOf('a.test.js', js), 'swallows-failure');
   });
 });
+
+// Phase 44: found by the corpus harness, in a test nobody would have re-read.
+//
+// OpenMRS's RefByUuidTest was called a tautology - "the check compares a value with itself, which no
+// change to the code can falsify" - and its `assertTrue(true)` does compare nothing. But the real
+// check is the `fail()` in its catch. Make the call throw and the test falsifies immediately.
+describe('a bare fail() is a check', () => {
+  it('is not a tautology when a fail() in the catch can still fail it', () => {
+    const source = [
+      'public class T {',
+      '  @Test',
+      '  public void refByUuid() {',
+      '    try {',
+      '      Object r = svc.get(x);',
+      '      assertTrue(true, "no exception");',
+      '    } catch (Exception e) {',
+      '      fail("threw: " + e.getMessage());',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    assert.equal(verdictOf('T.java', source), 'checks');
+  });
+
+  it('still calls a real tautology a tautology', () => {
+    const source = 'public class T {\n  @Test\n  public void t() {\n    assertTrue(true);\n  }\n}';
+    assert.equal(verdictOf('T.java', source), 'tautology');
+  });
+
+  it('reads the shape that ends in a conditional fail', () => {
+    // Keycloak's EventOptionsTest.testDeprecatedArePresent, and 43 others, were being called
+    // crash-only. That test fails whenever an event type goes missing.
+    const source = [
+      'public class T {',
+      '  @Test',
+      '  public void deprecatedArePresent() {',
+      '    List<String> left = remaining();',
+      '    if (!left.isEmpty()) {',
+      '      fail("Unknown event types " + left);',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    assert.equal(verdictOf('T.java', source), 'checks');
+  });
+
+  it('does not mistake a method whose name ends in Fail for the assertion', () => {
+    const source = 'public class T {\n  @Test\n  public void t() {\n    shouldFail(x);\n    canFail(y);\n  }\n}';
+    assert.notEqual(verdictOf('T.java', source), 'checks');
+  });
+});

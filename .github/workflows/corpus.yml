@@ -1,0 +1,49 @@
+# Re-derives the numbers somebody checked by hand, against real projects at a pinned commit.
+#
+# Phase 43 shipped 166 false accusations - correct Java tests told they were worthless - and the only
+# reason anybody found out is that Keycloak was cloned and 166 tests were read one at a time. Every
+# unit test passed before that and after it. A suite that cannot see its worst failure is not
+# measuring the thing that matters, and the thing that matters is what Tewip says about other
+# people's code.
+#
+# Not on every push: these are large clones and the checks take minutes. Weekly, before a release,
+# and whenever somebody asks.
+name: corpus
+
+on:
+  schedule:
+    - cron: '0 5 * * 2' # Tuesdays, 05:00 UTC
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'One repository from corpus/expected.json; empty runs all'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      # Keyed on the manifest: a new pinned commit must be fetched, an unchanged one must not.
+      - name: Reuse the clones
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/tewip-corpus
+          key: corpus-${{ hashFiles('corpus/expected.json') }}
+          restore-keys: corpus-
+
+      - name: Re-derive the verified numbers
+        env:
+          TEWIP_CORPUS: ~/.cache/tewip-corpus
+        run: node scripts/corpus.ts ${{ inputs.repo }}

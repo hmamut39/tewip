@@ -6,53 +6,10 @@
 //   security check, and what the team's corrections add up to. Every one runs the same `tewip`
 //   command line people use in a terminal, in the open folder, and shows its Markdown.
 const vscode = require('vscode');
-const { exec, execFile } = require('node:child_process');
+const { execFile } = require('node:child_process');
+const { runTewip, tewipCommand, workspaceDir } = require('./run.js');
+const { checkEngineVersion } = require('./engine-version.js');
 
-/** The program and leading arguments that run Tewip, from the `tewip.path` setting. */
-function tewipCommand() {
-  const setting = (vscode.workspace.getConfiguration('tewip').get('path') || 'tewip').trim();
-  // A path to the script itself runs under Node; anything else is taken as the command to run.
-  if (/\.(ts|js|mjs)$/i.test(setting)) return { command: 'node', args: [setting] };
-  return { command: setting, args: [] };
-}
-
-function workspaceDir() {
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-}
-
-/**
- * On Windows the `tewip` command is a .cmd file, which only runs through cmd.exe, and cmd.exe
- * splits and interprets an unquoted command line: a path with a space would break in two, and an
- * "&" in a folder or branch name would start a second command. Every argument is quoted, and a
- * "%" (which cmd.exe expands even inside quotes) is refused rather than guessed at.
- */
-function forCmd(arg) {
-  if (/[%\r\n]/.test(arg)) throw new Error(`cannot pass "${arg}" safely to the Windows command line (it contains % or a line break)`);
-  return `"${arg.replace(/"/g, '""')}"`;
-}
-
-/** Runs `tewip <args>` in `cwd` and resolves with its output. */
-function runTewip(args, cwd) {
-  const { command, args: lead } = tewipCommand();
-  const windows = process.platform === 'win32';
-  return new Promise((resolve, reject) => {
-    let all;
-    try {
-      all = windows ? [command, ...lead, ...args].map(forCmd) : [...lead, ...args];
-    } catch (error) {
-      reject(error);
-      return;
-    }
-    const done = (error, stdout, stderr) => {
-      if (error && !stdout) reject(new Error(stderr?.trim() || error.message));
-      else resolve(stdout);
-    };
-    const options = { cwd, maxBuffer: 32 * 1024 * 1024, env: process.env };
-    // Windows: one command line, every part already quoted by forCmd, run by cmd.exe.
-    if (windows) exec(all.join(' '), options, done);
-    else execFile(command, all, options, done);
-  });
-}
 
 /** Shows Markdown output in a new editor with a rendered preview beside it. */
 async function show(markdown) {
@@ -259,6 +216,8 @@ const isItSlower = fileCommand({ verb: 'perf', busy: 'Tewip is checking whether 
 const wouldTestsCatch = fileCommand({ verb: 'prove', busy: 'Tewip is breaking this file to see whether the tests notice (this takes minutes)…', needsFile: true, extra: ['--limit', '4'] });
 
 function activate(context) {
+  // Not awaited: the check must never delay a command the person asked for.
+  void checkEngineVersion();
   context.subscriptions.push(
     vscode.commands.registerCommand('tewip.explainReport', explainReport),
     vscode.commands.registerCommand('tewip.ciReport', ciReport),

@@ -5,6 +5,7 @@
 // Tewip would not judge - and it ends with what it refused, because that is what makes the rest of
 // it believable.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { normalise } from '../quality/source-text.ts';
 import { join, relative } from 'node:path';
 import { CANNOT_FAIL, vouchFile, type FileVouch, type Judgement, type Verdict } from './vouch.ts';
 
@@ -60,7 +61,7 @@ export function vouchAll(root: string, paths: string[]): FileVouch[] {
   for (const file of testFiles(root, paths)) {
     let text: string;
     try {
-      text = readFileSync(file, 'utf8');
+      text = normalise(readFileSync(file, 'utf8'));
     } catch {
       continue;
     }

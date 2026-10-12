@@ -2624,6 +2624,35 @@ verification asked "is there an empty catch?" instead of "can that catch catch a
 right answers out of 41 made the method look sound. Hand verification is necessary and it is not
 sufficient; this is what it looks like when it fails.
 
+**And on its first run in CI it found that Tewip was not deterministic.** The same pinned commit of
+Keycloak gave **0 swallows-failure findings on Windows and 3 on Linux**, and OpenMRS differed by
+seven crash-only tests. Git for Windows checks source out with CRLF, so the text being judged was not
+the text the project wrote. A scanner whose answer depends on which machine ran it is not giving an
+answer; it is giving an opinion with a hostname attached. Line endings are now normalised at the
+read boundary rather than with a `?` in each pattern, because one forgotten `?` is this bug again.
+
+The three that Windows had been hiding were worth the trouble. Two were false: Keycloak's admin
+client opens its tests by deleting what they are about to create -
+
+```ts
+try { await clientScopes.delByName({ name }); } catch { /* ignore */ }
+```
+
+- and asserts afterwards, outside the try. The rule asked "does this test assert anywhere, and is
+there an empty catch anywhere", so a `try` around *setup* was read as a swallowed verdict. A catch
+can only discard a verdict its own try contains, and that is now what is asked.
+
+The third is genuine, and it is the mirror image of Phase 43:
+
+```ts
+try { await getConfig({ id }); fail("should not find deleted config"); } catch { /* ignore */ }
+```
+
+In Java this shape is correct, because `AssertionError` is not an `Exception` and a typed catch
+cannot take it. In TypeScript a bare `catch` catches **everything**, including what `fail()` throws,
+so the test passes whether or not the config was deleted. Same shape, opposite answers, both right -
+and a real defect in Red Hat's admin client.
+
 Two repositories, four checks, every number carrying the sentence that says who checked it and how.
 The corpus runs weekly, on every release tag, and on request - not on every push, because these are
 large clones. Every field trial from here adds a row instead of producing a number nobody checks

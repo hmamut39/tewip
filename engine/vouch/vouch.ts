@@ -9,6 +9,8 @@
 // their time and their trust, and a reviewer who is wrong once is ignored afterwards. So a body whose
 // checking happens somewhere this cannot follow is reported as undecided, by name, and never as
 // vacuous.
+import { balanced, firstRealLine, stripLines, withoutComments } from './text.ts';
+import { swallowsFailure } from './swallowed.ts';
 import { checksSomething, tautologies, unfinishedExpectations } from './assertions.ts';
 import { languageOf, looksLikeTests, testsIn, textRanges, type FoundTest, type Language } from './tests-in.ts';
 
@@ -162,56 +164,7 @@ function withoutText(body: string): string {
   return out;
 }
 
-/**
- * On the JVM, the only catches that can swallow a failing assertion.
- *
- * `Assert.fail()` and every JUnit matcher throw `AssertionError`, which extends `Error`, which
- * extends `Throwable` - and `Error` is **not** an `Exception`. So `catch (Exception e) { }` does not
- * catch a failing assertion, and neither does `catch (NotFoundException e) { }`. Only these do.
- *
- * This is not a detail. It is the difference between the standard Java way of writing "I expect this
- * to throw" -
- *
- *     try { parse(bad); Assert.fail(); } catch (VerificationException expected) { }
- *
- * - which is a correct test that fails properly when `parse` stops throwing, and a test that really
- * does discard its own verdict. Tewip could not tell them apart and called **166 correct Keycloak
- * tests worthless**, every one of them this idiom. Telling a developer their working test is
- * worthless is the one failure this project cannot afford, so the caught type is now read.
- *
- * C# is deliberately not here: NUnit, xUnit and MSTest all throw assertion failures that derive from
- * `Exception`, so `catch (Exception)` really does swallow them there. Same shape, opposite answer.
- */
-const JVM_SWALLOWS = /^(?:java\.lang\.)?(?:Throwable|Error|AssertionError)$/;
 
-/**
- * Everything inside a `try` whose `catch` discards what it caught. An assertion failure is an
- * exception, so a test shaped this way reports success however the code behaves - and a `catch` that
- * asserts, re-throws or fails the test is the legitimate version, which this leaves alone.
- */
-function swallowsFailure(body: string, checks: boolean, language: Language): string {
-  if (!checks) return ''; // nothing to swallow; judged as no-assertion instead
-  for (const hit of body.matchAll(/catch\s*(\([^)]*\))?\s*\{/g)) {
-    // On the JVM the caught type decides it, and nearly every type leaves the assertion alone.
-    if (language === 'jvm') {
-      const caught = /\(\s*(?:final\s+)?([\w.]+)/.exec(hit[1] ?? '');
-      // A multi-catch - `catch (A | B e)` - swallows only if one of its types does.
-      const types = (hit[1] ?? '').replace(/[()]/g, '').split('|').map((t) => t.trim().split(/\s+/)[0]);
-      if (!types.some((t) => JVM_SWALLOWS.test(t)) && !(caught && JVM_SWALLOWS.test(caught[1]))) continue;
-    }
-    const open = body.indexOf('{', hit.index ?? 0);
-    const handler = balanced(body, open);
-    if (handler === null) continue;
-    const meaningful = withoutComments(handler).trim();
-    const rescues = checksSomething(handler) || /\b(throw|raise|rethrow|fail|t\s*\.\s*(Error|Fatal)|pytest\s*\.\s*fail)\b/.test(handler);
-    if (rescues) continue;
-    // A handler that only logs, or does nothing at all, discards the failure.
-    if (meaningful === '' || /^(console\s*\.\s*\w+\s*\([^;]*\)\s*;?|print\s*\([^;]*\)\s*;?|pass|;)$/.test(meaningful.replace(/\s+/g, ' ').trim())) {
-      return meaningful === '' ? 'catch { }' : meaningful.slice(0, 120);
-    }
-  }
-  return '';
-}
 
 /** Functions defined in this file that assert, so a test calling one really is checking something. */
 function helpersThatCheck(text: string, language: Language): Set<string> {
@@ -247,45 +200,5 @@ function indentedFrom(text: string, from: number): string {
 /** Names that are calls but not helpers: language and framework machinery. */
 const LANGUAGE_NOISE = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'await', 'typeof', 'new', 'require', 'import', 'print', 'console', 'log', 'describe', 'beforeEach', 'afterEach', 'it', 'test', 'range', 'len', 'str', 'int', 'super', 'Error', 'Promise', 'Array', 'Object', 'String', 'Number', 'Boolean', 'Date', 'JSON', 'Math', 'Map', 'Set']);
 
-const balanced = (text: string, open: number): string | null => {
-  if (open === -1) return null;
-  let depth = 0;
-  for (let i = open; i < text.length; i += 1) {
-    if (text[i] === '{') depth += 1;
-    else if (text[i] === '}') {
-      depth -= 1;
-      if (depth === 0) return text.slice(open + 1, i);
-    }
-  }
-  return null;
-};
 
 /** Comments cannot assert, and a commented-out check is the classic way a test stops checking. */
-function withoutComments(body: string): string {
-  return body
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .split(String.fromCharCode(10))
-    .map((line) => line.replace(/(^|\s)\/\/.*$/, '').replace(/(^|\s)#(?!\{).*$/, ''))
-    .join(String.fromCharCode(10));
-}
-
-const stripLines = (body: string, lines: string[]): string =>
-  body
-    .split(String.fromCharCode(10))
-    .filter((line) => !lines.some((drop) => line.trim() === drop.trim()))
-    .join(String.fromCharCode(10));
-
-/** The first line that does something, for the report to quote. */
-function firstRealLine(body: string): string {
-  const lines = body
-    .split(String.fromCharCode(10))
-    .map((l) => l.trim())
-    .filter((l) => l !== '' && l !== '{' && l !== '}');
-  // A comment is not the evidence. Saleor's tests are written `# given` / `# when / then`, so the
-  // quoted evidence for 166 real findings was the single character "#", which tells a reader
-  // nothing about the test it is accusing. The line that does something is the evidence.
-  // Nor is a line with nothing in it but punctuation: a lone quote closing a docstring, a stray
-  // bracket. Evidence has to be something a reader can recognise as the test doing work.
-  const code = lines.find((l) => !/^(#|\/\/|\/\*|\*|"""|'''|--)/.test(l) && /[A-Za-z0-9]/.test(l));
-  return (code ?? lines[0] ?? '').slice(0, 120);
-}

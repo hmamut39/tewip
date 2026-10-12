@@ -12,15 +12,15 @@
           "expect": {
             "files": 1580,
             "tests": 11858,
-            "checks": 9568,
+            "checks": 9567,
             "cannot-tell": 1213,
             "crash-only": 1000,
             "never-runs": 77,
-            "swallows-failure": 0,
+            "swallows-failure": 1,
             "unfinished-expectation": 0,
             "tautology": 0
           },
-          "verified": "2026-10-12: all 77 never-runs read by hand - 31 @Ignore, 21 @Disabled, 19 .skip, 6 confirmed with grep where a Windows path defeated the reader. The three zeros are the guard, not an absence: Phase 43 shipped 166 swallows-failure accusations here and every one was the Java expected-exception idiom, which cannot swallow an AssertionError. If any of them stops being 0, read the new ones before believing them. checks/crash-only moved on 2026-10-12 when a bare `fail(...)` began counting as a check - 44 tests that end in `if (bad) fail(...)` were being called crash-only, and EventOptionsTest.testDeprecatedArePresent was read by hand to confirm it."
+          "verified": "2026-10-12. All 77 never-runs read by hand - 31 @Ignore, 21 @Disabled, 19 .skip, 6 confirmed with grep. The single swallows-failure is genuine and is a real defect in Red Hat's admin client: authenticationManagement.spec.ts `try { await getConfig(id); fail('should not find deleted config'); } catch {}` - a bare catch in TypeScript catches everything, including what fail() throws, so the test passes whether or not the config was deleted. It must stay 1 and it must stay that test. Phase 43 shipped 166 here, all the Java expected-exception idiom, which cannot swallow an AssertionError; two more were found and removed in Phase 44, where the empty catch guarded setup and the assertions came after it. unfinished-expectation and tautology are 0 and that is the guard, not an absence."
         },
         {
           "command": "schema",
@@ -56,13 +56,13 @@
           "expect": {
             "files": 405,
             "tests": 5808,
-            "checks": 5559,
-            "cannot-tell": 142,
+            "checks": 5558,
+            "cannot-tell": 150,
             "tautology": 1,
-            "crash-only": 67,
+            "crash-only": 60,
             "never-runs": 39
           },
-          "verified": "2026-10-12: 39 never-runs and 1 tautology checked against the source. 37 carry @Disabled or @Ignore directly; the other two are real but sat outside a narrow search window - VisitValidatorTest has @Disabled after a three-line comment, and CreateConceptDictionaryDataSet is disabled at class level. The tautology is StartModuleAnnotationReuseTest.shouldPass, which is `assertTrue(true)` and nothing else. swallows-failure is 0 and that is a correction: Phase 42 recorded 2 here as genuine and they were not - both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly. tautology was 2 until RefByUuidTest was re-read: its `assertTrue(true)` sits beside a `fail()` in the catch, so the test can fail and is not a tautology."
+          "verified": "2026-10-12. 39 never-runs and 1 tautology checked against the source: 37 carry @Disabled or @Ignore directly, VisitValidatorTest has @Disabled after a three-line comment, CreateConceptDictionaryDataSet is disabled at class level, and the tautology is StartModuleAnnotationReuseTest.shouldPass, which is assertTrue(true) and nothing else. swallows-failure is 0, correcting Phase 42, which recorded 2 here as genuine: both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly on the JVM. tautology was 2 until RefByUuidTest was re-read - its assertTrue(true) sits beside a fail() in the catch, so the test can fail. These counts are from after line endings were normalised on read; before that they differed between Windows and Linux."
         }
       ]
     }

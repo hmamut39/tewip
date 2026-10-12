@@ -260,3 +260,20 @@ describe('rules-4: data collisions and server errors come before the retry rule'
     assert.ok(d.evidence.some((e) => /exercises error handling/.test(e.message)));
   });
 });
+
+// Phase 44: a scanner whose answer depends on the machine that ran it is giving an opinion with a
+// hostname attached. Found when the corpus harness disagreed with itself across Windows and Linux.
+describe('reading somebody else source the same way everywhere', () => {
+  it('strips carriage returns and a byte order mark', async () => {
+    const { normalise } = await import('../quality/source-text.ts');
+    assert.equal(normalise('a\r\nb\r\n'), 'a\nb\n');
+    assert.equal(normalise('﻿first'), 'first');
+    assert.equal(normalise('already\nfine'), 'already\nfine');
+  });
+
+  it('keeps the line count, so reported line numbers do not move', async () => {
+    const { normalise } = await import('../quality/source-text.ts');
+    const crlf = 'one\r\ntwo\r\nthree';
+    assert.equal(normalise(crlf).split('\n').length, crlf.split('\n').length);
+  });
+});

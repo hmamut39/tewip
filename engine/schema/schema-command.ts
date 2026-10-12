@@ -9,6 +9,7 @@
 // such. A mention in a comment counts as a mention; Tewip says where it looked and lets the reader judge.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { normalise } from '../quality/source-text.ts';
 import { dirname, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { dialectOf, forwardOnly, irreversible, readFramework, type Dialect } from './frameworks.ts';
@@ -87,7 +88,7 @@ export function droppingWhatIsNew(findings: Finding[], text: string): Finding[] 
 export function readMigration(root: string, file: string): Migration {
   let text = '';
   try {
-    text = readFileSync(resolve(root, file), 'utf8');
+    text = normalise(readFileSync(resolve(root, file), 'utf8'));
   } catch {
     return { file, dialect: 'unknown', findings: [], unread: 'the file could not be read', irreversible: false };
   }

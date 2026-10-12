@@ -9,6 +9,7 @@
 //
 // It never says a page is accessible. It says what was checked.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { normalise } from '../quality/source-text.ts';
 import { dirname, join, relative, resolve } from 'node:path';
 import { sourceFiles } from '../secure/secrets.ts';
 import { JS_LIKE, MARKUP, tags } from './markup.ts';
@@ -93,7 +94,7 @@ export function findBarriers(root: string, only?: string): { findings: Finding[]
   for (const path of files) {
     let source: string;
     try {
-      source = readFileSync(path, 'utf8');
+      source = normalise(readFileSync(path, 'utf8'));
     } catch {
       continue;
     }

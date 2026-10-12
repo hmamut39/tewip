@@ -498,3 +498,48 @@ describe('a bare fail() is a check', () => {
     assert.notEqual(verdictOf('T.java', source), 'checks');
   });
 });
+
+// Phase 44, found by the corpus harness on its first run in CI: the same pinned commit gave 0
+// swallows-failure on Windows and 3 on Linux, because Git for Windows checks source out with CRLF.
+// Two of the three were false, and this is the rule that was wrong.
+describe('a catch only swallows what its own try contains', () => {
+  it('leaves a try around setup alone', () => {
+    // Keycloak's admin-client tests open by deleting the thing they are about to create, so the
+    // test does not depend on what the last run left behind, and assert afterwards - outside it.
+    const source = [
+      'it("create client scope and get by name", async () => {',
+      '  try {',
+      '    await kcAdminClient.clientScopes.delByName({ name });',
+      '  } catch {',
+      '    // ignore',
+      '  }',
+      '  await kcAdminClient.clientScopes.create({ name });',
+      '  const scope = await kcAdminClient.clientScopes.findOneByName({ name });',
+      '  expect(scope).to.be.ok;',
+      '});',
+    ].join('\n');
+    assert.equal(verdictOf('a.spec.ts', source), 'checks');
+  });
+
+  it('still catches the assertion that really is inside the try', () => {
+    const source = 'it("y", async () => {\n  try {\n    expect(scope).to.be.ok;\n  } catch {\n  }\n});';
+    assert.equal(verdictOf('a.spec.ts', source), 'swallows-failure');
+  });
+
+  it('reads the expected-exception idiom as broken in TypeScript and sound in Java', () => {
+    // The same shape, opposite answers, and both are right. A bare `catch` in TypeScript catches
+    // everything the `fail()` throws; a typed `catch` in Java cannot catch an AssertionError.
+    const ts = 'it("x", async () => {\n  try {\n    await getConfig({ id });\n    fail("should not find deleted config");\n  } catch {\n    // ignore\n  }\n});';
+    assert.equal(verdictOf('a.spec.ts', ts), 'swallows-failure');
+    const java = 'public class T {\n  @Test\n  public void t() {\n    try {\n      getConfig(id);\n      fail("should not find deleted config");\n    } catch (NotFoundException expected) {\n    }\n  }\n}';
+    assert.equal(verdictOf('T.java', java), 'checks');
+  });
+});
+
+// The answer must not depend on which machine read the file.
+describe('line endings', () => {
+  it('judges a CRLF file exactly as it judges an LF one', () => {
+    const lf = 'public class T {\n  @Test\n  public void t() {\n    try {\n      Assert.assertEquals(2, f());\n    } catch (Throwable e) {\n    }\n  }\n}';
+    assert.equal(verdictOf('T.java', lf), verdictOf('T.java', lf.split('\n').join('\r\n')));
+  });
+});

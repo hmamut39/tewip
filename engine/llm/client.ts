@@ -67,9 +67,13 @@ interface OpenAiOptions {
   model: string;
   reasoningEffort?: string;
   baseUrl?: string;
+  /** The name to use in an error, so a local runner is not reported as OpenAI. */
+  provider?: string;
+  /** How to get it running, shown when a local endpoint refuses the connection. */
+  hint?: string;
 }
 
-export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https://api.openai.com/v1' }: OpenAiOptions): LlmClient {
+export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https://api.openai.com/v1', provider = 'OpenAI', hint = '' }: OpenAiOptions): LlmClient {
   return {
     model: reasoningEffort ? `${model} (reasoning ${reasoningEffort})` : model,
     async complete({ system, user, schemaName, schema }) {
@@ -94,7 +98,18 @@ export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https:
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           });
         } catch (error) {
-          if (attempt >= MAX_ATTEMPTS) throw new Error(`OpenAI request failed: ${String(error)}`);
+          if (attempt >= MAX_ATTEMPTS) {
+            // "OpenAI request failed: TypeError: fetch failed" is what somebody running a model on
+            // their own machine used to see when they had not started it - the wrong provider named,
+            // and no mention of the one thing wrong. A local endpoint that refuses the connection is
+            // not an outage, it is a server nobody started yet, and the hint says how.
+            const local = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(baseUrl);
+            throw new Error(
+              local
+                ? `no model is answering at ${baseUrl}. Nothing is listening there, so ${provider} is probably not running${hint ? ` - ${hint}` : ''}`
+                : `${provider} request failed: ${String(error)}`,
+            );
+          }
           await sleep(2000 * attempt);
           continue;
         }
@@ -111,7 +126,7 @@ export function openAiClient({ apiKey, model, reasoningEffort, baseUrl = 'https:
           return message.content;
         }
         const detail = truncate(await res.text(), 300);
-        if ((res.status !== 429 && res.status < 500) || attempt >= MAX_ATTEMPTS) throw new Error(`OpenAI API ${res.status}: ${detail}`);
+        if ((res.status !== 429 && res.status < 500) || attempt >= MAX_ATTEMPTS) throw new Error(`${provider} API ${res.status}: ${detail}`);
         await sleep(2000 * attempt);
       }
     },

@@ -6,6 +6,7 @@ import { truncate } from '../signature.ts';
 import type { LlmClient } from './client.ts';
 import type { FailureContext } from './context.ts';
 import { OUTPUT_SCHEMA, OUTPUT_SCHEMA_NAME, PROMPT_VERSION, SYSTEM_PROMPT } from './prompt.ts';
+import { jsonFromModel } from './json-from-model.ts';
 
 export interface LlmOutput {
   category: RootCause;
@@ -16,7 +17,7 @@ export interface LlmOutput {
 
 /** Validates the model's JSON. Throws on anything outside the contract. */
 export function parseLlmOutput(raw: string): LlmOutput {
-  const value = JSON.parse(raw) as Partial<LlmOutput>;
+  const value = jsonFromModel<Partial<LlmOutput>>(raw);
   if (!ROOT_CAUSES.includes(value.category as RootCause)) throw new Error(`category outside the taxonomy: ${String(value.category)}`);
   if (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence)) throw new Error('confidence is not a number');
   if (typeof value.reasoning !== 'string') throw new Error('reasoning is not a string');

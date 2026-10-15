@@ -2792,6 +2792,63 @@ listed as the evaluation project an AI engineer is expected to have built, and t
 is a **judge that is not the thing being judged**: every expectation in it was verified by hand, by
 the same author who wrote the rule. Worth saying plainly rather than claiming otherwise.
 
+### Phase 47: The Model on Your Own Machine, Actually Run
+
+Planned as "add local model support". The first thing it found is that local model support already
+existed: `TEWIP_PROVIDER=ollama`, keyless, pointed at `127.0.0.1:11434/v1`, with a default model and
+a hint - and a test that checked the environment variables resolved and **never sent a request**.
+
+Configured on reasoning, never measured. The same mistake as C# in Phase 45, and worth saying
+plainly rather than building a second one beside it.
+
+Why it matters more than most: a hospital, a bank or a government department cannot send source code
+to a hosted API, and those are precisely the organisations every field trial since Phase 41 has been
+aimed at. The local path is not a preference for them, it is the only path.
+
+Put in front of a real OpenAI-compatible server, **two of the three commonest local replies crashed
+it outright**:
+
+| what the model sent | what happened |
+|---|---|
+| `{ ... }` | parsed |
+| ` ```json
+{ ... }
+``` ` | `SyntaxError: Unexpected token '\`'` |
+| `Here is the analysis:
+
+{ ... }` | `SyntaxError: Unexpected token 'H'` |
+
+OpenAI's `response_format: json_schema` with `strict: true` constrains generation, so the content is
+always a bare object and `JSON.parse` is enough - which is why four separate call sites did exactly
+that. Self-hosted Ollama does constrain through llama.cpp's grammar decoder, but Ollama's own
+documentation records backends that accept the parameter and quietly do not enforce it, and every
+other local runner has its own answer. A fence and a sentence of preamble are not a model
+misbehaving; they are what an unconstrained model does.
+
+So there is now one extractor, used at all four sites. It is extraction and not repair: the fence
+comes off, the object between the outermost braces is taken, and a reply with no JSON in it still
+throws, quoting what actually arrived.
+
+**And the first error a local user would ever see named the wrong product.** With nothing listening
+on 11434, Tewip spent six seconds retrying and then said:
+
+> OpenAI request failed: TypeError: fetch failed
+
+Wrong provider, and no mention of the single thing that was wrong. It now says:
+
+> no model is answering at http://127.0.0.1:11434/v1. Nothing is listening there, so ollama is
+> probably not running - install Ollama from ollama.com, then run: ollama pull qwen3:8b
+
+The README gained the section that tells a privacy-constrained team this is possible at all, with
+what changes and what does not: the deterministic layers call no model under any provider, and only
+judgement - explaining a failure, writing a test, drafting a plan - uses one.
+
+**Not measured here, and worth being straight about.** Ollama is not installed on this machine, so
+every finding above comes from the real client against a real HTTP server rather than against a real
+model. That is exactly where the integration bugs were, and it is not the same as running a 8B model
+over a genuine failure and judging the answer. Until that happens, Tewip supports a local model and
+nobody has measured how good its answers are with one.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

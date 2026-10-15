@@ -8,6 +8,7 @@ import type { LlmClient } from '../llm/client.ts';
 import type { Framework } from './frameworks.ts';
 import type { PageFacts } from './grounding.ts';
 import type { Plan } from './plan.ts';
+import { jsonFromModel } from '../llm/json-from-model.ts';
 
 export const WRITE_PROMPT_VERSION = 'write-6';
 
@@ -93,7 +94,7 @@ function contextFor(ctx: WriteContext, scenario: Scenario) {
 
 export async function draftTest(model: LlmClient, ctx: WriteContext, scenario: Scenario): Promise<Draft> {
   const raw = await model.complete({ system: DRAFT_SYSTEM, user: JSON.stringify(contextFor(ctx, scenario)), schemaName: 'tewip_test_draft', schema: DRAFT_SCHEMA });
-  return JSON.parse(raw) as Draft;
+  return jsonFromModel<Draft>(raw);
 }
 
 /** The first lines of a failure: which check failed and how, without the page or the call log. */
@@ -108,7 +109,7 @@ export async function repairTest(model: LlmClient, ctx: WriteContext, scenario: 
   const repeated = earlier.length > 0 ? { earlierFailures: earlier, note: 'Your earlier repairs failed too. If the same check keeps failing because the page does something other than the scenario expects, the fault is "app".' } : {};
   const user = JSON.stringify({ ...contextFor(ctx, scenario), yourTest: draft.code, realError: error.slice(-10000), ...repeated });
   const raw = await model.complete({ system: REPAIR_SYSTEM, user, schemaName: 'tewip_test_repair', schema: REPAIR_SCHEMA });
-  return JSON.parse(raw) as Repair;
+  return jsonFromModel<Repair>(raw);
 }
 
 /**

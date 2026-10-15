@@ -9,6 +9,7 @@ import type { LlmClient } from '../llm/client.ts';
 import { readJsonl } from '../../reporters/store.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import { changeSummary, existingTests, readPages, relatedCodeSources, relatedTestSources, type ChangeSummary, type ExistingTests, type PageFacts, type TestSource } from './grounding.ts';
+import { jsonFromModel } from '../llm/json-from-model.ts';
 
 export const PLAN_PROMPT_VERSION = 'plan-4';
 
@@ -154,5 +155,5 @@ export function verifyCoverage(plan: Plan, facts: PlanFacts): Plan {
 
 export async function writePlan(facts: PlanFacts, model: LlmClient): Promise<Plan> {
   const raw = await model.complete({ system: SYSTEM, user: factsForModel(facts), schemaName: 'tewip_test_plan', schema: SCHEMA });
-  return verifyCoverage(JSON.parse(raw) as Plan, facts);
+  return verifyCoverage(jsonFromModel<Plan>(raw), facts);
 }

@@ -68,7 +68,14 @@ export function modelChoiceFromEnv(purpose: 'triage' | 'write'): ModelChoice | n
 /** A client for that choice: Anthropic has its own API shape, everything else speaks OpenAI's. */
 export function clientFor(choice: ModelChoice): LlmClient {
   if (choice.provider === 'anthropic') return anthropicClient({ apiKey: choice.apiKey, model: choice.model, baseUrl: choice.baseUrl });
-  return openAiClient({ apiKey: choice.apiKey || 'local', model: choice.model, reasoningEffort: choice.reasoningEffort, baseUrl: choice.baseUrl });
+  return openAiClient({
+    apiKey: choice.apiKey || 'local',
+    model: choice.model,
+    reasoningEffort: choice.reasoningEffort,
+    baseUrl: choice.baseUrl,
+    provider: choice.provider === 'custom' ? 'the configured endpoint' : choice.provider,
+    hint: PROVIDERS[choice.provider].hint,
+  });
 }
 
 /** What to tell someone who has no model configured, naming every way to get one. */

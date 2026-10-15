@@ -15,12 +15,41 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 | **Terminal** | `npm install -g tewip-ai`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
 | **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension ([download](https://github.com/hmamut39/tewip/releases/tag/vscode-0.5.0)): registers Tewip with the editor's AI assistant and adds six commands - explain a report, why CI failed on this branch, the risk review of your change, which flaky tests to quarantine, the security check, and what your corrections add up to |
 | **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp`: fifteen tools, including *has this happened here before?*, *is this requirement covered and passing?* and *what should be done next about this goal?* (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
-| **Any model** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama (no account, nothing leaves the computer): `TEWIP_PROVIDER` |
+| **Any model, including none** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama - no account, no key, and no source code leaving the building: `TEWIP_PROVIDER=ollama`. Three quarters of what Tewip answers calls no model at all. [How](#running-with-no-data-leaving-the-building) |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
 
 Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.
 
 **Status: phases 1 to 14 are built; the two auto-fix phases (5 and 8) are the ones still in progress.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
+
+
+## Running with no data leaving the building
+
+A hospital, a bank or a government department usually cannot send source code to a hosted API, and
+that is most of who this is built for. Tewip runs against a model on the same machine:
+
+```bash
+# once
+curl -fsSL https://ollama.com/install.sh | sh     # or ollama.com for Windows and macOS
+ollama pull qwen3:8b
+
+# then
+export TEWIP_PROVIDER=ollama
+tewip done --diff main...HEAD
+```
+
+No key, no account, no network call off the machine. `TEWIP_BASE_URL` points the same path at
+LM Studio, vLLM, llama.cpp's server, or anything else that speaks the OpenAI shape.
+
+**What changes and what does not.** The deterministic layers - `vouch`, `schema`, `access`, `perf`,
+`standards` - call no model at any time, with any provider, and are unaffected. Only the parts that
+need judgement use one: explaining a failure, writing a test, drafting a plan. A smaller local model
+is less accurate at those than a frontier one, and Tewip says which layer decided every answer, so
+the difference is visible rather than hidden.
+
+A local model is also less likely to be *constrained* to the schema it was asked for: some backends
+accept the request and quietly do not enforce it. Tewip reads a reply that arrives inside a markdown
+fence or after a sentence of preamble, and still refuses one with no JSON in it at all.
 
 ## What it costs
 

@@ -2731,6 +2731,67 @@ GOV.UK and firefly-iii. Java, C#, Python, PHP, TypeScript and Nunjucks; Liquibas
 Laravel; React, Razor and a government design system. Every number carries the sentence saying who
 checked it and how.
 
+### Phase 46: The Verdict This Tool Is Named For, Measured at Last
+
+`done` is the command the product exists for - *"Proves the work"*. It is what a team runs before
+merging: is anything failing, is the changed code really tested, can the tests in it fail at all,
+does it keep this project's standards. Ready, not ready, or cannot say.
+
+Five field trials had measured its **components** - `vouch`, `schema`, `access`, `perf` - on whole
+repositories. **The verdict itself had never been run on a real change.** It is also the one place
+where being wrong is most expensive, because somebody merges on it.
+
+Six real merged Saleor pull requests, each one checked out at its own commit and judged against its
+parent. **Four came back "Not ready", and all four shipped a test for exactly the change they made.**
+
+`#19798` is the clearest. It changes `saleor/graphql/utils/sorting.py` to reject a `sortBy` with
+neither a field nor an attribute, and adds `test_sort_products_without_field_and_attribute`, which
+posts precisely that query and asserts the error. Tewip said:
+
+> Not ready: no test imports or reaches `saleor/graphql/utils/sorting.py`, so nothing here could
+> notice a mistake in it.
+
+The first clause is true and the second does not follow. Coverage here is followed through imports -
+a fact rather than a name match, and the right design - but a test that posts a GraphQL query never
+imports the resolver chain in between. The same is true of an HTTP route, a Django view, a Rails
+controller, a Spring endpoint. In those frameworks, which is most of the web, import-following cannot
+see the coverage that exists.
+
+**A gate that says "not ready" to a correct pull request is uninstalled within a week**, and it is
+the same overclaim as a false accusation, pointed at the change instead of at a test. So the check
+can now say what this project says everywhere else: when nothing imports the changed file *and the
+same change ships tests*, the answer is **cannot say**, with the reason spelled out. When the change
+ships no test either, it stays "not ready", because then nothing really could notice. All six now
+read "Cannot say", which is honest rather than useful - and honest is the floor, not the ceiling.
+
+**Two things about Tewip's honesty about itself.** The verdict cited its own accuracy as *"tewip
+vouch, 19 of 19 correct on 5,448 tests in 8 public projects"* - a figure written before Phase 43
+found 166 false accusations in a single repository. It now cites the corpus. The README carried the
+same claim, and now carries the correction in full: what the number was, what happened, and why the
+corpus exists. A tool whose whole argument is "every answer carries its evidence" cannot quote a
+stale number about itself.
+
+And the "cannot say" headline read *"is anything failing and is the changed code tested could not be
+checked"* - the questions lowercased and joined with "and". In the headline of the verdict the
+product is named for.
+
+### What the 2026 material changes about the plan
+
+From the references sent on 2026-10-15, two things are worth acting on rather than noting.
+
+**A local model.** Every reference stack now puts Ollama beside the cloud APIs, and for this product
+it is not a preference but an adoption gate: a hospital, a bank or a government department cannot
+send source code to OpenAI, and those are precisely the buyers these field trials have been aimed
+at. Tewip is already most of the way there by construction - three quarters of what it answers is
+decided by deterministic rules that call no model at all - so what is missing is a provider, not an
+architecture. **Phase 47.**
+
+**The corpus was the right instinct.** "A golden set, a judge and a CI gate against regressions" is
+listed as the evaluation project an AI engineer is expected to have built, and that is exactly what
+`corpus/expected.json` and the corpus workflow are. The one thing it lacks against that description
+is a **judge that is not the thing being judged**: every expectation in it was verified by hand, by
+the same author who wrote the rule. Worth saying plainly rather than claiming otherwise.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

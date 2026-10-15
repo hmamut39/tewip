@@ -46,10 +46,25 @@ describe('is this work done?', () => {
     assert.match(decision.headline, /went unnoticed/);
   });
 
-  it('will not say ready when nothing tests the changed code', () => {
-    const decision = decide(seen({ covering: [] }));
+  it('will not say ready when nothing tests the changed code and the change adds none', () => {
+    const decision = decide(seen({ covering: [], changedTests: [] }));
     assert.equal(decision.verdict, 'not-ready');
     assert.match(decision.headline, /no test imports or reaches/);
+  });
+
+  // Phase 46, found by running this verdict over six real merged Saleor pull requests: four came
+  // back "Not ready" and all four shipped a test for exactly the change they were making. Coverage
+  // here is followed through imports, and a test that posts a GraphQL query and asserts the error
+  // never imports the resolver chain in between. A gate that says "not ready" to a correct pull
+  // request is uninstalled within a week.
+  it('says cannot say, not no, when the change ships tests the imports cannot see', () => {
+    const decision = decide(seen({ covering: [] }));
+    assert.equal(decision.verdict, 'cannot-say');
+    assert.match(decision.headline, /"Is the changed code tested\?"/);
+    assert.match(decision.headline, /one question that matters/);
+    const check = decision.checks.find((c) => c.question === 'Is the changed code tested?');
+    assert.equal(check?.standing, 'not-checked');
+    assert.match(check?.answer ?? '', /framework entry point/);
   });
 
   it('puts what is failing above everything else', () => {
@@ -65,7 +80,7 @@ describe('is this work done?', () => {
     // an approval assembled out of shrugs. An unanswered essential question is not a pass.
     const decision = decide(seen({ noHistory: true }));
     assert.equal(decision.verdict, 'cannot-say');
-    assert.match(decision.headline, /is anything failing could not be checked/);
+    assert.match(decision.headline, /"Is anything failing\?" - so this is not an approval/);
     assert.match(decision.headline, /not an approval/);
   });
 

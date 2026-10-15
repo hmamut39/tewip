@@ -87,11 +87,33 @@ export function decide(evidence: Evidence): Decision {
   // 2. Does anything test the change at all?
   if (evidence.changedSource.length === 0) {
     checks.push({ question: 'Is the changed code tested?', standing: 'not-applicable', answer: 'this change touches no source file', decidedBy: 'the diff' });
+  } else if (evidence.covering.length === 0 && evidence.changedTests.length > 0) {
+    // Nothing *imports* the changed file, and the same change ships tests. Coverage here is followed
+    // through imports, which is a fact rather than a name match - and which cannot see a test that
+    // reaches the code through a framework's entry point. A Saleor test posts a GraphQL query and
+    // asserts the error it gets back; the resolver chain in between is never imported by name.
+    //
+    // Found in Phase 46 by running this verdict over six real merged Saleor pull requests. Four came
+    // back **Not ready**, and all four shipped a test for exactly the change they were making. A gate
+    // that says "not ready" to a correct pull request is uninstalled within a week, and it is the
+    // same overclaim as a false accusation, pointed at the change instead of at a test.
+    //
+    // So: cannot say. Which is this project's whole point, and this check had no way to say it.
+    checks.push({
+      question: 'Is the changed code tested?',
+      standing: 'not-checked',
+      answer:
+        `no test imports or reaches ${evidence.changedSource.slice(0, 3).join(', ')}, but this change also ` +
+        `edits ${evidence.changedTests.length} test file(s). Coverage is followed through imports, which cannot see a test ` +
+        'that reaches the code through a GraphQL resolver, an HTTP route or any other framework entry point - ' +
+        'so whether those tests cover this is a question the imports cannot answer',
+      decidedBy: 'imports followed through the source, which is a fact rather than a name match',
+    });
   } else if (evidence.covering.length === 0) {
     checks.push({
       question: 'Is the changed code tested?',
       standing: 'not-met',
-      answer: `no test imports or reaches ${evidence.changedSource.slice(0, 3).join(', ')}, so nothing here could notice a mistake in it`,
+      answer: `no test imports or reaches ${evidence.changedSource.slice(0, 3).join(', ')}, and this change adds no test either, so nothing here could notice a mistake in it`,
       decidedBy: 'imports followed through the source, which is a fact rather than a name match',
     });
   } else {
@@ -111,7 +133,7 @@ export function decide(evidence: Evidence): Decision {
       question: 'Can the tests in this change fail?',
       standing: 'not-met',
       answer: `${evidence.cannotFail.length} of them cannot: ${evidence.cannotFail.slice(0, 2).map((t) => `${t.name} (${t.file}:${t.line})`).join(', ')}`,
-      decidedBy: 'tewip vouch, 19 of 19 correct on 5,448 tests in 8 public projects',
+      decidedBy: 'tewip vouch, measured on 41,523 real tests in the six public projects in corpus/expected.json',
     });
   } else {
     checks.push({
@@ -180,7 +202,15 @@ export function decide(evidence: Evidence): Decision {
       broken.length > 0
         ? `Not ready: ${broken[0].answer}`
         : verdict === 'cannot-say'
-          ? `Cannot say: ${essential.filter((c) => c.standing === 'not-checked').map((c) => c.question.toLowerCase().replace(/\?$/, '')).join(' and ')} could not be checked, so this is not an approval`
+          ? // Quoted, because the questions are questions: lowercasing them and joining with "and"
+            // produced "is anything failing and is the changed code tested could not be checked",
+            // which is the headline of the verdict this whole tool is named for.
+            `Cannot say: ${
+              essential.filter((c) => c.standing === 'not-checked').length === 1 ? 'one question that matters' : 'two questions that matter'
+            } here went unanswered - ${essential
+              .filter((c) => c.standing === 'not-checked')
+              .map((c) => `"${c.question}"`)
+              .join(' and ')} - so this is not an approval`
           : `Ready as far as ${checks.filter((c) => c.standing === 'met').length} check(s) can show${unknown.length > 0 ? `, with ${unknown.length} not checked` : ''}`,
     checks,
     notChecked: [

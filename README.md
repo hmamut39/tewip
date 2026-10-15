@@ -1067,9 +1067,18 @@ that never run, and tests that compare no value at all. No model, no cost.
 It is also an MCP tool, so a coding agent can ask about the tests it just wrote before claiming a
 change is covered.
 
-**Measured on 5,448 tests in 8 public projects across 5 languages** (express, axios, chalk, requests,
-click, gorilla/mux, cobra, gson): 19 tests were called unable to fail, and **all 19 were correct** when
-read against the files - one unconditional skip in psf/requests, eighteen `@Ignore` methods in gson.
+**Measured on 41,523 tests in six public projects** - Keycloak, OpenMRS, bitwarden/server, Saleor,
+GOV.UK Frontend and Firefly III - in Java, C#, Python, PHP and TypeScript. Every accusation was read
+against its source by hand, and the counts are kept in [`corpus/expected.json`](corpus/expected.json)
+against a pinned commit, re-derived by `npm run corpus` on every release.
+
+**It has been badly wrong once, and that is worth saying plainly.** An earlier version of this
+paragraph reported 19 of 19 correct on 5,448 tests. Then Tewip was pointed at Keycloak and **called
+166 correct tests worthless** - every one of them the standard Java way of writing "I expect this to
+throw", which `Assert.fail()` makes fail properly because `AssertionError` is not an `Exception`.
+The rule had never read the caught type. 918 unit tests passed before that and after it, which is
+why the corpus exists: the thing that matters is what Tewip says about other people's code, and
+nothing was measuring it.
 
 Two things it refuses to do, which is why the list is worth reading:
 

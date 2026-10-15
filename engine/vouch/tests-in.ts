@@ -42,7 +42,26 @@ export function languageOf(file: string): Language | null {
 }
 
 /** Does this file look like tests at all? Vouching for a source file is a category error. */
+/**
+ * Minified or vendored: a file nobody in this project wrote, and nobody is going to fix.
+ *
+ * firefly-iii ships `public/v1/lib/jquery-4.0.0.min.js`, and minified JavaScript is full of `test(`
+ * - it is how a regular expression is applied - so it read as a test file and was judged as one.
+ * Nothing useful can come of that: the author cannot act on it, and it is not their code.
+ *
+ * Length is the signal rather than the name, because plenty of vendored bundles are not called
+ * `.min.js`. A minified file is one enormous line; source is not.
+ */
+function minifiedOrVendored(file: string, text: string): boolean {
+  if (/[.-]min\.(js|css|mjs)$/i.test(file)) return true;
+  if (/(^|[\/])(vendor|third[_-]?party|bundles?|dist)[\/]/i.test(file)) return true;
+  const lines = text.split(String.fromCharCode(10));
+  const longest = lines.reduce((most, line) => Math.max(most, line.length), 0);
+  return longest > 2000 && text.length / Math.max(lines.length, 1) > 400;
+}
+
 export function looksLikeTests(file: string, text: string): boolean {
+  if (minifiedOrVendored(file, text)) return false;
   const named = /(^|[\\/])(tests?|spec|specs|__tests__|e2e|it|integration)[\\/]|[._-](test|tests|spec|specs|it)\.[a-z]+$|(^|[\\/])test_[^\\/]+\.py$|_test\.(go|py|rb)$|Tests?\.(java|kt|cs|scala)$/i.test(file);
   const declares =
     /\b(it|test|describe|Scenario)\s*\(|^\s*def\s+test_|@Test\b|\[(Test|Fact|Theory)\]|\bfunc\s+Test[A-Z]/m.test(text) ||
@@ -50,7 +69,19 @@ export function looksLikeTests(file: string, text: string): boolean {
     // above never matched it, and Rust marks one with an attribute no pattern here knew. Both came
     // back as "0 test(s) read in 0 file(s)", which reads like a clean answer and is not one.
     /#\s*\[\s*(?:test|tokio::test|rstest)\s*\]/.test(text) ||
-    /\bfunction\s+test\w*\s*\(|#\s*\[\s*Test\b|\*\s*@test\b/.test(text) ||
+    // `public`, or no modifier at all: PHPUnit runs public methods and nothing else. Without that,
+    // firefly-iii's `private function testing()` - a middleware helper asking whether the app is in
+    // the test environment - made `app/Http/Middleware/InterestingMessage.php` a test file, and the
+    // whole of that production class was judged as tests. Vouching for source code is a different
+    // question, and this file says so three lines further down.
+    // A PHP method called `test*` is not a PHPUnit test. firefly-iii has eight public ones in
+    // production controllers - `testRule`, `testNotification` - which are endpoints a user hits to
+    // try a rule or send a test notification, and every one of them made its controller a test file.
+    // What makes a PHPUnit test is the class it is in, so that is what is asked for: a TestCase to
+    // extend, or the attribute and annotation forms that need no base class.
+    (/#\s*\[\s*Test\b|\*\s*@test\b/.test(text) ||
+      (/(?:^|[^\w$>])(?:public\s+)?(?:static\s+)?function\s+test\w*\s*\(/m.test(text) &&
+        /\bextends\s+\w*TestCase\b|\buse\s+PHPUnit\{2}Framework/.test(text))) ||
     /^\s*(?:RSpec\.)?(?:describe|context)\s+|^\s*(?:x|f)?it\s+["'].*\bdo\b/m.test(text);
   return named || declares;
 }

@@ -2849,6 +2849,73 @@ model. That is exactly where the integration bugs were, and it is not the same a
 over a genuine failure and judging the answer. Until that happens, Tewip supports a local model and
 nobody has measured how good its answers are with one.
 
+### Phase 48: Ruby, PHP and Rust - the Last Three Assumptions
+
+Phase 36 added these three languages. Phase 45 found four bugs in C# the day it was finally measured,
+and Phase 47 found two in the local-model path the day it was finally run. These were the three that
+were left.
+
+**discourse** - 54,846 RSpec tests, the largest Ruby suite available. **firefly-iii** - a real finance
+application, the only Laravel project in the corpus. **ripgrep** - Rust, and the project Phase 36's
+Rust support was written against in the first place.
+
+**Rust was right.** 466 tests, zero accusations. The one language that held.
+
+**PHP was 72% undecided, which is a different way of being useless.** 68 of firefly-iii's 95 tests
+came back "Tewip would not judge", and the reason is one line:
+
+```php
+$response = $this->get(route('api.v1.autocomplete.accounts'));
+$response->assertUnauthorized();
+$response->assertHeader('Content-Type', 'application/json');
+```
+
+That is how a Laravel HTTP test asserts, and only `$this->assert` was recognised - so the assertions
+were unknown helpers that might assert, and nearly every test in the project was undecided. A tool
+that shrugs at three quarters of a suite has not told anybody anything.
+
+**And eight production files were being judged as tests.** firefly-iii has `private function testing()`
+in middleware - asking whether the app is in the test environment - and public `testRule` and
+`testNotification` methods in controllers, which are endpoints a user hits to try a rule or send a
+test notification. Every one made its class a test file, and this project's own extractor says three
+lines further down that vouching for source code is a different question. PHPUnit runs public methods
+in a class that extends TestCase; that is now what is asked for, and the eight are gone.
+
+**A ninth file was minified jQuery.** Minified JavaScript is full of `test(`, because that is how a
+regular expression is applied. OpenMRS turned out to have the same thing under `webapp/`, inside a
+corpus project whose numbers had been recorded as correct. Length is the signal rather than the
+name, since plenty of vendored bundles are not called `.min.js`.
+
+**Ruby's skips were conditional.** 30 of discourse's 37 "never runs" were this:
+
+```ruby
+skip "suggested topic not found in results" if suggested_topic.nil?
+```
+
+A modifier guard. The test runs every time the condition is false, which is most of the time. The Go
+path has refused conditional skips since it was written - "cobra's TestDeadcodeElimination skips on
+Windows and runs everywhere else" is in the comment - and Ruby's was added in Phase 36 without it.
+The last one was an expectation kept in a variable and finished on the next line, which RSpec allows:
+`preview = expect(...)` then `preview.to match(...)` is a finished expectation spanning three lines,
+and reading only the line the `expect` sits on called it unfinished.
+
+**38 accusations became 7, and all 7 were read against their source:** five `xit` and two
+unconditional `skip`.
+
+### The corpus caught a fix changing answers nobody had looked at
+
+The Laravel pattern was first written as `->\s*assert[A-Z]`, and `->` is also Java's lambda arrow.
+Thirteen Keycloak verdicts moved - `coseKey -> assertEcKey(coseKey, ...)` matched - and they happened
+to move correctly, which is not the point. A PHP fix had silently changed Java answers that nobody
+had verified. The pattern is now `$variable->assertX(`, which is what it was for, and Keycloak
+returned to its recorded numbers on the next run.
+
+That is the whole argument for Phase 44 in one paragraph, and it took four days to be demonstrated.
+
+The corpus is now **eight projects and thirteen checks**: Keycloak, OpenMRS, bitwarden, Saleor,
+GOV.UK, firefly-iii, discourse and ripgrep. Java, C#, Python, PHP, Ruby, Rust, TypeScript and
+Nunjucks. **111,000 real tests**, every accusation read against its source by hand.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

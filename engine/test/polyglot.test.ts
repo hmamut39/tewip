@@ -9,6 +9,8 @@ import { valueMismatch } from '../error-parse.ts';
 import { HistoryIndex } from '../history.ts';
 import { importJunit } from '../import/junit.ts';
 import { PROJECT_ROOT } from '../../reporters/store.ts';
+import { vouchFile } from '../vouch/vouch.ts';
+import { looksLikeTests } from '../vouch/tests-in.ts';
 
 const REPORTS = join(PROJECT_ROOT, 'fixtures', 'polyglot', 'reports');
 
@@ -78,5 +80,113 @@ describe('real reports from every supported runner', () => {
     const { records } = read('node-node-test.xml');
     assert.ok(records.length > 0);
     for (const r of records) assert.ok(r.testId.startsWith('fixtures/polyglot/node/node-test.test.mjs'), r.testId);
+  });
+});
+
+// Phase 48: Ruby, PHP and Rust, added in Phase 36 and never measured on real code until now.
+// discourse (54,846 Ruby tests), firefly-iii (86 PHP tests) and ripgrep (466 Rust tests).
+describe('PHP: what makes a method a PHPUnit test', () => {
+  const php = (body: string, file = 'SomethingTest.php') => vouchFile(file, body);
+
+  it('does not read a production method named test* as a test', () => {
+    // firefly-iii has `private function testing()` in middleware - asking whether the app is in the
+    // test environment - and eight public `testRule` / `testNotification` endpoints in controllers,
+    // which a user hits to try a rule or send a test notification. Every one made its production
+    // class a test file. What makes a PHPUnit test is the class it is in.
+    const controller = [
+      '<?php',
+      'final class TriggerController extends Controller {',
+      '  public function testRule(TestRequest $request): JsonResponse {',
+      '    return response()->json([]);',
+      '  }',
+      '}',
+    ].join('\n');
+    assert.equal(php(controller, 'app/Http/Controllers/TriggerController.php').judgements.length, 0);
+    assert.match(php(controller, 'app/Http/Controllers/TriggerController.php').unread, /different question|does not look like/);
+  });
+
+  it('still reads a real PHPUnit test', () => {
+    const test = [
+      '<?php',
+      'final class AccountControllerTest extends TestCase {',
+      '  public function testItWorks(): void {',
+      '    $this->assertSame(1, 1);',
+      '  }',
+      '}',
+    ].join('\n');
+    assert.equal(php(test).judgements.length, 1);
+  });
+
+  it('reads Laravel fluent assertions, which is what a Laravel HTTP test asserts with', () => {
+    // `$response->assertUnauthorized()` was an unknown helper that might assert, so firefly-iii came
+    // back 72% "Tewip would not judge" - 68 of its 95 tests.
+    const test = [
+      '<?php',
+      'final class AccountControllerTest extends TestCase {',
+      '  public function testUnauthenticated(): void {',
+      '    $response = $this->get(route("api.v1.autocomplete.accounts"));',
+      '    $response->assertUnauthorized();',
+      '    $response->assertHeader("Content-Type", "application/json");',
+      '  }',
+      '}',
+    ].join('\n');
+    assert.equal(php(test).judgements[0]?.verdict, 'checks');
+  });
+});
+
+describe('a file nobody in this project wrote', () => {
+  it('does not judge minified or vendored code', () => {
+    // firefly-iii ships jquery-4.0.0.min.js, and minified JavaScript is full of `test(` because
+    // that is how a regular expression is applied. Nothing useful can come of judging it.
+    const minified = `!function(e){var t=/^x$/;t.test(e)&&function(){}()}(window);${'a'.repeat(2500)}`;
+    assert.equal(looksLikeTests('public/v1/lib/jquery-4.0.0.min.js', minified), false);
+    assert.equal(looksLikeTests('vendor/some/bundle.js', 'it("x", () => { expect(1).toBe(1); });'), false);
+    // and an ordinary test file is still a test file
+    assert.equal(looksLikeTests('spec/thing_spec.rb', 'it "works" do\n  expect(1).to eq(1)\nend'), true);
+  });
+});
+
+describe('Ruby: a skip that carries a condition', () => {
+  const rspec = (body: string) => vouchFile('thing_spec.rb', `RSpec.describe Thing do\n${body}\nend`);
+
+  it('does not call a conditionally skipped test "never runs"', () => {
+    // discourse writes `skip "..." if suggested_topic.nil?` - the test runs every time the condition
+    // is false, which is most of the time. 30 of its 37 "never runs" findings were this.
+    const conditional = [
+      '  it "includes gists in suggested topics" do',
+      '    suggested = find_suggested',
+      '    skip "suggested topic not found in results" if suggested.nil?',
+      '    expect(suggested.gist).to eq("x")',
+      '  end',
+    ].join('\n');
+    assert.equal(rspec(conditional).judgements[0]?.verdict, 'checks');
+  });
+
+  it('still catches an unconditional skip', () => {
+    const always = '  it "is off" do\n    skip "broken"\n    expect(1).to eq(1)\n  end';
+    assert.equal(rspec(always).judgements[0]?.verdict, 'never-runs');
+  });
+});
+
+describe('Ruby: an expectation kept in a variable', () => {
+  it('is finished when the matcher is called on the variable', () => {
+    // RSpec allows it and discourse writes it. `expect(...)` returns the target and `.to` is a
+    // method on it, so this is a finished expectation that happens to span three lines.
+    const held = [
+      'RSpec.describe Onebox do',
+      '  it "allows both start and end" do',
+      '    preview =',
+      '      expect(Onebox.preview("https://x").to_s)',
+      '    preview.to match(/start=120/)',
+      '    preview.to match(/end=180/)',
+      '  end',
+      'end',
+    ].join('\n');
+    assert.equal(vouchFile('youtube_onebox_spec.rb', held).judgements[0]?.verdict, 'checks');
+  });
+
+  it('still catches an expectation nothing was ever called on', () => {
+    const bare = 'RSpec.describe Onebox do\n  it "x" do\n    expect(Onebox.preview("https://x").to_s)\n  end\nend';
+    assert.equal(vouchFile('youtube_onebox_spec.rb', bare).judgements[0]?.verdict, 'unfinished-expectation');
   });
 });

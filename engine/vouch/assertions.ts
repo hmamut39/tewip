@@ -68,6 +68,21 @@ const CHECKS: RegExp[] = [
   // in laravel/framework's SupportStrTest came back as "Tewip would not judge" because the
   // `assertSame(...)` in them was being read as an unknown helper that might assert.
   /\$this\s*->\s*assert/,
+  // Laravel's fluent assertions, which is what a Laravel HTTP test actually asserts with:
+  //
+  //     $response = $this->get(route('api.v1.autocomplete.accounts'));
+  //     $response->assertUnauthorized();
+  //     $response->assertHeader('Content-Type', 'application/json');
+  //
+  // The pattern above only reads `$this->assert`, so every one of those was an unknown helper that
+  // might assert - and firefly-iii, a real finance application, came back **72% "Tewip would not
+  // judge"**. A capital after `assert` is what keeps this from matching an ordinary method: it is
+  // assertOk, assertStatus, assertJson, assertUnauthorized, never assertion() or asserts().
+  // `$response->`, not any `->`: Java's lambda arrow is also `->`, so the first version of this
+  // quietly moved thirteen Keycloak verdicts - `coseKey -> assertEcKey(coseKey, ...)` matched. It
+  // happened to be right about them, and that is not the point: a PHP fix had changed Java answers
+  // nobody had looked at. The corpus caught it on the next run, which is what it is for.
+  /\$\w+\s*->\s*assert[A-Z]\w*\s*\(/,
   /\b(?:self|static|Assert)\s*::\s*assert/,
   /\bexpect\s*\(.*\)\s*->\s*\w+/,
   // Rust. A #[should_panic] test asserts by panicking, so it can fail without an assert in it.
@@ -92,12 +107,33 @@ export function checksSomething(text: string): boolean {
  */
 export function unfinishedExpectations(body: string): string[] {
   const found: string[] = [];
-  for (const line of body.split(String.fromCharCode(10))) {
+  const lines = body.split(String.fromCharCode(10));
+  for (const [i, line] of lines.entries()) {
     const text = line.trim();
     if (!/^(await\s+)?expect(\.soft)?\s*\(/.test(text)) continue;
     const after = afterBalanced(text, text.indexOf('('));
     if (after === null) continue; // the call spans more lines; judged as part of the whole body
     const rest = after.trim();
+    // An expectation kept in a variable and finished on a later line. RSpec allows it, and
+    // discourse writes it:
+    //
+    //     preview =
+    //       expect(Onebox.preview(url).to_s)
+    //     preview.to match(/start=120/)
+    //
+    // `expect(...)` returns the target and `.to` is a method on it, so this is a finished
+    // expectation that happens to span three lines. Reading only the line the `expect` is on called
+    // it unfinished - "an expectation was written but no matcher was called on it" - about a test
+    // that checks two things.
+    if (rest === '' || rest === ';') {
+      // Only the continuation form, because that is the only one that reaches here: a line reading
+      // `preview = expect(x)` does not start with `expect(` and the loop above never looks at it.
+      const named = /([A-Za-z_$][\w$]*)\s*=\s*$/.exec(lines[i - 1] ?? '');
+      // Built by concatenation on purpose. Written as a template literal, `\b` is a backspace
+      // character and `\s` is the letter s, so the pattern silently matched nothing.
+      const finished = new RegExp('(^|[^\\w$.])' + named?.[1] + '\\s*\\.\\s*(to|not_to|to_not)\\b');
+      if (named && finished.test(body)) continue;
+    }
     if (rest === '' || rest === ';') found.push(text);
     // A matcher named but not called: `.toBeVisible;` or `.toBeVisible` at the end of a statement.
     else if (/^\.\s*[A-Za-z$_][\w$]*\s*;?$/.test(rest)) found.push(text);

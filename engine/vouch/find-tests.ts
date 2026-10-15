@@ -186,7 +186,9 @@ const DECLARES: Partial<Record<Language, RegExp>> = {
   rust: /#\s*\[\s*(?:test|tokio::test|async_std::test|rstest)\s*\]/g,
   // PHPUnit accepts three markers and real suites use all of them: the testFoo naming convention
   // (laravel/framework does this), the #[Test] attribute of PHPUnit 10, and the @test docblock.
-  php: /(?:#\s*\[\s*Test[^\]]*\]|\*\s*@test\b|(?:public|protected|private)?\s*function\s+test\w*\s*\()/g,
+  // `private`/`protected` dropped: PHPUnit collects public methods only, and a private helper whose
+  // name happens to start with "test" is not one. See tests-in.ts for the production file this cost.
+  php: /(?:#\s*\[\s*Test[^\]]*\]|\*\s*@test\b|(?:^|[^\w$>])(?:public\s+)?(?:static\s+)?function\s+test\w*\s*\()/gm,
 };
 
 /** JUnit, Kotlin, Scala, Go, C#, PHP and Rust: an annotation or a naming convention, then a braced body. */
@@ -277,7 +279,19 @@ function skipsAtTopLevel(body: string): boolean {
   const lines = body.split(String.fromCharCode(10)).filter((l) => l.trim() !== '');
   if (lines.length === 0) return false;
   const base = Math.min(...lines.map((l) => l.length - l.trimStart().length));
-  return lines.some((l) => l.length - l.trimStart().length === base && /^\s*(?:skip|pending)\b/.test(l));
+  // Not a `skip` carrying a trailing condition. Ruby writes a guard as a modifier -
+  //
+  //     skip "suggested topic not found in results" if suggested_topic.nil?
+  //
+  // - and that test runs every time the condition is false, which is most of the time. The Go side
+  // has refused conditional skips since it was written; Ruby's was added in Phase 36 without it, and
+  // discourse has four tests that run perfectly well being called "never runs".
+  return lines.some(
+    (l) =>
+      l.length - l.trimStart().length === base &&
+      /^\s*(?:skip|pending)\b/.test(l) &&
+      !/\s(?:if|unless)\s/.test(l),
+  );
 }
 
 export { jsTests, pythonTests, rubyTests, bracedTests };

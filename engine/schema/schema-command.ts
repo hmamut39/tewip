@@ -77,6 +77,11 @@ function createdHere(text: string): Set<string> {
   // EF Core puts the name on the line after the call, so these have to reach across a newline.
   const FRAMEWORK_CREATES = [
     /migrationBuilder\s*\.\s*CreateTable\s*\([\s\S]{0,80}?name\s*:\s*["']([\w$.]+)["']/gi,
+    // Django names the model rather than the table, and so does its AddIndex, so the two match each
+    // other. Saleor never exercises this - Django convention puts CreateModel and AddIndex in
+    // separate migrations - but every other dialect here has its create form registered and this
+    // one did not, which is the kind of gap that waits for a project with different habits.
+    /migrations\s*\.\s*CreateModel\s*\([\s\S]{0,60}?name\s*=\s*["']([\w]+)["']/gi,
     /queryInterface\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
     /knex\s*\.\s*schema\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
     /Schema\s*::\s*create\s*\(\s*["']([\w$.]+)["']/gi,

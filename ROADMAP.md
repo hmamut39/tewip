@@ -2916,6 +2916,43 @@ The corpus is now **eight projects and thirteen checks**: Keycloak, OpenMRS, bit
 GOV.UK, firefly-iii, discourse and ripgrep. Java, C#, Python, PHP, Ruby, Rust, TypeScript and
 Nunjucks. **111,000 real tests**, every accusation read against its source by hand.
 
+### Phase 49: Django and Rails - 3,978 Migrations Nobody Had Read
+
+The two biggest migration ecosystems in the world, and both were already sitting in the corpus
+untested: **saleor** is Django, **discourse** is Rails. `vouch` had been run over both; `schema`
+never had.
+
+**550 of discourse's "unreadable migrations" were not migrations.** It selected 3,095 files and could
+read 2,545. The rest were `lib/migration/helpers.rb` - a library module - `table_dropper.rb`, and
+`migrations/converters/config/locales/migrations.en.yml`, a **locale file**. Phase 44 stopped a
+directory called `migration/` from claiming every file under it by extension, and discourse shows
+that was not enough: `.rb` and `.yml` are both things a migration can be written in.
+
+A "could not read" list that is 18% library code teaches a reader to skip the list, which costs more
+than the list is worth. `dialectOf` is the one definition of what a migration is written in, so it
+decides in the walk too: a file whose dialect is unknown is not an unreadable migration, it is not a
+migration. **Both projects now read every file they select, and neither has an unread list at all.**
+
+**Django's index findings named no model.** The rule said "adds an index or constraint, which Django
+builds with a lock unless told otherwise" - and never said *to what*. It also left the finding with
+an empty table name, which quietly disabled `createdHere`, the Phase 33 rule that stops an index on
+a table created moments earlier from counting as a lock. Django's `CreateModel` turned out to be the
+one create form, of eight, that had never been registered there.
+
+Both fixed: the finding names its model, and 14 of saleor's 112 locks were indexes on models created
+in the same migration - `0055_create_checkout_metadata_model.py` creates `checkoutmetadata` and
+indexes it four lines later. An index on a table with no rows in it holds nobody up.
+
+**What Tewip got right, which is worth recording too.** Discourse has 61 migrations using
+`algorithm: :concurrently`, and Tewip reports nothing for any of them - `CREATE INDEX CONCURRENTLY`
+does not block writes, and it is the remedy Tewip itself recommends. The tool declining to complain
+about the thing it would have told you to do is not nothing: it is the difference between advice and
+noise. Saleor's 285 `RunPython` findings are the same shape - application code run against every row
+inside a migration, which is exactly the slow, risky operation that deserves naming.
+
+The corpus is now **eight projects and fifteen checks**, and `schema` has been measured against
+Django, Rails, Liquibase, EF Core, T-SQL, Laravel and plain SQL - **5,700 real migrations**.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

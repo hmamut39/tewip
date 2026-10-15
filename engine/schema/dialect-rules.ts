@@ -76,11 +76,16 @@ const DJANGO: Operation[] = [
     instead: 'for a large table, work in batches with atomic = False on the migration and make it resumable. For a small one this is fine - Tewip cannot see how many rows there are',
   },
   {
-    find: /AddIndex\(|AddConstraint\(/i,
+    // The model is named, for two reasons. A finding that says "adds an index or constraint" without
+    // saying to what is most of the way to useless, and `createdHere` - which stops an index on a
+    // table created moments earlier from counting as a lock - matches on the table name, so with no
+    // name it could never suppress anything here. Django writes it `AddIndex(model_name="order", ...)`.
+    find: /(?:AddIndex|AddConstraint)\s*\([\s\S]{0,120}?model_name\s*=\s*["']([\w]+)["']/i,
     unless: /AddIndexConcurrently|AddConstraintNotValid|atomic\s*=\s*False/,
     risk: 'locks-writes',
-    what: () => 'adds an index or constraint, which Django builds with a lock unless told otherwise',
+    what: (m) => `adds an index or constraint to ${m[1]}, which Django builds with a lock unless told otherwise`,
     instead: 'AddIndexConcurrently / AddConstraintNotValid from django.contrib.postgres.operations, with atomic = False on the migration',
+    table: (m) => m[1],
   },
 ];
 

@@ -133,6 +133,18 @@
             "never-runs": 0
           },
           "verified": "2026-10-12. Zero accusations across 12,982 tests - no tautology, no unfinished expectation, no swallowed failure, nothing skipped - and that agrees with the hand verification in Phase 42, which read the condemned list and found it empty. The four zeros are the measurement here: Saleor is the largest Python suite in the corpus and the one most likely to surface a false accusation, so any of them moving off zero needs reading before it is believed."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 1433,
+            "findings": 743,
+            "slow": 285,
+            "breaks-old-code": 323,
+            "destroys-data": 37,
+            "locks-writes": 98
+          },
+          "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep."
         }
       ]
     },
@@ -206,6 +218,18 @@
             "tautology": 0
           },
           "verified": "2026-10-15. 7 never-runs, every one read against its source: 5 `xit` and 2 unconditional `skip`. It was 38 before Phase 48. Thirty were `skip \"...\" if condition` - a Ruby modifier guard, where the test runs every time the condition is false - and one was an expectation held in a variable and finished on the next line, which RSpec allows and discourse writes. The Go side had refused conditional skips since it was written; Ruby's was added in Phase 36 without it."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 2545,
+            "findings": 1243,
+            "locks-writes": 1005,
+            "breaks-old-code": 188,
+            "destroys-data": 49,
+            "slow": 1
+          },
+          "verified": "2026-10-15. 2,545 Rails migrations, every one read. 1,005 locks-writes confirmed by script to be on tables not created in the same migration; the 61 migrations that use `algorithm: :concurrently` correctly report nothing, which is Tewip recommending the thing discourse already did and then not complaining about it. 550 files were previously reported as migrations Tewip could not read and were library modules, a class, and a locale YAML file sitting under a directory called migrations/."
         }
       ]
     },

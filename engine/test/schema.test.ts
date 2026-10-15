@@ -636,3 +636,69 @@ describe('an index on a table that did not exist a moment ago', () => {
     assert.equal(findings(existing).length, 1);
   });
 });
+
+// Phase 49: Django and Rails, the two biggest migration ecosystems, measured for the first time.
+// saleor (1,433 Django migrations) and discourse (2,545 Rails migrations).
+describe('a file under a migration directory that is not a migration', () => {
+  it('is not reported as a migration Tewip could not read', () => {
+    // discourse selected 3,095 files and could read 2,545. The other 550 were things like
+    // `lib/migration/helpers.rb` (a library module), `table_dropper.rb` (a class), and
+    // `migrations/converters/config/locales/migrations.en.yml` (a locale file). Phase 44 stopped a
+    // directory called `migration/` claiming every file under it by extension; that was not enough.
+    // `dialectOf` is the one definition of what a migration is written in, so it decides here too.
+    for (const [path, text] of [
+      ['lib/migration/helpers.rb', 'module Migration\n  module Helpers\n    def self.new_site?\n      true\n    end\n  end\nend'],
+      ['migrations/converters/config/locales/migrations.en.yml', 'en:\n  converters:\n    discourse: Discourse\n'],
+    ] as const) {
+      assert.equal(dialectOf(path, text), 'unknown', path);
+    }
+  });
+
+  it('still recognises the real ones beside them', () => {
+    assert.equal(dialectOf('db/migrate/20161014_add_index.rb', 'class AddIndex < ActiveRecord::Migration[4.2]\n  def change\n    add_index :posts, :user_id\n  end\nend'), 'rails');
+    assert.equal(dialectOf('saleor/account/migrations/0048_x.py', 'class Migration(migrations.Migration):\n    operations = [migrations.AddIndex(model_name="user", index=models.Index(fields=["email"]))]'), 'django');
+  });
+});
+
+describe('Django: naming the model an index is built on', () => {
+  const find = (text: string) => readFramework('django', text);
+
+  it('says which model, and not just that there is an index', () => {
+    // "adds an index or constraint, which Django builds with a lock unless told otherwise" does not
+    // say to what. It also left the finding with no table name, so `createdHere` - which stops an
+    // index on a table created moments earlier from counting - could never suppress anything here.
+    const text = 'class Migration(migrations.Migration):\n    operations = [\n        migrations.AddIndex(\n            model_name="order",\n            index=models.Index(fields=["created"]),\n        ),\n    ]';
+    const [found] = find(text);
+    assert.equal(found?.table, 'order');
+    assert.match(found?.what ?? '', /to order/);
+  });
+
+  it('leaves a concurrent index alone, as it always did', () => {
+    const text = 'class Migration(migrations.Migration):\n    atomic = False\n    operations = [AddIndexConcurrently(model_name="order", index=models.Index(fields=["x"]))]';
+    assert.deepEqual(find(text), []);
+  });
+
+  it('does not count an index on a model created in the same migration', () => {
+    // saleor's 0055_create_checkout_metadata_model.py creates checkoutmetadata and indexes it in the
+    // same file. An index on a table with no rows in it holds nobody up. Fourteen of saleor's
+    // locks-writes findings were this, and Django's CreateModel was the one create form that had
+    // never been registered.
+    const text = [
+      'class Migration(migrations.Migration):',
+      '    operations = [',
+      '        migrations.CreateModel(',
+      '            name="checkoutmetadata",',
+      '            fields=[("id", models.AutoField(primary_key=True))],',
+      '        ),',
+      '        migrations.AddIndex(',
+      '            model_name="checkoutmetadata",',
+      '            index=models.Index(fields=["checkout_id"]),',
+      '        ),',
+      '    ]',
+    ].join('\n');
+    assert.deepEqual(droppingWhatIsNew(find(text), text), []);
+    // and on a model that already exists, it is still a lock
+    const existing = 'class Migration(migrations.Migration):\n    operations = [migrations.AddIndex(model_name="order", index=models.Index(fields=["x"]))]';
+    assert.equal(droppingWhatIsNew(find(existing), existing).length, 1);
+  });
+});

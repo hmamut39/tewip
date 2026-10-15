@@ -4,7 +4,8 @@
 // across a whole checkout rather than across a diff and that file went past the 300-line rule.
 // Keeping it in one place is the point: the alternative was a copy of these patterns in a script,
 // and two definitions of "is this a migration" drift the moment one of them is fixed.
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { dialectOf } from './frameworks.ts';
 import { join, relative } from 'node:path';
 
 // A directory called `migration/` says what is probably in it, not what every file in it is. This
@@ -70,7 +71,25 @@ export function migrationsUnder(root: string, limit = 20_000): string[] {
         continue;
       }
       const rel = relative(root, full).replaceAll(String.fromCharCode(92), '/');
-      if (SCHEMA_FILE.test(rel) || MIGRATION.test(rel) || NAMED_MIGRATION.test(rel)) found.push(rel);
+      if (!SCHEMA_FILE.test(rel) && !MIGRATION.test(rel) && !NAMED_MIGRATION.test(rel)) continue;
+      // And it has to look like one inside. Phase 44 stopped a directory called `migration/` from
+      // claiming every file under it by extension; discourse shows that was not enough. `lib/migration/
+      // helpers.rb` is a library module, `table_dropper.rb` is a class, and
+      // `migrations/converters/config/locales/migrations.en.yml` is a locale file - all three were
+      // selected, none could be read, and all three were reported as migrations Tewip could not read.
+      // 550 of discourse's 3,095, which is a "could not read" list that is mostly library code.
+      //
+      // `dialectOf` is the one definition of what a migration is written in, so it decides here too:
+      // a file whose dialect is unknown is not an unreadable migration, it is not a migration.
+      if (info.size > 2_000_000) continue;
+      let text = '';
+      try {
+        text = readFileSync(full, 'utf8');
+      } catch {
+        continue;
+      }
+      if (dialectOf(rel, text) === 'unknown') continue;
+      found.push(rel);
     }
   };
   walk(root, 0);

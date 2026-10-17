@@ -57,6 +57,28 @@ export const LLM_CONFIDENCE_CEILING = 0.45;
 
 export function contradictsHistory(category: RootCause, context: FailureContext): string | null {
   if (category !== 'REAL_BUG' && category !== 'LOCATOR_DRIFT') return null;
+  // A timeout is not evidence of a bug, and that is measured rather than argued.
+  //
+  // Phase 56 took 471 real labelled CI failures from WordPress/gutenberg and asked, for each signal
+  // a classifier can actually see when the test fails, how far it moves the label from its base
+  // rate. Three signals move it a long way:
+  //
+  //   error says Timeout/exceeded   ->  TIMING 91%   (37% when absent)
+  //   error is an assertion         ->  TIMING 93%   (ENV 86% when absent)
+  //   error mentions a locator      ->  TIMING 94%
+  //
+  // and REAL_BUG sits at 3-6% in **every single bucket** - its base rate, undisturbed. Nothing in
+  // the evidence available at failure time distinguishes a real bug from flakiness. That is the
+  // whole explanation for a model layer scoring 17.8%: it reaches for the one category the evidence
+  // cannot support, and is wrong about 94% of the time when it does.
+  //
+  // So a verdict of REAL_BUG resting on nothing but a timeout is refused. Six per cent of those
+  // really are bugs, and they are not lost: the case goes to a person with the model's reasoning
+  // attached, which is what this project does with every question it cannot answer.
+  const message = context.error?.message ?? '';
+  if (category === 'REAL_BUG' && /timeout|exceeded/i.test(message)) {
+    return 'refused: the only evidence is a timeout, and across 471 labelled failures a timeout was TIMING 91% of the time and REAL_BUG 6%';
+  }
   if (context.thisRun?.anotherAttemptPassed) {
     return `refused: another attempt of the same code passed in this run, so the failure is not deterministic and cannot be ${category}`;
   }

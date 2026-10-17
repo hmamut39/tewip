@@ -3224,6 +3224,53 @@ If so, the honest product is one that says so - which, with the ceiling in place
 
 1,016 tests.
 
+### Phase 56: Is the Question Answerable at All?
+
+Phase 55 left an uncomfortable possibility open. The model layer scored 17.8% where answering
+"TIMING" to everything would have scored 70%, and the obvious reading is that the model is bad. The
+less comfortable reading is that **the evidence available when a test fails does not contain the
+answer**, and that any classifier would do about as badly.
+
+That is measurable, so it was measured. 471 real labelled CI failures from WordPress/gutenberg,
+harvested locally, and for each signal a classifier can actually see at the moment of failure: how
+far does it move the label from its base rate?
+
+| signal | when present | when absent |
+|---|---|---|
+| error says Timeout/exceeded | **TIMING 91%** | ENV 60%, TIMING 37% |
+| error is an assertion | **TIMING 93%** | **ENV 86%** |
+| error mentions a locator | **TIMING 94%** | ENV 54% |
+| strict mode violation | **TIMING 100%** (n=27) | - |
+
+**Separating TIMING from ENV is very answerable.** The shape of the error does most of the work, and
+the rules layer already exploits it - 98.5% on the 88% of failures it will decide.
+
+And then the column that settles the question. **REAL_BUG is 3%, 6%, 4%, 5%, 4% and 5% - its base
+rate, in every single bucket.** No signal available at failure time moves it at all. Nothing in the
+error, the locator, the timeout or the history tells you whether this is a real bug.
+
+That is the whole explanation for 17.8%. The model is reaching for the one category the evidence
+cannot support, and when it does it is wrong about 94% of the time by base rate alone. It is not a
+prompt problem and a better model would not fix it: **the information is not there yet**. It arrives
+days later, in the commit that fixes the test - which is exactly where the ground truth comes from.
+
+So one more measured guard: a verdict of REAL_BUG resting on nothing but a timeout is refused, and
+the refusal quotes the number it rests on. `LOCATOR_DRIFT` on a timeout is deliberately still
+allowed, because a drifted selector times out by definition. The 6% that really are bugs are not
+lost - they go to a person with the model's reasoning attached, which is what this project does with
+every question it cannot answer.
+
+**What this phase is really for.** Three phases have now ended by making Tewip quieter: `done` saying
+"cannot say", `pick` saying "run everything", the model layer capped below the threshold that routes
+to a human. It would be easy to read that as retreat. It is the opposite - each one replaced a
+confident answer that measurement showed was wrong. A tool that says "I cannot tell you this" on the
+5% nobody can tell, and 98.5% on the 88% that can be told, is worth more than one that answers
+everything and is wrong about the part that matters most.
+
+`scripts/answerable.ts` is kept, so the question can be asked again of any harvested dataset.
+
+1,020 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

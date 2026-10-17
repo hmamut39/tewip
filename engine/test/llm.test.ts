@@ -181,3 +181,34 @@ describe('what the model layer is allowed to claim', () => {
     assert.ok(LLM_CONFIDENCE_CEILING < 0.85, 'below the threshold at which a fix may be attempted');
   });
 });
+
+describe('a timeout is not evidence of a bug', () => {
+  const context = (message: string) =>
+    ({
+      error: { message, callLog: [] },
+      thisRun: { attempts: 1, failedAttempts: 1, anotherAttemptPassed: false },
+      history: { pattern: 'every recorded attempt failed (3/3) and there is no passing run to compare with' },
+    }) as never;
+
+  it('refuses REAL_BUG when the only evidence is a timeout', () => {
+    // Phase 56 took 471 real labelled CI failures and asked how far each failure-time signal moves
+    // the label from its base rate. A timeout means TIMING 91% of the time and REAL_BUG 6%. The six
+    // per cent are not lost: the case goes to a person with the model's reasoning attached.
+    const refused = contradictsHistory('REAL_BUG', context('TimeoutError: locator.click: Timeout 30000ms exceeded'));
+    assert.match(refused ?? '', /TIMING 91%/);
+  });
+
+  it('allows REAL_BUG when the error is an actual assertion', () => {
+    assert.equal(contradictsHistory('REAL_BUG', context('Error: expect(received).toBe(expected)\n Expected: 5\n Received: 3')), null);
+  });
+
+  it('allows LOCATOR_DRIFT on a timeout, because a drifted selector times out by definition', () => {
+    assert.equal(contradictsHistory('LOCATOR_DRIFT', context('TimeoutError: Timeout 30000ms exceeded')), null);
+  });
+
+  it('leaves the categories a timeout actually supports alone', () => {
+    const timeout = context('TimeoutError: Timeout 30000ms exceeded');
+    assert.equal(contradictsHistory('TIMING', timeout), null);
+    assert.equal(contradictsHistory('ENV', timeout), null);
+  });
+});

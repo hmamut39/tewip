@@ -3506,7 +3506,28 @@ blocking", and when none of them did: "That is not a pass: nothing was checked."
 supposed to prevent exactly this - *"the headline must not call it a pass"* - passed throughout,
 because it checked for the word "blocking" after deleting the phrase "nothing blocking".
 
-1,059 tests.
+**And then the fix exposed a fourth.** With the range corrected, the Action's next run wrote a full
+`done` verdict - six questions, three answered - and the summary still said *"Is this work done? —
+nothing to check"*. `done`'s `nothingToDo` pattern was `/cannot say/i`. The verb exits non-zero for
+anything that is not "ready", and check mode read that one word as "there was nothing here".
+
+The footer of the very report being discarded reads:
+
+> "Cannot say" is a real answer and is never rounded up to ready.
+
+Check mode was rounding it *down* - below "ready", below "not ready", to "nothing to check", and out
+of the headline count entirely. The one answer this project exists to give was the one answer its own
+CI mode threw away.
+
+A refusal and a finding cannot share an exit code, so they no longer do. A check can now report an
+**open question**: counted as having looked, shown with its own verdict, named as "an open question"
+rather than "nothing to check", and totalled in the headline as *"1 left a question open rather than
+answering it, which is not a pass either."* It still does not fail the build, because the Action's
+`gate` input promises in writing that "advice and open questions are reported without breaking the
+build" - a gate that fires on a question teaches a team to pass `continue-on-error`, after which it
+never fires at all.
+
+1,062 tests.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

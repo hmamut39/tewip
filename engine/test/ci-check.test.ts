@@ -179,3 +179,36 @@ describe('reading the Action\'s artifact', () => {
     assert.deepEqual(reportsIn(zip({ 'triage.json': '{}', 'done.md': '' }), 0), [], 'and the caller then says what the artifact did hold');
   });
 });
+
+// Phase 60, the third finding: check mode was discarding the one answer this project exists to give.
+//
+// `done` exits non-zero for anything that is not "ready", and its nothingToDo was /cannot say/i - so
+// a full verdict naming six questions and answering three was filed as "nothing to check" and left
+// out of the headline count. The footer of that very report reads "Cannot say is a real answer and
+// is never rounded up to ready". Check mode was rounding it down instead.
+describe('a verdict that says cannot say', () => {
+  const CANNOT_SAY = [
+    '# Is this work done? Cannot say',
+    '',
+    'For `91c7f5f...HEAD`. Cannot say: one question that matters here went unanswered - "Is anything failing?" - so this is not an approval.',
+  ].join(String.fromCharCode(10));
+  const doneCheck = CHECKS.find((c) => c.id === 'done')!;
+
+  it('is not mistaken for having nothing to look at', () => {
+    assert.ok(!doneCheck.nothingToDo.test(CANNOT_SAY), 'a verdict with three answers in it is not an empty answer');
+    assert.ok(doneCheck.openQuestion?.test(CANNOT_SAY), 'it is an open question, which is a different thing');
+  });
+
+  it('is reported and counted, and says it is not a pass', () => {
+    const body = renderChecks([ran('done', { open: true, report: CANNOT_SAY }), ran('vouch')], []);
+    const headline = body.split('<details')[0];
+    assert.match(headline, /2 of 2 checks had something to look at/, 'it looked, so it counts');
+    assert.match(headline, /1 left a question open rather than answering it, which is not a pass either/);
+    assert.match(body, /an open question/, 'and its own section says so, not "nothing to check"');
+    assert.match(body, /Cannot say: one question that matters/, 'with the verdict itself, not a summary of it');
+  });
+
+  it('still recognises a range it could not read at all', () => {
+    assert.ok(doneCheck.nothingToDo.test('tewip: nothing changed in "origin/main...HEAD"'));
+  });
+});

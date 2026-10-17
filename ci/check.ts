@@ -42,6 +42,20 @@ interface Check {
   args: (ctx: CiContext, range: string) => string[];
   /** Why there might be nothing to do, so an empty answer is explained rather than counted as a pass. */
   nothingToDo: RegExp;
+  /**
+   * The verb answered, and its answer is a question rather than a finding.
+   *
+   * `done` exits non-zero for anything that is not "ready", which covers two different things: a
+   * verdict of **not ready**, which is a finding, and **cannot say**, which is the refusal this
+   * whole project is built to give. The Action's `gate: blocking` promises that "advice and open
+   * questions are reported without breaking the build", so the two cannot share an exit code here.
+   *
+   * Before this existed, `done`'s nothingToDo was `/cannot say/i` - so a full verdict naming six
+   * questions and answering three was filed as **"nothing to check"** and left out of the headline
+   * count. The footer of that very report reads: *"Cannot say is a real answer and is never rounded
+   * up to ready."* Check mode was rounding it down instead.
+   */
+  openQuestion?: RegExp;
 }
 
 export const CHECKS: readonly Check[] = [
@@ -50,7 +64,10 @@ export const CHECKS: readonly Check[] = [
     title: 'Is this work done?',
     verb: 'done',
     args: (_ctx, range) => ['--diff', range],
-    nothingToDo: /cannot say/i,
+    // A verdict is always printed when there is a change to read; an unreadable range prints
+    // nothing at all, which `runCheck` already treats as idle.
+    nothingToDo: /nothing changed in/i,
+    openQuestion: /^# Is this work done\? Cannot say/im,
   },
   {
     id: 'schema',
@@ -97,6 +114,8 @@ export interface Ran {
   blocking: boolean;
   /** Nothing in this change for it to look at. */
   idle: boolean;
+  /** It answered, and the answer is a question - reported, counted, and never a gate failure. */
+  open?: boolean;
 }
 
 /** The checks a workflow asked for, in the order they were asked for, ignoring names Tewip has no verb for. */
@@ -135,8 +154,12 @@ function runCheck(ctx: CiContext, check: Check, range: string, gate: boolean): R
   }
   const report = `${ran.stdout ?? ''}`.trim();
   const idle = report === '' || check.nothingToDo.test(report);
-  // A check with nothing to look at never fails the job, whatever its exit code.
-  return { check, report, blocking: gate && !idle && ran.status !== 0, idle };
+  const open = !idle && Boolean(check.openQuestion?.test(report));
+  // A check with nothing to look at never fails the job, whatever its exit code. Neither does one
+  // whose answer is an open question: the gate's documented promise is that it fails only on what a
+  // verb itself calls blocking, and a gate that fires on a question teaches a team to pass
+  // continue-on-error, after which it never fires at all.
+  return { check, report, blocking: gate && !idle && !open && ran.status !== 0, idle, open };
 }
 
 /** The one comment a pull request gets, however many checks ran. */
@@ -149,17 +172,18 @@ export function renderChecks(ran: Ran[], unknown: string[]): string {
   // that line as the verdict and never opens the five collapsed sections, so the line has to say how
   // many of the checks actually had something in front of them.
   const looked = ran.filter((r) => !r.idle);
+  const open = ran.filter((r) => r.open && !r.blocking);
   lines.push(
     blocking.length > 0
       ? `**${blocking.length} of ${ran.length} checks found something blocking.**`
       : looked.length === 0
         ? `**${ran.length} ${ran.length === 1 ? 'check' : 'checks'} ran and none of them had anything to look at.** That is not a pass: nothing was checked. Usually the diff was empty - set \`fetch-depth: 0\` on \`actions/checkout\`.`
-        : `**${looked.length} of ${ran.length} ${ran.length === 1 ? 'check' : 'checks'} had something to look at, and found nothing blocking.**`,
+        : `**${looked.length} of ${ran.length} ${ran.length === 1 ? 'check' : 'checks'} had something to look at, and found nothing blocking.**${open.length > 0 ? ` ${open.length} left a question open rather than answering it, which is not a pass either.` : ''}`,
     '',
   );
 
   for (const r of ran) {
-    const mark = r.blocking ? 'blocking' : r.idle ? 'nothing to check' : 'ran, nothing blocking';
+    const mark = r.blocking ? 'blocking' : r.idle ? 'nothing to check' : r.open ? 'an open question' : 'ran, nothing blocking';
     lines.push(`<details${r.blocking ? ' open' : ''}>`, `<summary><b>${r.check.title}</b> — ${mark}</summary>`, '');
     lines.push(r.idle && r.report === '' ? '_Nothing in this change for it to look at._' : r.report, '', '</details>', '');
   }

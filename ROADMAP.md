@@ -3704,6 +3704,66 @@ nothing to compare against. That line is no longer printed when there is nothing
 
 1,085 tests.
 
+### Phase 64: Two Numbers Set Eight Weeks Apart, And Between Them A Command That Files Nothing
+
+`tewip bugs` turns a failure diagnosed as a real bug into a ticket, and deliberately files nothing
+for a flaky test or a broken environment. That restraint is the whole feature. Field-tested on a real
+Playwright blob report from CI (11 real failures) it behaved perfectly: nothing filed, categories
+named. Then on a real jest report containing a plain value mismatch - *"Expected: 4, Received: 3"*,
+which is about as clear as a real bug gets:
+
+> 2 failure(s), and none of them is a real bug Tewip is confident about (**REAL_BUG**, ENV). Nothing
+> was filed, which is the point.
+
+The sentence names `REAL_BUG` among the categories *inside the clause denying there was one*.
+
+What is actually happening is worse than a wording slip. **Phase 55 capped a model-only diagnosis at
+0.45**, because the model's unsupported word is not reliable enough to act on. **This command has
+required 0.80 since Phase 10.** The two numbers were set eight weeks apart, in different files, and
+never compared. Between them: a bug only the model recognises can never be filed, whatever it says.
+
+Measured with the rules alone over **1,964 real failures from five public projects**:
+
+| project | failures | REAL_BUG | reaching 0.80 |
+| --- | --- | --- | --- |
+| WordPress/gutenberg | 882 | 20 | **1** |
+| supabase | 770 | 0 | 0 |
+| lxdui | 161 | 0 | 0 |
+| penpot | 72 | 0 | 0 |
+| jupyterlab | 79 | 0 | 0 |
+
+**One ticket out of 1,964 real failures.** Four of the five projects would never see this command file
+anything, and the one sentence it printed to explain that contradicted itself.
+
+**The bar is not lowered.** A ticket opened on a model's unsupported word is precisely what this
+project exists not to do, and 0.45 is the honest reading of how often that word is right. What was
+wrong was the reporting, so the refusal now tells the two cases apart:
+
+> 2 failure(s). 1 of them Tewip reads as a real bug, and none of those reaches the 0.80 confidence it
+> requires before opening a ticket in somebody's name - **the highest is 0.45**.
+> All of them came from the AI layer, which is capped at 0.45 on purpose: a model's unsupported word
+> is not enough to file on. **A person's correction on the failure in CI, or a rule that agrees, is
+> what would make it enough.**
+
+and the genuine case keeps its own plain answer:
+
+> 11 failure(s), and none of them looks like the application being wrong - they are LOCATOR_DRIFT,
+> UNKNOWN, TEST_DATA, ENV. Nothing was filed, which is the point.
+
+Two smaller things in the same tally. `items.length - bugs.length` was printed as *"were flaky tests,
+environment or test data"* - so a bug Tewip was 0.45 sure of was being counted in print as a flaky
+test. And `--max` was silent: the cap is applied before anything is filed, and a run with twelve
+bugs and `--max 5` said nothing about the other seven. That is the Phase 58 mistake again - a capped
+answer reading as a whole one - so the cap now names what it did not reach and how to raise it.
+
+**What this leaves open, and it is the user's call, not Tewip's:** the rules layer reaches REAL_BUG at
+0.80 roughly once in two thousand real failures. Either the rules should recognise a plain value
+mismatch themselves - the strongest candidate, since "expected 4, received 3" needs no model - or
+`bugs` should be able to file a model-only bug while saying in the ticket that a model alone decided
+it. Both are real designs; neither should be chosen by inference.
+
+1,091 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

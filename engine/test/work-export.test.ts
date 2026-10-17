@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { TriageItem } from '../../outlets/items.ts';
 import type { Plan } from '../quality/plan.ts';
-import { bugBody, bugSummary, seenAgain } from '../work/bug-command.ts';
+import { bugBody, bugSummary, CONFIDENT_ENOUGH, seenAgain, whyNothingWasFiled } from '../work/bug-command.ts';
 import { cell, toXrayCsv, toZephyrCsv } from '../work/testcase-export.ts';
 
 const NL = String.fromCharCode(10);
@@ -146,5 +146,62 @@ describe('test cases as a file a tool can import', () => {
     const steps = rows.filter((r) => r[0] === 'CO-001').map((r) => r[4]);
     assert.ok(steps.includes('press "Pay", then press it again'), `quotes and commas survived: ${steps.join(' | ')}`);
     assert.equal(cell(`two${NL}lines`), `"two${NL}lines"`);
+  });
+});
+
+// Phase 64: `tewip bugs` field-tested on real reports and real harvested failures.
+//
+// Measured with the rules alone over 1,964 failures from five public projects - gutenberg, supabase,
+// lxdui, penpot, jupyterlab - **20 REAL_BUG verdicts, of which 1 reaches the 0.8 bar this command
+// requires.** Four of the five produce none at all. Phase 55 capped a model-only diagnosis at 0.45
+// and this bar has been 0.8 since Phase 10; the two numbers were set eight weeks apart and never
+// compared, so a bug only the model recognises can never be filed.
+//
+// The bar is not lowered here. What is fixed is the refusal, which used to print
+// "none of them is a real bug Tewip is confident about (REAL_BUG, ENV)" - naming REAL_BUG inside
+// the sentence denying there was one.
+describe('why nothing was filed', () => {
+  const diagnosed = (category: string, confidence: number, source: string) =>
+    ({ category, confidence, source } as unknown as TriageItem['diagnosis']);
+  const unsureBug = (confidence: number, source = 'AI gpt-5.4-mini (reasoning low)') =>
+    item({ diagnosis: diagnosed('REAL_BUG', confidence, source), source });
+  const flaky = item({ diagnosis: diagnosed('TIMING', 0.8, 'rules rules-9'), source: 'rules rules-9' });
+  const env = item({ diagnosis: diagnosed('ENV', 0.8, 'rules rules-9'), source: 'rules rules-9' });
+
+  it('does not name REAL_BUG in the sentence that says there is no real bug', () => {
+    const said = whyNothingWasFiled([unsureBug(0.45), env], [unsureBug(0.45)]);
+    assert.doesNotMatch(said, /none of them (is|looks like) a real bug/, 'there was one; it was not sure enough');
+    assert.match(said, /1 of them Tewip reads as a real bug/);
+  });
+
+  it('names the bar and the highest confidence, so the reason is checkable', () => {
+    const said = whyNothingWasFiled([unsureBug(0.45), unsureBug(0.3), env], [unsureBug(0.45), unsureBug(0.3)]);
+    assert.match(said, /2 of them Tewip reads as a real bug/);
+    assert.match(said, /0\.80 confidence/, 'the bar');
+    assert.match(said, /the highest is 0\.45/, 'and how far off it was');
+  });
+
+  it('says that a model-only verdict is capped on purpose, and what would lift it', () => {
+    const said = whyNothingWasFiled([unsureBug(0.45)], [unsureBug(0.45)]);
+    assert.match(said, /capped at 0\.45 on purpose/);
+    assert.match(said, /A person's correction on the failure in CI, or a rule that agrees/);
+  });
+
+  it('does not blame the model when the rules were the ones that hesitated', () => {
+    const byRules = unsureBug(0.6, 'rules rules-9');
+    const said = whyNothingWasFiled([byRules], [byRules]);
+    assert.doesNotMatch(said, /capped at 0\.45/, 'that sentence is about the AI layer only');
+    assert.match(said, /the highest is 0\.60/);
+  });
+
+  it('still says plainly when nothing in the report is a bug at all', () => {
+    const said = whyNothingWasFiled([flaky, env], []);
+    assert.match(said, /none of them looks like the application being wrong/);
+    assert.match(said, /TIMING, ENV/);
+    assert.match(said, /which is the point/);
+  });
+
+  it('keeps the bar where it is, because a ticket on a model\'s word is the thing not to do', () => {
+    assert.equal(CONFIDENT_ENOUGH, 0.8);
   });
 });

@@ -21,6 +21,58 @@ import { trackerFromEnv, trackerHelp } from './trackers.ts';
 /** Bugs Tewip filed carry this as well, so a second run finds them and does not file again. */
 export const BUG_LABEL = 'tewip-bug';
 
+/**
+ * How sure Tewip has to be before it puts a person's name on a ticket.
+ *
+ * Named and exported because of what it collides with. Phase 55 capped a model-only diagnosis at
+ * **0.45** - the model is not reliable enough for its word alone to be acted on - and this bar has
+ * been 0.8 since Phase 10. The two numbers were set eight weeks apart and never compared, and
+ * together they mean **a bug only the model recognised can never be filed**, whatever it says.
+ *
+ * Measured over 1,964 real failures from five public projects (gutenberg, supabase, lxdui, penpot,
+ * jupyterlab) with the rules alone: **20 REAL_BUG verdicts, of which 1 reaches 0.8.** Four of the
+ * five projects produce none at all. On a real jest report of a plain value mismatch - "Expected: 4,
+ * Received: 3", which is as clear as a real bug gets - the verdict is REAL_BUG at 0.45 from the
+ * model, and `bugs` files nothing.
+ *
+ * The bar is not lowered here. A ticket opened on a model's unsupported word is the thing this
+ * project exists not to do, and 0.45 is the honest reading of how often that word is right. What
+ * changes is that the refusal now says which of the two reasons applies, because "none of them is a
+ * real bug Tewip is confident about" was being printed for twenty failures Tewip had called real
+ * bugs.
+ */
+export const CONFIDENT_ENOUGH = 0.8;
+
+/**
+ * Why nothing was filed - the two cases told apart.
+ *
+ * The old sentence was one line for both: `${items.length} failure(s), and none of them is a real
+ * bug Tewip is confident about (${kinds})`, where `kinds` was every category present. On a real
+ * report it printed **"none of them is a real bug Tewip is confident about (REAL_BUG, ENV)"** -
+ * listing REAL_BUG inside the sentence denying there was one. A reader cannot tell from that whether
+ * Tewip found nothing or found something it would not act on, and those call for opposite next steps.
+ */
+export function whyNothingWasFiled(items: TriageItem[], unsure: TriageItem[]): string {
+  const kinds = [...new Set(items.filter((i) => i.diagnosis.category !== 'REAL_BUG').map((i) => i.diagnosis.category))];
+  if (unsure.length === 0) {
+    return (
+      `${items.length} failure(s), and none of them looks like the application being wrong` +
+      `${kinds.length > 0 ? ` - they are ${kinds.join(', ')}` : ''}. Nothing was filed, which is the point.`
+    );
+  }
+  const highest = Math.max(...unsure.map((i) => i.diagnosis.confidence));
+  const byModel = unsure.filter((i) => /AI|gpt|claude|model/i.test(i.source)).length;
+  return [
+    `${items.length} failure(s). ${unsure.length} of them Tewip reads as a real bug, and none of those reaches the ${CONFIDENT_ENOUGH.toFixed(2)} confidence it requires before opening a ticket in somebody's name - the highest is ${highest.toFixed(2)}.`,
+    byModel > 0
+      ? `${byModel === unsure.length ? 'All' : `${byModel}`} of them came from the AI layer, which is capped at 0.45 on purpose: a model's unsupported word is not enough to file on. A person's correction on the failure in CI, or a rule that agrees, is what would make it enough.`
+      : '',
+    `Nothing was filed. These are listed in \`tewip explain\` with their evidence${kinds.length > 0 ? `, alongside ${kinds.join(', ')} failures that are deliberately never filed` : ''}.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export interface BugCommand {
   root: string;
   report: string;
@@ -93,15 +145,15 @@ export async function runBugs(cmd: BugCommand): Promise<TriageItem[]> {
 
   // Only what Tewip itself calls a bug, and only when it is confident enough to put a person's name
   // on it. Everything else is deliberately left out.
-  const bugs = items.filter((i) => i.diagnosis.category === 'REAL_BUG' && i.diagnosis.confidence >= 0.8);
+  const bugs = items.filter((i) => i.diagnosis.category === 'REAL_BUG' && i.diagnosis.confidence >= CONFIDENT_ENOUGH);
+  const unsure = items.filter((i) => i.diagnosis.category === 'REAL_BUG' && i.diagnosis.confidence < CONFIDENT_ENOUGH);
   const lines: string[] = [`Report: ${cmd.report}`, `Project: ${cmd.projectKey}`, ''];
   if (items.length === 0) {
     console.log('Every test in that report passed. Nothing to file.');
     return [];
   }
   if (bugs.length === 0) {
-    const kinds = [...new Set(items.map((i) => i.diagnosis.category))].join(', ');
-    console.log(`${items.length} failure(s), and none of them is a real bug Tewip is confident about (${kinds}). Nothing was filed, which is the point.`);
+    console.log(whyNothingWasFiled(items, unsure));
     return [];
   }
 
@@ -141,8 +193,19 @@ export async function runBugs(cmd: BugCommand): Promise<TriageItem[]> {
     filed++;
   }
 
-  const left = items.length - bugs.length;
-  lines.push('', `${bugs.length} of ${items.length} failure(s) look like real bugs; ${left} were flaky tests, environment or test data and were deliberately not filed.`);
+  // `items.length - bugs.length` was described as "flaky tests, environment or test data", which is
+  // untrue of a REAL_BUG sitting below the bar: a bug Tewip is 0.45 sure of was being counted, in
+  // print, as a flaky test. And the `max` cap was silent - the same mistake `prove` made in Phase 58,
+  // where a sampled answer read as a whole one.
+  const notBugs = items.length - bugs.length - unsure.length;
+  const beyondCap = Math.max(0, bugs.length - cmd.max);
+  lines.push(
+    '',
+    `${bugs.length} of ${items.length} failure(s) look like real bugs.` +
+      (notBugs > 0 ? ` ${notBugs} were flaky tests, environment or test data and were deliberately not filed.` : '') +
+      (unsure.length > 0 ? ` ${unsure.length} more look like real bugs but below the ${CONFIDENT_ENOUGH.toFixed(2)} confidence needed to file one, so they were not.` : ''),
+  );
+  if (beyondCap > 0) lines.push(`${beyondCap} were past the --max ${cmd.max} limit and were not looked at. Raise it with \`--max ${bugs.length}\`.`);
   lines.push(cmd.create ? `${filed} ticket(s) created in ${tracker?.name}. Tewip never moves, assigns or closes one.` : 'Nothing was created. Add --create to file them.');
   console.log(lines.join('\n'));
   return bugs;

@@ -3318,6 +3318,70 @@ each one looked exactly like good news.
 
 1,024 tests.
 
+### Phase 58: The Report That Covered A Third Of The File And Said "0 Went Unnoticed"
+
+`tewip prove` breaks one line of real code at a time, runs the tests that cover it, and reports
+which changes nobody noticed. It had been run on strangers' projects but never on Tewip's own, so it
+was pointed at `engine/flaky/flaky.ts` - the file whose tests had been written hours earlier, in
+Phase 57.
+
+> 6 change(s) were made to your code and the covering tests were run against each. **5 went
+> unnoticed.** 1 were caught.
+
+Five of six. One of them was the Phase 57 quarantine rule itself: the test for it used
+`failedRuns: 1` against a `minRuns` of 2, nowhere near the boundary it was supposed to be defending.
+Four tests later the file read **0 unnoticed, 6 caught** - and one of those four tests was a fake. It
+sorted a local array instead of calling `flakyTests`, so it re-implemented the line it was checking
+and checked nothing. `prove` kept flagging the mutant and was right to.
+
+**Then the real defect.** `--limit` does not mean "try this many of the changes that matter", it
+means "sample the file". `flaky.ts` allows 14 changes; the run asked about 6. `verdict.ts` allows 20;
+the run asked about 6. The report said neither thing. "0 went unnoticed" was true of six lines and
+read as true of the file:
+
+| file | changes it allows | a `--limit 6` run | asking about all of them |
+| --- | --- | --- | --- |
+| `engine/flaky/flaky.ts` | 14 | 0 unnoticed | **5 unnoticed** |
+| `engine/verdict/verdict.ts` | 20 | 0 unnoticed | **3 unnoticed** |
+| `reporters/store.ts` | 7 | 0 unnoticed | **2 unnoticed** |
+
+Ten real holes in Tewip's own suite, every one of them on a line the sample never visited, all ten
+hidden behind a clean report. This is the fourth command in eight phases to return a confident,
+well-formatted, empty answer - and the first where the emptiness was manufactured by the reporting
+rather than by a bug in the logic. **A zero is the hardest wrong answer to notice; a zero out of a
+denominator nobody printed is worse.**
+
+The headline now carries the denominator, and the "Not counted" section says what is missing and how
+to ask for it:
+
+> 6 **of the 20** change(s) were made to your code ... **1 went unnoticed.** 5 were caught.
+>
+> - **engine/verdict/verdict.ts** allows 20 change(s) and 6 were taken, spread across the file.
+>   Nothing above says anything about the other 14. To ask about all of them: `--limit 20`.
+
+**A second defect, found in the same output.** Both versions of a changed line were truncated at 120
+characters *from the start*, so on a long line the change fell past the cut and the report printed an
+identical pair:
+
+> was: `` `the suite executes ${evidence.coverage.executed.slice(0, 3).join(', ')}${evidence.covera` ``
+> became: `` `the suite executes ${evidence.coverage.executed.slice(0, 3).join(', ')}${evidence.covera` ``
+
+A real hole - nothing tested the "and 4 more" count in `verdict.ts` - reported as a change that
+changed nothing. A reader seeing that concludes the tool is broken and stops reading the findings
+that are right. The quote is now cut around the difference instead of around the start.
+
+The ten holes were closed: an empty coverage list no longer counts as "the code is tested", the "and
+N more" count is pinned, the questions that do not apply stay out of the report body, `share` and
+`flakyShare` no longer divide by zero, three off-by-ones on `minRuns` are nailed to the boundary, one
+branch is no longer described as "1 different branches", and `appendJsonl` - the write the whole
+reporter depends on - is checked for the first time, having survived being inverted into a no-op.
+
+One change is still unnoticed and will stay that way: `if (read <= 0) break;` in the chunked reader
+guards against a zero-length read that a real file cannot produce, so no honest test can kill it.
+Saying that is better than writing a test that pretends to.
+
+1,045 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

@@ -175,3 +175,136 @@ describe('flakiness that was observed rather than diagnosed', () => {
     assert.equal(decide(test({ recoveredOnRetry: 1, failedRuns: 1, totalRuns: 400 }), { minRuns: 3, alwaysFailsAbove: 0.8 }).verdict, 'watch');
   });
 });
+
+// Phase 58: the boundaries `tewip prove` found nothing checking.
+//
+// Run against flaky.ts - a file whose tests had been written hours earlier, in Phase 57 - prove
+// broke it in six deliberate ways and **five went unnoticed**. Every one was a boundary or a
+// connective that the tests happened to step over rather than land on: `>=` became `>`, `||` became
+// `&&`, and every test still passed. The line was covered. It was not checked.
+describe('the edges of the flaky verdict', () => {
+  const opts = { minRuns: 2, alwaysFailsAbove: 0.8 };
+  const base = (over: Partial<FlakyTest> = {}): FlakyTest =>
+    ({
+      testId: 'a > b', title: 'b', file: 'spec/a.spec.js',
+      failedRuns: 5, totalRuns: 100, failedAttempts: 10, wastedMs: 1000,
+      recoveredOnRetry: 0, branches: ['trunk'],
+      categories: [{ category: 'UNKNOWN', count: 10 }],
+      firstSeen: '2026-10-01T00:00:00Z', lastSeen: '2026-10-17T00:00:00Z',
+      verdict: 'watch', why: '', ...over,
+    }) as FlakyTest;
+
+  it('calls it a bug at exactly half the failures, not just above half', () => {
+    // `realBugs >= failedAttempts / 2` survived becoming `>`, because no test sat on the boundary.
+    // Exactly half looking like the application being wrong is still too many to hide.
+    assert.equal(decide(base({ failedAttempts: 10, categories: [{ category: 'REAL_BUG', count: 5 }] }), opts).verdict, 'fix-now');
+    assert.equal(decide(base({ failedAttempts: 10, categories: [{ category: 'REAL_BUG', count: 4 }] }), opts).verdict, 'watch');
+  });
+
+  it('quarantines at exactly the minimum number of runs, not one above it', () => {
+    // `failedRuns >= minRuns` survived becoming `>`: the Phase 57 test used failedRuns: 1, which is
+    // nowhere near the edge it was meant to be defending.
+    assert.equal(decide(base({ recoveredOnRetry: 1, failedRuns: 2 }), opts).verdict, 'quarantine');
+    assert.equal(decide(base({ recoveredOnRetry: 1, failedRuns: 1 }), opts).verdict, 'watch');
+  });
+
+  it('only blames the branches when there is more than one of them', () => {
+    // `branches.length > 1` survived becoming `>= 1`, which would have told every team that a test
+    // failing on their single trunk "failed on 1 different branches, so it is the test".
+    const many = decide(base({ recoveredOnRetry: 1, branches: ['trunk', 'release'] }), opts);
+    assert.match(many.why, /2 different branches/);
+    const one = decide(base({ recoveredOnRetry: 1, branches: ['trunk'] }), opts);
+    assert.doesNotMatch(one.why, /different branches/);
+  });
+
+  it('breaks a tie on wasted time by how many runs it broke', () => {
+    // The sort's `||` survived becoming `&&`, which collapses the comparison to a boolean and loses
+    // the tiebreak - the report would still look sorted while not being. The first attempt at this
+    // test sorted a local array instead of calling flakyTests, so prove reported the mutant alive
+    // again and was right to: a test that re-implements the line it is checking checks nothing.
+    const runsHere = Array.from({ length: 6 }, (_, i) => run(`t${i}`, day(i + 1), 'main', ['x > slow', 'x > often']));
+    const records = [
+      // Equal wasted time: one failure of 60s against three of 20s.
+      record('x > slow', 't0', 'UNKNOWN', day(1), 60_000),
+      record('x > often', 't1', 'UNKNOWN', day(2), 20_000),
+      record('x > often', 't2', 'UNKNOWN', day(3), 20_000),
+      record('x > often', 't3', 'UNKNOWN', day(4), 20_000),
+    ];
+    const ranked = flakyTests(records, runsHere, {});
+    assert.equal(ranked[0].wastedMs, ranked[1].wastedMs, 'the two really are tied on wasted time');
+    assert.equal(ranked[0].testId, 'x > often', 'the one that broke more runs is ranked first');
+  });
+
+  it('counts the attempts of this run, not of some other run', () => {
+    // `run.runId === runId` survived becoming `!==`, which would take the attempt count from a
+    // different run entirely - every number in the report downstream of it would be another run's.
+    const runsHere = [
+      { ...run('r1', day(1), 'main', ['x > a']), attempts: { 'x > a': 3 } } as RunSummary,
+      { ...run('r2', day(2), 'main', ['x > a']), attempts: { 'x > a': 1 } } as RunSummary,
+    ];
+    const [only] = flakyTests([record('x > a', 'r1', 'UNKNOWN', day(1), 10_000)], runsHere, {});
+    // r1 ran it three times and recorded one failure, so two later attempts passed. Reading r2's
+    // single attempt instead would say nothing recovered, and the retry story would be lost.
+    assert.equal(only.recoveredOnRetry, 1, 'the retry that passed belongs to r1, not to r2');
+    assert.equal(only.failedRuns, 1, 'it failed in r1 only');
+  });
+});
+
+// Phase 58, the second pass: `--limit 6` had sampled 6 of the 14 changes this file allows and
+// reported them all caught. Asking about all 14 found five more holes, every one of them on a line
+// the sample never visited. The lesson is the report's, not the suite's: a partial answer that does
+// not say it is partial reads exactly like a whole one.
+describe('the arithmetic underneath the verdict', () => {
+  const opts = { minRuns: 2, alwaysFailsAbove: 0.8 };
+  const base = (over: Partial<FlakyTest> = {}): FlakyTest =>
+    ({
+      testId: 'a > b', title: 'b', file: 'spec/a.spec.js',
+      failedRuns: 5, totalRuns: 100, failedAttempts: 10, wastedMs: 1000,
+      recoveredOnRetry: 0, branches: ['trunk'],
+      categories: [{ category: 'UNKNOWN', count: 10 }],
+      firstSeen: '2026-10-01T00:00:00Z', lastSeen: '2026-10-17T00:00:00Z',
+      verdict: 'watch', why: '', ...over,
+    }) as FlakyTest;
+
+  it('does not divide by a run count of zero', () => {
+    // `totalRuns > 0` survived becoming `>= 0`, which divides by zero and prints "Infinity% of the
+    // 0 run(s) it was in" - a number no reader can do anything with, in the sentence that is
+    // supposed to justify the verdict.
+    const why = decide(base({ totalRuns: 0, failedRuns: 1 }), opts).why;
+    assert.match(why, /100% of the 0 run\(s\)/, 'no runs recorded is treated as "it always failed", not as Infinity');
+  });
+
+  it('does not divide by an attempt count of zero', () => {
+    // `failedAttempts > 0` survived becoming `>= 0`: with a diagnosed category and no attempts
+    // recorded, the flaky share came out Infinity and sailed past the 0.5 gate, so a test nobody
+    // has any attempt data for would be recommended for quarantine.
+    const odd = base({ failedRuns: 2, failedAttempts: 0, categories: [{ category: 'TIMING', count: 3 }] });
+    assert.equal(decide(odd, opts).verdict, 'watch', 'no attempts recorded is no evidence, not overwhelming evidence');
+  });
+
+  it('calls a test broken at exactly the minimum run count, not one above it', () => {
+    // `totalRuns >= minRuns` survived becoming `>`: a test that failed both of the two runs it was
+    // in is the clearest "this test does not work" there is, and it was being filed under watch.
+    assert.equal(decide(base({ failedRuns: 2, totalRuns: 2 }), opts).verdict, 'fix-now');
+    assert.equal(decide(base({ failedRuns: 1, totalRuns: 1 }), opts).verdict, 'watch', 'one run is not a pattern');
+  });
+
+  it('quarantines a diagnosed test at exactly the minimum run count', () => {
+    // `failedRuns >= minRuns` survived becoming `>` on the diagnosed path too - the same off-by-one
+    // as the observed path above, in the branch that reads `tewip explain`'s own categories.
+    const timing = (failedRuns: number) => base({ failedRuns, categories: [{ category: 'TIMING', count: 5 }] });
+    assert.equal(decide(timing(2), opts).verdict, 'quarantine');
+    assert.equal(decide(timing(1), opts).verdict, 'watch');
+  });
+
+  it('does not blame one branch for being several, on the diagnosed path either', () => {
+    // `branches.length > 1` survived becoming `>= 1` here, which is the same sentence this file
+    // already pins on the observed path. Both say "failed on 1 different branches, so it is the
+    // test rather than one person's change" - a conclusion drawn from nothing.
+    const one = decide(base({ failedRuns: 3, branches: ['trunk'], categories: [{ category: 'TIMING', count: 6 }] }), opts);
+    assert.equal(one.verdict, 'quarantine');
+    assert.doesNotMatch(one.why, /different branches/, 'one branch is not a spread');
+    const two = decide(base({ failedRuns: 3, branches: ['trunk', 'release'], categories: [{ category: 'TIMING', count: 6 }] }), opts);
+    assert.match(two.why, /2 different branches/);
+  });
+});

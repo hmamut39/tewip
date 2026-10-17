@@ -106,6 +106,19 @@ function inPattern(line: string, at: number): boolean {
  * changes to one function say much less about a suite than five changes in five places.
  */
 export function mutantsFor(text: string, limit = 6): Mutant[] {
+  return spread(candidateMutants(text), limit);
+}
+
+/**
+ * Every change this file allows, before any sampling.
+ *
+ * The caller needs this number, not only the sample. `prove engine/verdict/verdict.ts --limit 6`
+ * used to report "6 change(s) were made... 0 went unnoticed", and the file allows 20: eight of the
+ * twelve it never tried were in code the tests had never been asked about. A clean report that
+ * silently covers a third of the file reads exactly like a clean report that covers all of it,
+ * which is the one thing this project will not print.
+ */
+export function candidateMutants(text: string): Mutant[] {
   const ranges = textRanges(text);
   const lines = text.split(String.fromCharCode(10));
   const offsets: number[] = [];
@@ -135,7 +148,7 @@ export function mutantsFor(text: string, limit = 6): Mutant[] {
       break; // one change per line keeps each answer about one thing
     }
   }
-  return spread(found, limit);
+  return found;
 }
 
 /**
@@ -143,7 +156,7 @@ export function mutantsFor(text: string, limit = 6): Mutant[] {
  * one function and nothing in the rest of the file should not look like a suite that catches
  * everything, and taking the first six mutants in order is how that happens.
  */
-function spread(all: Mutant[], limit: number): Mutant[] {
+export function spread(all: Mutant[], limit: number): Mutant[] {
   if (all.length <= limit) return all;
   const step = all.length / limit;
   return Array.from({ length: limit }, (unused, i) => all[Math.floor(i * step)]);

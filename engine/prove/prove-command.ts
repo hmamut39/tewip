@@ -36,6 +36,36 @@ export function filesToProve(cmd: ProveCommand): string[] {
   return change.files.map((f) => f.split('\\').join('/')).filter((f) => SOURCE.test(f) && !IS_TEST.test(f) && existsSync(resolve(cmd.root, f)));
 }
 
+/**
+ * " of the 20" - the part of the headline that keeps a clean answer honest.
+ *
+ * `--limit` samples the file, so "6 change(s) were made... 0 went unnoticed" was true of six lines
+ * and read as true of the file. Found on Tewip's own `engine/verdict/verdict.ts`: a report of six
+ * caught out of six, in a file that allows twenty. Silent when everything the file allows was tried,
+ * because then there is nothing to warn about.
+ */
+function ofHowMany(proofs: Proof[], tried: number): string {
+  const found = proofs.reduce((total, p) => total + p.found, 0);
+  return found > tried ? ` of the ${found}` : '';
+}
+
+/**
+ * The two versions of a line, cut so that the difference between them is visible.
+ *
+ * Both used to be truncated at 120 characters from the start, which on a long line put the change
+ * past the cut and printed an identical pair. Found on Tewip's own `verdict.ts:112`, where a real
+ * hole - nothing tests the "and 4 more" count - was reported as `was: X` / `became: X`. A reader
+ * seeing that concludes the tool is broken, and stops reading the findings that are right.
+ */
+export function aroundTheChange(was: string, now: string, width = 120): [string, string] {
+  if (was.length <= width && now.length <= width) return [was, now];
+  let at = 0;
+  while (at < was.length && at < now.length && was[at] === now[at]) at += 1;
+  const from = Math.max(0, at - Math.floor(width / 3));
+  const cut = (text: string) => (from > 0 ? '...' : '') + text.slice(from, from + width) + (from + width < text.length ? '...' : '');
+  return [cut(was), cut(now)];
+}
+
 export function renderProof(proofs: Proof[]): string {
   const tried = proofs.flatMap((p) => p.tried);
   const unnoticed = tried.filter((t) => t.fate === 'unnoticed');
@@ -49,7 +79,7 @@ export function renderProof(proofs: Proof[]): string {
     '',
     tried.length === 0
       ? 'Nothing was tried. See below for why.'
-      : `${tried.length} change(s) were made to your code and the covering tests were run against each. **${unnoticed.length} went unnoticed.** ${noticed.length} were caught. Took ${seconds}s.`,
+      : `${tried.length}${ofHowMany(proofs, tried.length)} change(s) were made to your code and the covering tests were run against each. **${unnoticed.length} went unnoticed.** ${noticed.length} were caught. Took ${seconds}s.`,
     '',
   ];
 
@@ -66,9 +96,10 @@ export function renderProof(proofs: Proof[]): string {
       if (gaps.length === 0) continue;
       lines.push(`### ${proof.file}`, '');
       for (const gap of gaps) {
+        const [was, now] = aroundTheChange(gap.mutant.was, gap.mutant.now);
         lines.push(`- **line ${gap.mutant.line}: ${gap.mutant.kind}**`);
-        lines.push(`  - was: \`${gap.mutant.was.slice(0, 120)}\``);
-        lines.push(`  - became: \`${gap.mutant.now.slice(0, 120)}\``);
+        lines.push(`  - was: \`${was}\``);
+        lines.push(`  - became: \`${now}\``);
       }
       lines.push('', `Run by: ${proof.covering.join(', ')}`, '');
     }
@@ -87,13 +118,17 @@ export function renderProof(proofs: Proof[]): string {
     lines.push('');
   }
 
-  if (invalid.length > 0 || broke.length > 0 || proofs.some((p) => p.notTried > 0 || p.setAside.length > 0)) {
+  const neverSampled = proofs.filter((p) => p.found > p.tried.length + p.notTried);
+  if (invalid.length > 0 || broke.length > 0 || neverSampled.length > 0 || proofs.some((p) => p.notTried > 0 || p.setAside.length > 0)) {
     lines.push('## Not counted', '');
     if (invalid.length > 0) lines.push(`- ${invalid.length} change(s) did not compile, so they say nothing about the tests. That is Tewip's fault, not yours.`);
     for (const p of proofs) for (const aside of p.setAside) lines.push(`- \`${aside.test}\` was set aside: ${aside.why}. It covers ${p.file}, so it may well notice things the tests above did not.`);
     if (broke.length > 0) lines.push(`- ${broke.length} run(s) broke in the environment rather than the tests.`);
     const left = proofs.reduce((total, p) => total + p.notTried, 0);
     if (left > 0) lines.push(`- ${left} change(s) were never tried: the time budget ran out. Raise it with \`--budget <seconds>\`.`);
+    for (const p of neverSampled) {
+      lines.push(`- **${p.file}** allows ${p.found} change(s) and ${p.tried.length + p.notTried} were taken, spread across the file. Nothing above says anything about the other ${p.found - p.tried.length - p.notTried}. To ask about all of them: \`--limit ${p.found}\`.`);
+    }
     lines.push('');
   }
 
@@ -148,7 +183,7 @@ export function runProve(cmd: ProveCommand): { proofs: Proof[]; unnoticed: numbe
   const proofs: Proof[] = [];
   for (const file of files) {
     if (!existsSync(resolve(cmd.root, file))) {
-      proofs.push({ file, covering: [], tried: [], blocked: 'no such file here', setAside: [], notTried: 0, seconds: 0 });
+      proofs.push({ file, covering: [], tried: [], blocked: 'no such file here', setAside: [], notTried: 0, found: 0, seconds: 0 });
       continue;
     }
     // Nothing importing it by name is the normal case in a layered codebase, not the absence of

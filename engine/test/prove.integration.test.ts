@@ -15,6 +15,8 @@ import { describe, it } from 'node:test';
 import type { Framework } from '../quality/frameworks.ts';
 import { proveFile } from '../prove/prove.ts';
 import { proveChanged, provedChangeLines } from '../prove/changed.ts';
+import { aroundTheChange, renderProof } from '../prove/prove-command.ts';
+import { candidateMutants, mutantsFor } from '../prove/mutants.ts';
 
 const NL = String.fromCharCode(10);
 const file = (...lines: string[]) => lines.join(NL) + NL;
@@ -170,7 +172,7 @@ describe('proving what a pull request changed, inside CI', () => {
     assert.match(lines, /put back exactly as it was/);
 
     // A file whose every change is caught produces no section at all.
-    const quiet = { proofs: [{ file: 'src/shop.js', covering: [], tried: [], blocked: '', setAside: [], notTried: 0, seconds: 1 }], unnoticed: 0, notReached: [], skipped: '' };
+    const quiet = { proofs: [{ file: 'src/shop.js', covering: [], tried: [], blocked: '', setAside: [], notTried: 0, found: 0, seconds: 1 }], unnoticed: 0, notReached: [], skipped: '' };
     assert.deepEqual(provedChangeLines(quiet), [], 'a section that always appears is a section nobody reads');
   });
 
@@ -189,5 +191,71 @@ describe('proving what a pull request changed, inside CI', () => {
     const proved = proveChanged(root, ['README.md', 'tests/shop.test.js'], {});
     assert.match(proved.skipped, /no source file that could be proved/);
     assert.deepEqual(provedChangeLines(proved), []);
+  });
+});
+
+// Phase 58: `--limit` samples the file, and for a long time the report did not say so.
+describe('a clean answer that covers part of a file', () => {
+  const proof = (over: Partial<Parameters<typeof renderProof>[0][0]>) => ({
+    file: 'src/shop.js',
+    covering: ['tests/shop.test.js'],
+    tried: [],
+    blocked: '',
+    setAside: [],
+    notTried: 0,
+    found: 0,
+    seconds: 1,
+    ...over,
+  });
+  const caught = (line: number) => ({
+    mutant: { line, was: 'if (a > b) return 1;', now: 'if (a >= b) return 1;', kind: 'a boundary moved by one' },
+    fate: 'noticed' as const,
+    noticedBy: 'tests/shop.test.js',
+    seconds: 0.4,
+  });
+
+  it('says how many of the file\'s changes it actually asked about', () => {
+    const report = renderProof([proof({ tried: [caught(3), caught(9)], found: 20 })]);
+    assert.match(report, /2 of the 20 change\(s\) were made/, 'the headline has to carry the sample size');
+    assert.match(report, /allows 20 change\(s\) and 2 were taken/);
+    assert.match(report, /Nothing above says anything about the other 18/);
+    assert.match(report, /--limit 20/, 'and how to ask about the rest');
+  });
+
+  it('stays quiet about sampling when it tried everything', () => {
+    const report = renderProof([proof({ tried: [caught(3), caught(9)], found: 2 })]);
+    assert.match(report, /^2 change\(s\) were made/m, 'no "of the 2": there is nothing left to warn about');
+    assert.doesNotMatch(report, /Nothing above says anything about/);
+  });
+
+  it('counts every change the file allows, not the sample', () => {
+    const source = file(...Array.from({ length: 12 }, (unused, i) => `  if (x` + i + ` > ` + i + `) { total += 1; }`));
+    assert.equal(candidateMutants(source).length, 12, 'twelve mutable lines');
+    assert.equal(mutantsFor(source, 4).length, 4, 'and a sample of four when four is asked for');
+  });
+});
+
+describe('quoting the change on a long line', () => {
+  it('shows where the two versions differ instead of a cut that hides it', () => {
+    const was = 'x'.repeat(200) + ' a - b ' + 'y'.repeat(50);
+    const now = 'x'.repeat(200) + ' a + b ' + 'y'.repeat(50);
+    const [left, right] = aroundTheChange(was, now);
+    assert.notEqual(left, right, 'a was/became pair that reads identical is worse than no quote at all');
+    assert.match(left, /a - b/);
+    assert.match(right, /a \+ b/);
+    assert.ok(left.startsWith('...'), 'and says that something was cut from the front');
+  });
+
+  it('leaves a line that fits exactly as it is', () => {
+    const [left, right] = aroundTheChange('if (a > b) return 1;', 'if (a >= b) return 1;');
+    assert.equal(left, 'if (a > b) return 1;');
+    assert.equal(right, 'if (a >= b) return 1;');
+  });
+
+  it('does not lose the change when it is at the very start of the line', () => {
+    const [left, right] = aroundTheChange('a === b ' + 'z'.repeat(300), 'a !== b ' + 'z'.repeat(300));
+    assert.match(left, /a === b/);
+    assert.match(right, /a !== b/);
+    assert.ok(!left.startsWith('...'), 'nothing was cut from the front, so nothing should claim it was');
   });
 });

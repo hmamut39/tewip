@@ -144,3 +144,39 @@ describe('is this work done?', () => {
     assert.doesNotMatch(report, new RegExp(`\\.\\.${NL}`), 'no doubled full stops');
   });
 });
+
+// Phase 58: found by running `tewip prove engine/verdict/verdict.ts --limit 20` on Tewip itself.
+// Three changes to this file went unnoticed by the suite above, and all three were on lines that
+// only a full run reached - a sampled run reported them as caught and said so with no caveat.
+describe('the lines a sampled proof run never reached', () => {
+  const covered = (executed: string[]): Partial<Evidence> => ({
+    covering: [],
+    coverage: { from: 'coverage/lcov.info', executed, notExecuted: [] },
+  });
+
+  it('does not call a change tested when coverage records nothing executed', () => {
+    // `executed.length > 0` survived becoming `>= 0`, which answers "yes, the suite executes "
+    // with an empty list - a met check, sourced from real coverage, resting on nothing.
+    const asked = decide(seen(covered([]))).checks.find((c) => c.question === 'Is the changed code tested?');
+    assert.notEqual(asked?.standing, 'met', 'an empty executed list is not evidence that anything ran');
+  });
+
+  it('counts the files it did not list rather than inventing more of them', () => {
+    // `executed.length - 3` survived becoming `+ 3`: with five covered files the answer read
+    // "and 8 more", a number larger than the whole list it came from.
+    const five = ['a.js', 'b.js', 'c.js', 'd.js', 'e.js'];
+    const asked = decide(seen(covered(five))).checks.find((c) => c.question === 'Is the changed code tested?');
+    assert.equal(asked?.standing, 'met');
+    assert.match(asked?.answer ?? '', /and 2 more/, 'three were named, so two are left');
+  });
+
+  it('leaves the questions that do not apply out of the body but keeps them in the table', () => {
+    // `standing === 'not-applicable'` survived becoming `!==`, which prints the one question that
+    // does not apply and silently drops every question that does.
+    const report = renderDecision('main...HEAD', decide(seen({ changedTests: [] })));
+    const table = report.slice(0, report.indexOf('### '));
+    assert.match(table, /Can the tests in this change fail\?/, 'the table lists it as n/a');
+    assert.doesNotMatch(report, /### Can the tests in this change fail\?/, 'but it gets no section of its own');
+    assert.match(report, /### Is anything failing/, 'and the questions that do apply still get theirs');
+  });
+});

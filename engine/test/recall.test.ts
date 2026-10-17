@@ -2,10 +2,10 @@
 // not a guess - every answer names the run it came from - and that a person's correction outranks
 // Tewip's own conclusion, because what the team decided beats what the tool decided.
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readJsonl } from '../../reporters/store.ts';
+import { appendJsonl, readJsonl } from '../../reporters/store.ts';
 import { describe, it } from 'node:test';
 import { memories, recall, renderRecall } from '../recall/recall.ts';
 import { errorShape } from '../signature.ts';
@@ -130,5 +130,27 @@ describe('reading a JSONL file that only ever grows', () => {
 
   it('yields nothing for a file that is not there', () => {
     assert.deepEqual(readJsonl(join(dir, 'absent.jsonl')), []);
+  });
+});
+
+// Phase 58: `tewip prove reporters/store.ts` found that nothing checked the write at all. The
+// guard `rows.length === 0` survived becoming `!==`, which turns every append into a no-op - the
+// reporter would collect failures all day and write an empty file, and the suite above, which only
+// ever reads files written by writeFileSync, would stay green through all of it.
+describe('appending to a JSONL file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tewip-append-'));
+
+  it('writes the rows it was given, one per line, and can read them back', () => {
+    const file = join(dir, 'nested', 'deeper', 'rows.jsonl');
+    appendJsonl(file, [{ a: 1 }, { a: 2 }]);
+    appendJsonl(file, [{ a: 3 }]);
+    assert.deepEqual(readJsonl(file), [{ a: 1 }, { a: 2 }, { a: 3 }], 'appending has to actually append');
+    assert.equal(readFileSync(file, 'utf8').split(String.fromCharCode(10)).filter(Boolean).length, 3, 'one row per line');
+  });
+
+  it('writes nothing at all - not even an empty file - for no rows', () => {
+    const file = join(dir, 'untouched.jsonl');
+    appendJsonl(file, []);
+    assert.equal(existsSync(file), false, 'a run with no failures should leave no trace');
   });
 });

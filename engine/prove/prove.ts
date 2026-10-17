@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import type { Framework } from '../quality/frameworks.ts';
 import { runTest } from '../quality/write-verify.ts';
-import { applyMutant, mutantsFor, type Mutant } from './mutants.ts';
+import { applyMutant, candidateMutants, spread, type Mutant } from './mutants.ts';
 
 /**
  * Does this mutated file still parse?
@@ -60,6 +60,11 @@ export interface Proof {
   setAside: Array<{ test: string; why: string }>;
   /** Mutants that were generated but not run, because the time budget ran out. */
   notTried: number;
+  /**
+   * Every change this file allows, not only the ones tried. `--limit` samples; without this number
+   * a report on 6 of 20 changes reads like a report on the file.
+   */
+  found: number;
   seconds: number;
 }
 
@@ -116,7 +121,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
   const runMs = (opts.runSeconds ?? 180) * 1000;
   const say = opts.onStep ?? (() => {});
   const full = resolve(root, file);
-  const proof: Proof = { file, covering, tried: [], blocked: '', setAside: [], notTried: 0, seconds: 0 };
+  const proof: Proof = { file, covering, tried: [], blocked: '', setAside: [], notTried: 0, found: 0, seconds: 0 };
 
   if (covering.length === 0) {
     proof.blocked = 'no test imports this file, so no test could notice any change to it. That is the finding: this code is not covered by anything Tewip can name.';
@@ -125,7 +130,11 @@ export function proveFile(root: string, file: string, covering: string[], framew
 
   const original = readFileSync(full, 'utf8');
   const stopGuarding = guardAgainstBeingKilled(full, original);
-  const mutants = mutantsFor(original, limit);
+  // The whole set first, then the sample: `found` is what the file allows and `mutants` is what
+  // there was time to ask about, and the report has to be able to tell the reader the difference.
+  const candidates = candidateMutants(original);
+  const mutants = spread(candidates, limit);
+  proof.found = candidates.length;
   if (mutants.length === 0) {
     proof.blocked = 'nothing in this file could be changed in a way a test should be expected to catch - no comparison, no condition, no returned value outside of strings and comments';
     return finish(proof, started, stopGuarding);

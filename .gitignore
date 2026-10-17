@@ -12,6 +12,7 @@ data/*
 # eleven filenames, and a list is only right until the next dataset: harvesting gutenberg-local
 # in Phase 56 produced a twelfth that nothing matched, and `git add -A` committed it. The
 # synthetic fixtures are invented data and belong in the repository; nothing else here does.
+eval/ground-truth.jsonl
 eval/ground-truth.*.jsonl
 !eval/ground-truth.synthetic.jsonl
 

@@ -17,6 +17,7 @@
 // and deliberately conservative: it is better to say "cannot say" to a real 4% regression than to
 // cry wolf at noise, because the second one costs the team the tool.
 import { MAIN_TIMING, type PerfRun } from './k6.ts';
+import { show, type Unit } from './run.ts';
 
 export type Direction = 'slower' | 'faster' | 'cannot-say';
 
@@ -48,6 +49,23 @@ export const ENOUGH_BASELINES = 3;
  */
 const SMALLEST_CHANGE = 0.05;
 
+/**
+ * The smallest difference in milliseconds this will call a regression, whatever the percentage.
+ *
+ * Found by running the same unchanged page four times through real Lighthouse and comparing the
+ * fourth against the other three: **"1 metric is slower than the baseline runs can explain."** The
+ * metric was `server-response-time`, the difference was **2.8ms on an 11ms baseline** - +25%, which
+ * clears the 5% floor easily - and Lighthouse itself reports all four of those runs as *"Root
+ * document took 10 ms"*. Tewip was claiming a regression at a precision finer than the tool it read
+ * reports, on a page that had not changed.
+ *
+ * The number is not derived from theory and is not pretending to be: it sits between a false
+ * positive this was measured producing (2.8ms) and the smallest true positive the suite already
+ * requires it to catch (10ms on a 50ms baseline). A relative floor cannot separate those two - both
+ * are about +20% - which is why the floor here is absolute.
+ */
+const MS_NOISE_FLOOR = 5;
+
 const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -62,13 +80,19 @@ const round = (n: number): number => Math.round(n * 10) / 10;
  * `baseline` is every stored value for the metric, oldest first. It is not averaged into a single
  * number, because its spread is the only evidence available about what noise looks like here.
  */
-export function compareMetric(metric: string, now: number, baseline: number[]): Comparison {
+export function compareMetric(metric: string, now: number, baseline: number[], unit: Unit = 'ms'): Comparison {
   const runs = baseline.length;
+  // Every number in `why` goes through the same formatter the rest of the report uses. These
+  // sentences used to end "ms" whatever the metric was, so a Lighthouse score of 100 was explained
+  // as **"1ms is within what 3 baseline runs already did on their own (1-1ms)"** - on the line
+  // directly below one reading `performance-score 100`. Two different numbers and a unit that does
+  // not exist, for the same measurement, in the same bullet.
+  const u = (n: number) => show({ value: n, unit, rating: null });
   const before = runs > 0 ? median(baseline) : 0;
   const low = runs > 0 ? Math.min(...baseline) : 0;
   const high = runs > 0 ? Math.max(...baseline) : 0;
   const spread = high - low;
-  const margin = Math.max(spread, before * SMALLEST_CHANGE);
+  const margin = Math.max(spread, before * SMALLEST_CHANGE, unit === 'ms' ? MS_NOISE_FLOOR : 0);
   const base = {
     metric,
     now: round(now),
@@ -97,7 +121,7 @@ export function compareMetric(metric: string, now: number, baseline: number[]): 
       ...base,
       direction: 'slower',
       why:
-        `${round(now)}ms is outside everything ${runs} baseline runs produced (${round(low)}-${round(high)}ms) ` +
+        `${u(now)} is outside everything ${runs} baseline runs produced (${u(low)}-${u(high)}) ` +
         `by more than their own spread, so the runs cannot explain it. That is ${percent > 0 ? '+' : ''}${percent}% on the middle run.`,
     };
   }
@@ -105,15 +129,15 @@ export function compareMetric(metric: string, now: number, baseline: number[]): 
     return {
       ...base,
       direction: 'faster',
-      why: `${round(now)}ms is below everything ${runs} baseline runs produced (${round(low)}-${round(high)}ms) by more than their own spread.`,
+      why: `${u(now)} is below everything ${runs} baseline runs produced (${u(low)}-${u(high)}) by more than their own spread.`,
     };
   }
   return {
     ...base,
     direction: 'cannot-say',
     why:
-      `${round(now)}ms is within what ${runs} baseline runs already did on their own (${round(low)}-${round(high)}ms, ` +
-      `allowing ${round(margin)}ms either side). A difference the baseline runs produce by themselves is not evidence about this change.`,
+      `${u(now)} is within what ${runs} baseline runs already did on their own (${u(low)}-${u(high)}, ` +
+      `allowing ${u(margin)} either side). A difference the baseline runs produce by themselves is not evidence about this change.`,
   };
 }
 

@@ -203,3 +203,55 @@ describe('the report', () => {
     assert.match(report, /\*\*1 of your own thresholds was breached\.\*\*/);
   });
 });
+
+// Phase 63: field-tested by running real Lighthouse against the same unchanged page four times and
+// comparing the fourth against the other three. It reported **"1 metric is slower than the baseline
+// runs can explain"** - on a page that had not changed.
+describe('what a real Lighthouse run exposed', () => {
+  // The actual numbers from those four runs of https://example.com.
+  const SERVER_RESPONSE = [12.583, 11.28, 11.294];
+
+  it('does not call 2.8ms on an 11ms baseline a regression, whatever the percentage', () => {
+    // +25%, which clears the 5% relative floor easily - and Lighthouse reports all four of those
+    // runs as "Root document took 10 ms", so the claim was finer than the instrument that made it.
+    const c = compareMetric('server-response-time', 14.086, SERVER_RESPONSE, 'ms');
+    assert.equal(c.direction, 'cannot-say');
+    assert.match(c.why, /allowing 5ms either side/);
+  });
+
+  it('still calls 9ms on the same baseline, which a real heavier page produced', () => {
+    // en.wikipedia.org against the same baselines: 20.1ms, +78%. The floor separates the two by
+    // absolute size, because both are about +20% or more and a relative rule cannot tell them apart.
+    const c = compareMetric('server-response-time', 20.121, SERVER_RESPONSE, 'ms');
+    assert.equal(c.direction, 'slower');
+    assert.match(c.why, /\+78% on the middle run/);
+  });
+
+  it('keeps the smallest true positive the suite already required', () => {
+    // 50 -> 60ms on three identical runs. If the floor swallowed this it would be too blunt.
+    assert.equal(compareMetric('http_req_duration', 60, [50, 50, 50], 'ms').direction, 'slower');
+    assert.equal(compareMetric('http_req_duration', 54, [50, 50, 50], 'ms').direction, 'cannot-say');
+  });
+
+  it('explains a score without inventing a unit for it', () => {
+    // This said "1ms is within what 3 baseline runs already did on their own (1-1ms)" on the line
+    // directly below one reading `performance-score 100`: two numbers and a unit that does not
+    // exist, for the same measurement, in the same bullet.
+    const c = compareMetric('performance-score', 1, [1, 1, 1], 'score');
+    assert.equal(c.direction, 'cannot-say');
+    assert.doesNotMatch(c.why, /\d\s*ms/, 'a Lighthouse score is not measured in milliseconds');
+    assert.match(c.why, /^100 is within/, 'and it is written the way the rest of the report writes it');
+  });
+
+  it('writes a slower score the same way', () => {
+    const c = compareMetric('performance-score', 0.87, [1, 1, 1], 'score');
+    assert.doesNotMatch(c.why, /\d\s*ms/);
+    assert.match(c.why, /87/);
+  });
+
+  it('leaves the ms floor out of a metric that is not in milliseconds', () => {
+    // The floor is about the resolution of a stopwatch; a ratio has no stopwatch.
+    const c = compareMetric('cumulative-layout-shift', 0.165, [0, 0, 0], 'unitless');
+    assert.equal(c.direction, 'slower', 'a layout shift from 0 to 0.165 is not 5 milliseconds of noise');
+  });
+});

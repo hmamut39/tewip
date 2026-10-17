@@ -131,10 +131,17 @@ export function renderPerf(
   }
   for (const c of [...slower, ...faster, ...unsure]) {
     const verdict = c.direction === 'slower' ? '**slower**' : c.direction === 'faster' ? 'faster' : 'cannot say';
+    // `show` and nothing else. This had a local formatter - `unit === 'ms' ? n + 'ms' : n` - which
+    // knew nothing about Lighthouse's 0-1 score, so one real report said **performance-score: 100**
+    // in the section above and **performance-score 1** here. Anyone reading the second number takes
+    // it for 1 out of 100: a perfect page reported as a catastrophic one, in the same report.
+    // `server-response-time` came out as 13ms above and 12.6ms here for the same reason.
     const unit = run.metrics[c.metric]?.unit ?? 'ms';
-    const u = (n: number) => (unit === 'ms' ? `${n}ms` : `${n}`);
+    const u = (n: number) => show({ ...(run.metrics[c.metric] ?? { unit, rating: null }), value: n });
     lines.push(`- \`${c.metric}\` ${u(c.now)} — ${verdict}`);
-    lines.push(`  - baseline ${u(c.baselineLow)}–${u(c.baselineHigh)} over ${c.baselineRuns} runs, middle ${u(c.before)}`);
+    // With no baseline there is no range, and "baseline 0ms-0ms over 0 runs, middle 0ms" is four
+    // zeros that read as measurements. The line below already says there is nothing to compare to.
+    if (c.baselineRuns > 0) lines.push(`  - baseline ${u(c.baselineLow)}–${u(c.baselineHigh)} over ${c.baselineRuns} runs, middle ${u(c.before)}`);
     lines.push(`  - ${c.why}`);
   }
   lines.push('');
@@ -233,7 +240,7 @@ export function runPerf(cmd: PerfCommand): PerfResult | undefined {
   }
 
   const comparisons = metricsInOrder(run)
-    .map((metric) => compareMetric(metric, run.metrics[metric].value, baselineFor(history, metric)))
+    .map((metric) => compareMetric(metric, run.metrics[metric].value, baselineFor(history, metric), run.metrics[metric].unit))
     // A metric that is zero now and was zero every time before says nothing, and printing
     // "0ms is within 0-0ms" three times buries the real lines.
     .filter((c) => c.now > 0 || c.baselineHigh > 0);

@@ -3653,6 +3653,57 @@ runs the whole suite and says why - the safe direction.
 
 1,079 tests.
 
+### Phase 63: Four Runs Of A Page That Had Not Changed, And One Of Them Was A Regression
+
+`tewip perf` answers "is this change slower, and does it matter" from k6, Lighthouse or JMeter
+output. It had never been pointed at a real report. So: real Lighthouse 12, real headless Chrome,
+`https://example.com` audited **four times**, the first three recorded as the baseline and the fourth
+compared against them. Nothing about the page changed between runs.
+
+> **1 metric is slower than the baseline runs can explain.**
+>
+> - `server-response-time` 14.1ms — **slower**
+>   - baseline 11ms–13ms over 3 runs, middle 11ms
+>   - 14.1ms is outside everything 3 baseline runs produced (11.3-12.6ms) by more than their own
+>     spread, so the runs cannot explain it. That is **+25%** on the middle run.
+
+A difference of **2.8 milliseconds**, on a page that had not changed, reported as a regression. And
+the deciding fact came from the report itself: Lighthouse's own `displayValue` for that audit, in all
+four runs, is **"Root document took 10 ms"**. Tewip was claiming a regression at a precision finer
+than the instrument it was reading.
+
+The floor was relative - 5% - and +25% clears it easily. A relative rule cannot separate this from
+the smallest true positive the suite already requires (50ms → 60ms on identical baselines, +20%), so
+the floor is now also **absolute: 5ms**. That number is not derived from theory and does not pretend
+to be - it sits between a false positive this was measured producing (2.8ms) and the smallest true
+positive it is required to keep (10ms). It applies only to metrics measured in milliseconds, because
+it is a statement about a stopwatch and a layout-shift ratio has no stopwatch.
+
+Checked against a genuinely slower page rather than assumed: `en.wikipedia.org/wiki/Main_Page`
+against the same three baselines gives **LCP +93% and server-response-time +78% (20.1ms, a 9ms
+difference), both still called slower**. The floor suppresses the 2.8ms and keeps the 9ms.
+
+**The second defect was in the same report, two lines apart.**
+
+> - good — `performance-score`: **100**
+> - `performance-score` **1** — cannot say
+>   - **1ms is within what 3 baseline runs already did on their own (1-1ms, allowing 0.1ms either
+>     side).**
+
+Three different renderings of one perfect Lighthouse score in one report: 100, 1, and "1ms". The
+comparison section had its own local formatter - `unit === 'ms' ? n + 'ms' : n` - which knew nothing
+about Lighthouse's 0-to-1 score, and the explanation sentence inside `compareMetric` hard-coded "ms"
+for every metric. Anyone reading the second section sees a score of 1 out of 100: a perfect page
+reported as a catastrophic one. `server-response-time` was 13ms in one section and 12.6ms in the
+other for the same reason. There is now one formatter, `show`, and the unit reaches the place that
+writes the sentence.
+
+**Third, smaller:** with no baseline at all, every metric printed "baseline 0ms–0ms over 0 runs,
+middle 0ms" - four zeros that read as measurements, directly above a line correctly saying there is
+nothing to compare against. That line is no longer printed when there is nothing in it.
+
+1,085 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

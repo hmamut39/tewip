@@ -170,7 +170,7 @@ server.registerTool(
       const name = label ?? 'default';
       const history = fromSameTool(storedRuns(root, name), run.source);
       const comparisons = metricsInOrder(run)
-        .map((m) => compareMetric(m, run.metrics[m].value, baselineFor(history, m)))
+        .map((m) => compareMetric(m, run.metrics[m].value, baselineFor(history, m), run.metrics[m].unit))
         .filter((c) => c.now > 0 || c.baselineHigh > 0);
       return renderPerf(run, comparisons, name, history.length, false, manual);
     }),

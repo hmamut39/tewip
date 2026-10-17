@@ -8,21 +8,16 @@ data/*
 !data/.gitkeep
 
 # Hand labels for real CI failures describe collected failure data; they stay local too.
-eval/ground-truth.jsonl
-eval/ground-truth.holdout.jsonl
-eval/ground-truth.fresh.jsonl
-eval/ground-truth.supabase.jsonl
-eval/ground-truth.penpot.jsonl
-eval/ground-truth.ghost.jsonl
-eval/ground-truth.aug.jsonl
-eval/ground-truth.aug2.jsonl
+# Every label file for real CI failures, by pattern rather than by name. This was a list of
+# eleven filenames, and a list is only right until the next dataset: harvesting gutenberg-local
+# in Phase 56 produced a twelfth that nothing matched, and `git add -A` committed it. The
+# synthetic fixtures are invented data and belong in the repository; nothing else here does.
+eval/ground-truth.*.jsonl
+!eval/ground-truth.synthetic.jsonl
 
 # Secrets (API keys) never leave this machine.
 .env
 .env.*
-eval/ground-truth.jupyterlab.jsonl
-eval/ground-truth.lxdui.jsonl
-eval/ground-truth.nextcloud.jsonl
 
 # Polyglot fixtures: installed packages and runner outputs.
 fixtures/polyglot/**/node_modules/

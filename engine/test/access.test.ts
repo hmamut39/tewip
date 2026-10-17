@@ -376,3 +376,57 @@ describe('labels a framework binds at render time', () => {
     assert.deepEqual(rules('<input type="text" name="name" placeholder="Name">', 'v.cshtml'), ['input-label']);
   });
 });
+
+// Phase 50: Vue, Svelte and Angular - supported since Phase 28 and 37, measured for the first time
+// against immich (Svelte), nocodb (Vue) and angular/components (Angular Material).
+describe('a component that labels the control it wraps', () => {
+  it('does not call an Angular Material input unlabelled', () => {
+    // `MatFormField` generates the id on the input and the `for` on the label when it renders. The
+    // label is real; it is simply not expressed here. Reading the markup alone, Tewip called 426
+    // inputs in the Angular team's own accessibility-focused component library unlabelled.
+    const source = '<mat-form-field><mat-label>Title</mat-label><input matInput type="text"></mat-form-field>';
+    assert.equal(confidenceOf(source, 'input-label', 'v.html'), 'ask-a-person');
+    assert.equal(confidenceOf('<mat-form-field><mat-label>Notes</mat-label><textarea matInput></textarea></mat-form-field>', 'label', 'v.html'), 'ask-a-person');
+  });
+
+  it('still reports a control a component wraps without labelling it', () => {
+    // A custom element around a bare input is not a shrug: the label has to actually be in there.
+    assert.equal(confidenceOf('<my-card><input type="text"></my-card>', 'input-label', 'v.html'), 'barrier');
+    assert.equal(confidenceOf('<div><input type="text"></div>', 'input-label', 'v.html'), 'barrier');
+  });
+});
+
+describe('a click handler, in every framework spelling', () => {
+  it('reads Angular and Vue, which were both invisible', () => {
+    // angular/components has 414 `(click)=` handlers and Tewip saw none, so click-without-keyboard
+    // could never fire in any Angular project - the library reported zero, which looked clean and
+    // was blindness. nocodb has 455 `@click.stop` and similar, which the exact-name list also missed.
+    assert.deepEqual(rules('<div (click)="go()">x</div>', 'v.html'), ['click-without-keyboard']);
+    assert.deepEqual(rules('<div @click.stop="go">x</div>', 'v.html'), ['click-without-keyboard']);
+    assert.deepEqual(rules('<div @click.prevent.self="go">x</div>', 'v.html'), ['click-without-keyboard']);
+  });
+
+  it('still reads the ones it always did', () => {
+    for (const markup of ['<div onclick="go()">x</div>', '<div @click="go">x</div>', '<div on:click={go}>x</div>']) {
+      assert.deepEqual(rules(markup, 'v.html'), ['click-without-keyboard'], markup);
+    }
+  });
+
+  it('does not mistake an attribute that merely contains the word', () => {
+    assert.deepEqual(rules('<div data-click-target="x">y</div>', 'v.html'), []);
+  });
+
+  it('leaves an element that does handle keys alone', () => {
+    assert.deepEqual(rules('<div (click)="go()" (keydown)="k()">x</div>', 'v.html'), []);
+    assert.deepEqual(rules('<div @click.stop="go" @keydown.enter="go">x</div>', 'v.html'), []);
+  });
+
+  it('does not call a custom element keyboard-inaccessible', () => {
+    // `<mat-checkbox (click)="toggle()">` is a checkbox with full keyboard handling once Angular
+    // renders it. Reading the markup alone it looks like a bare tag carrying a click.
+    assert.deepEqual(rules('<mat-checkbox (click)="toggle()">Pick</mat-checkbox>', 'v.html'), []);
+    assert.deepEqual(rules('<ion-button @click="go">Go</ion-button>', 'v.html'), []);
+    // and a table row beside it, which really is not focusable, is still a barrier
+    assert.deepEqual(rules('<tr (click)="expand()"><td>x</td></tr>', 'v.html'), ['click-without-keyboard']);
+  });
+});

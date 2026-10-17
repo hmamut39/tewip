@@ -7,7 +7,7 @@
 // whether alt text is any good) are not attempted here and are listed in NOT_CHECKED instead.
 import { inside, labelledBy, type Tag } from './markup.ts';
 import type { Confidence } from './wcag.ts';
-import { ARIA, INTERACTIVE, UNLABELLED_TYPES, at, clickHandler, decorative, hiddenFromEveryone, keyHandler, notRendered, show, tabIndexOf } from './element.ts';
+import { ARIA, INTERACTIVE, UNLABELLED_TYPES, at, clickHandler, customElement, decorative, hiddenFromEveryone, keyHandler, notRendered, show, tabIndexOf } from './element.ts';
 
 export interface Finding {
   rule: string;
@@ -22,7 +22,7 @@ export interface Finding {
 }
 
 /** Checks that look at one element at a time. */
-function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean, namedByComponent: Set<string> = new Set(), boundLabels: Set<string> = new Set()): Finding[] {
+function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: number, ancestorKey: boolean, namedByComponent: Set<string> = new Set(), boundLabels: Set<string> = new Set(), labelledByAComponent = false): Finding[] {
   const out: Finding[] = [];
   const place = at(t, file);
   const name = labelledBy(t);
@@ -62,10 +62,11 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
     );
     const linked = bound || (typeof t.attrs.id === 'string' && labelFor.has(t.attrs.id));
     if (!name.named && !linked && openLabels === 0) {
-      if (name.unknown || t.dynamic.has('id') || t.dynamic.has('style') || (typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id))) {
+      if (labelledByAComponent || name.unknown || t.dynamic.has('id') || t.dynamic.has('style') || (typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id))) {
         out.push({ rule: nameRule, confidence: 'ask-a-person', ...place,
-          why:
-            typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id)
+          why: labelledByAComponent
+            ? 'no label is written on this control, but it sits inside a custom element that contains a label - a component that binds the two when it renders, which this file cannot show'
+            : typeof t.attrs.id === 'string' && namedByComponent.has(t.attrs.id)
               ? `no <label for> is written here, but a component in this file names id="${t.attrs.id}" in one of its props, so the label may be rendered there`
               : t.dynamic.has('style')
                 ? 'no label can be read here, and its style is an expression, so whether this is displayed at all cannot be read from the markup'
@@ -106,7 +107,11 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
   // world is built - a backdrop div closes on click, and Escape closes it from the dialog itself.
   // WCAG 2.1.1 asks that the *function* be reachable from the keyboard, not that this particular
   // div be focusable. Excalidraw's Modal.tsx is exactly this shape, and calling it a blocker is wrong.
-  if (clickHandler(t) && !INTERACTIVE.has(t.name) && !t.component && !t.attrs.role && tabindex === null && !keyHandler(t) && !ancestorKey) {
+  // `!customElement(t)` as well as `!t.component`: `<mat-checkbox (click)="toggle()">` is a checkbox
+  // that Angular renders with full keyboard handling, and `<mat-list-item>` likewise. Reading the
+  // markup alone they look like bare tags carrying a click. A `<tr (click)>` beside them in the same
+  // file is a genuine barrier, and still reported as one - table rows really are not focusable.
+  if (clickHandler(t) && !INTERACTIVE.has(t.name) && !t.component && !customElement(t) && !t.attrs.role && tabindex === null && !keyHandler(t) && !ancestorKey) {
     out.push({ rule: 'click-without-keyboard', confidence: 'barrier', ...place,
       why: 'it responds to a click, but it has no role, no tabindex and no key handler, so the keyboard cannot reach or fire it',
       next: 'use a <button>, or add role="button", tabindex="0" and a key handler' });
@@ -181,8 +186,29 @@ export function checkFile(source: string, all: Tag[], file: string, isDocument =
   let interactiveDepth = 0;
   let lastHeading = 0;
 
-  /** The elements currently open around this one, and whether each handles keys. */
-  const open: { name: string; keys: boolean }[] = [];
+  /**
+   * The elements currently open around this one: whether each handles keys, whether it is a custom
+   * element, and whether a label has appeared inside it.
+   *
+   * A custom element does its own labelling and does it somewhere else. Angular Material writes
+   *
+   *     <mat-form-field>
+   *       <mat-label>Title</mat-label>
+   *       <input matInput type="text">
+   *     </mat-form-field>
+   *
+   * and `MatFormField` generates the id on the input and the `for` on the label when it renders.
+   * The label is real; it is simply not expressed here. Reading the markup alone, Tewip called 426
+   * inputs in **the Angular team's own accessibility-focused component library** unlabelled.
+   *
+   * The same family as PatternFly's `<FormGroup fieldId>` in Phase 43 and ASP.NET's `asp-for` in
+   * Phase 45. This is the third spelling: the component wraps the label and the control together.
+   *
+   * A dash in the name is what marks a custom element - no standard HTML element has one - and the
+   * label must actually appear inside it, so an ordinary `<my-card>` around a bare input is still a
+   * barrier rather than a shrug.
+   */
+  const open: { name: string; keys: boolean; custom: boolean; sawLabel: boolean }[] = [];
 
   for (const [i, t] of all.entries()) {
     if (t.name === 'label') openLabels += t.closing ? -1 : t.selfClosing ? 0 : 1;
@@ -194,8 +220,13 @@ export function checkFile(source: string, all: Tag[], file: string, isDocument =
       continue;
     }
 
-    out.push(...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys), namedByComponent, boundLabels));
-    if (!t.selfClosing) open.push({ name: t.name, keys: keyHandler(t) });
+    // A label, or a component that is one by name - `<mat-label>`, `<ion-label>`, `<sl-label>`.
+    if (t.name === 'label' || /(^|-)labels?$/.test(t.name)) for (const o of open) if (o.custom) o.sawLabel = true;
+    const labelledByAComponent = open.some((o) => o.custom && o.sawLabel);
+    out.push(
+      ...perElement(t, file, labelFor, Math.max(openLabels - (t.name === 'label' ? 1 : 0), 0), open.some((o) => o.keys), namedByComponent, boundLabels, labelledByAComponent),
+    );
+    if (!t.selfClosing) open.push({ name: t.name, keys: keyHandler(t), custom: t.name.includes('-'), sawLabel: false });
 
     const id = t.attrs.id;
     if (isDocument && id && !t.dynamic.has('id')) {

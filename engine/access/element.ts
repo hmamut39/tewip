@@ -43,8 +43,46 @@ export const ARIA = new Set([
 ]);
 
 /** A click handler, in any of the four dialects this scanner reads. */
+/**
+ * A click handler, in any of the spellings the frameworks use.
+ *
+ * This was a list of four exact names, and two whole frameworks wrote theirs differently:
+ *
+ *   - **Angular** binds events as `(click)="..."`. angular/components has **414** of them and Tewip
+ *     saw none, so `click-without-keyboard` could never fire in any Angular project at all. The
+ *     library reported zero, which looked like a clean result and was blindness.
+ *   - **Vue** allows modifiers, so the attribute is `@click.stop` or `@click.prevent` rather than
+ *     `@click`. nocodb has **455** of those.
+ *
+ * Svelte was already covered both ways - `on:click` and Svelte 5's `onclick` - which is why this
+ * only showed up when a third framework was finally pointed at.
+ *
+ * `keyHandler` below had no such problem because it matches on a substring; the trade is that this
+ * one has to name the shapes, so that `data-click-target` is not read as a handler.
+ */
+// Angular's `(click)="go()"` reaches here as an attribute plainly named `click`, because the
+// attribute reader strips the parentheses - which is also why `keyHandler` below already worked for
+// Angular and this did not: it matches on a substring and this matched on an exact name. No standard
+// HTML attribute is called `click`, so taking the bare form costs nothing.
+const CLICK = /^(?:on)?(?:click|dblclick)$|^(?:@|v-on:|on:)(?:click|dblclick)(?:[.|][\w.|$-]*)?$/i;
+
+/**
+ * A custom element: a component in markup that does not spell its name with a capital.
+ *
+ * `t.component` catches React's `<Select>` and `<Foo.Bar>`, and misses every web component and every
+ * Angular or Ionic element - `<mat-checkbox>`, `<mat-list-item>`, `<ion-button>`. A dash in the name
+ * is what the HTML spec reserves for them, and no standard element has one.
+ *
+ * It matters wherever Tewip is about to say something certain about an element whose behaviour is
+ * written somewhere else. `<mat-checkbox (click)="x()">` is a real checkbox with real keyboard
+ * handling once Angular renders it; reading the markup alone it looks like a bare tag with a click.
+ */
+export function customElement(t: Tag): boolean {
+  return t.name.includes('-');
+}
+
 export function clickHandler(t: Tag): boolean {
-  return ['onclick', '@click', 'v-on:click', 'on:click'].some((a) => a in t.attrs || t.dynamic.has(a));
+  return [...Object.keys(t.attrs), ...t.dynamic].some((a) => CLICK.test(a));
 }
 
 export function keyHandler(t: Tag): boolean {

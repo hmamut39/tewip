@@ -255,6 +255,60 @@
           "verified": "2026-10-15. Zero accusations across 466 Rust tests, which agrees with reading the condemned list and finding it empty. The four zeros are the measurement here: Rust was added in Phase 36 against this exact project, after its lifetimes were being read as unterminated strings, and nothing had held that since."
         }
       ]
+    },
+    {
+      "name": "angular-components",
+      "url": "https://github.com/angular/components.git",
+      "commit": "3f9f22ba985eb7f85e812aa66a75ec7b143fd756",
+      "why": "Angular Material - the Angular team's own component library, with a dedicated accessibility focus. The Angular equivalent of pointing `access` at GOV.UK, and the only Angular in the corpus.",
+      "checks": [
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 683,
+            "findings": 615,
+            "ask-a-person": 421,
+            "barrier": 194
+          },
+          "verified": "2026-10-17. 194 barriers, down from 533. The 339 that went were Angular Material's own form fields: <mat-form-field><mat-label>Title</mat-label><input matInput></mat-form-field>, where MatFormField binds the two when it renders - the label is real and simply not expressed in the file. Samples of what remains were read by hand: the ARIA combobox examples carry a placeholder and no label, which is the classic WCAG 3.3.2 failure, and <tr (click)=...> rows really are not focusable. click-without-keyboard was 0 before this trial and is 16: Angular binds events as (click) and Tewip knew four exact spellings, none of them Angular's, so the rule could never fire in any Angular project. mat-checkbox and mat-list-item carrying a click are excluded - they are components that render keyboard-accessible controls."
+        }
+      ]
+    },
+    {
+      "name": "nocodb",
+      "url": "https://github.com/nocodb/nocodb.git",
+      "commit": "10f215665687080d3036fa6a85dca58fb64c652f",
+      "why": "A real Vue product, and the only Vue in the corpus. 1,132 markup files.",
+      "checks": [
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 1132,
+            "findings": 606,
+            "barrier": 481,
+            "ask-a-person": 125
+          },
+          "verified": "2026-10-17. 481 barriers, 377 of them click-without-keyboard, which is what a Vue codebase of this age looks like: plain <div @click> with no role, no tabindex and no key handler. Samples read by hand - Breadcrumb.vue's nc-breadcrumb-item is exactly that. It was 286 until Vue's modifier forms were understood: the attribute is @click.stop, not @click, and nocodb has 455 of those."
+        }
+      ]
+    },
+    {
+      "name": "immich",
+      "url": "https://github.com/immich-app/immich.git",
+      "commit": "188d64e4359259252358b49853890b3204ea72d2",
+      "why": "SvelteKit, and the only Svelte in the corpus.",
+      "checks": [
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 425,
+            "findings": 111,
+            "barrier": 25,
+            "ask-a-person": 86
+          },
+          "verified": "2026-10-17. 25 barriers across 425 SvelteKit files, the lowest rate of the three frontends. Svelte needed no fix at all: both its spellings, on:click and Svelte 5's onclick, were already read, which is why this gap only appeared when a third framework was pointed at."
+        }
+      ]
     }
   ]
 }

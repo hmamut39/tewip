@@ -2953,6 +2953,53 @@ inside a migration, which is exactly the slow, risky operation that deserves nam
 The corpus is now **eight projects and fifteen checks**, and `schema` has been measured against
 Django, Rails, Liquibase, EF Core, T-SQL, Laravel and plain SQL - **5,700 real migrations**.
 
+### Phase 50: Vue, Svelte and Angular - the Frameworks That Had Never Been Run
+
+`access` had been measured on React, Razor and Nunjucks. Vue, Svelte and Angular had been supported
+since Phases 28 and 37 and never pointed at anything. **immich** (SvelteKit), **nocodb** (Vue) and
+**angular/components** - Angular Material, the Angular team's own library, with a dedicated
+accessibility focus and therefore the Angular equivalent of GOV.UK.
+
+**Angular Material reported 533 barriers, 426 of them unlabelled inputs.** In an accessibility
+library. Every one was this:
+
+```html
+<mat-form-field>
+  <mat-label>Title</mat-label>
+  <input matInput type="text">
+</mat-form-field>
+```
+
+`MatFormField` generates the id on the input and the `for` on the label when it renders. The label
+is real and simply not expressed in the file. This is the **third** spelling of the same family -
+PatternFly named the control in a prop (Phase 43), ASP.NET bound it through the model with `asp-for`
+(Phase 45), and Angular Material wraps the two together. A custom element containing a label now
+means "cannot say" rather than "certain barrier", and an ordinary `<my-card>` around a bare input is
+still a barrier, because the label has to actually be in there.
+
+**And Angular's events were invisible.** `click-without-keyboard` read four exact attribute names -
+`onclick`, `@click`, `v-on:click`, `on:click` - and Angular binds events as `(click)`.
+angular/components has **414** of them and Tewip saw none, so the rule **could never fire in any
+Angular project at all**. The library reported zero, which looked like a clean result and was
+blindness. Vue's modifier forms were missed for the same reason: the attribute is `@click.stop`, not
+`@click`, and nocodb has **455** of those. Svelte needed nothing - both its spellings were already
+read, which is exactly why this only surfaced when a third framework was finally pointed at.
+
+A zero is the hardest wrong answer to notice, because it looks like the answer you wanted.
+
+The new detection then needed its own restraint: `<mat-checkbox (click)="toggle()">` is a checkbox
+with full keyboard handling once Angular renders it, and `t.component` - which catches React's
+`<Select>` - does not catch a name spelled with a dash. A `<tr (click)>` beside it in the same file
+is a genuine barrier and is still reported as one, because table rows really are not focusable.
+
+**What survived:** Angular 194 barriers, nocodb 481, immich 25. nocodb's 377 keyboard findings are
+what a Vue codebase of this age looks like - plain `<div @click>` with no role, no tabindex and no
+key handler - and samples of all three were read against their source. GOV.UK stayed at 6, unmoved,
+which is the regression check that matters most for this command.
+
+The corpus is now **eleven projects and eighteen checks**, and `access` has been measured against
+React, Angular, Vue, Svelte, Razor and Nunjucks.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

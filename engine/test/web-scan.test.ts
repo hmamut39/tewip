@@ -145,3 +145,55 @@ describe('reading a real scanner\'s report', () => {
     assert.equal(triageWeb(findings[1], new Set()).verdict, 'not-reachable', 'a low finding is worth fixing, not worth an evening');
   });
 });
+
+// Phase 71: `isLocal` is a consent control, not a convenience. `secure --url` refuses a non-local
+// address without `--i-am-authorised`, so anything this accepts is scanned with no questions asked.
+// It was a prefix match, and five hostnames walked past it.
+describe('whether consent is needed before touching a running site', () => {
+  it('accepts this machine, by name and by every private range', () => {
+    for (const url of [
+      'http://localhost:3000',
+      'http://LOCALHOST:3000',
+      'http://127.0.0.1:3000',
+      'http://127.1.2.3',
+      'http://0.0.0.0:8080',
+      'http://[::1]:3000',
+      'http://10.1.2.3',
+      'http://192.168.0.5',
+      'http://172.16.0.1',
+      'http://172.31.255.254',
+      'http://shop.local',
+      'http://api.localhost:4000',
+    ]) {
+      assert.equal(isLocal(url), true, `${url} is this machine or its network`);
+    }
+  });
+
+  it('refuses a host that merely begins with something local-looking', () => {
+    // Every one of these was accepted as "this machine", so Tewip would have scanned a host
+    // somebody else controls without ever asking. `localhost.<anything>` is one of the oldest
+    // allowlist bypasses there is, and a careless paste reaches it as easily as a malicious one.
+    for (const url of [
+      'http://localhost.evil.example',
+      'http://localhostile.example',
+      'http://10.evil.example',
+      'http://127.0.0.1.evil.example',
+      'http://172.16.evil.example',
+      'http://192.168.0.5.evil.example',
+    ]) {
+      assert.equal(isLocal(url), false, `${url} is not this machine and consent must be asked for`);
+    }
+  });
+
+  it('refuses the ranges that are not private, including the metadata endpoint', () => {
+    // 169.254.169.254 is where a cloud instance keeps its credentials. Asking before touching it
+    // is exactly what this function is for.
+    for (const url of ['http://169.254.169.254/latest/meta-data/', 'http://192.0.2.1', 'https://example.com', 'http://172.32.0.1', 'http://11.0.0.1', 'http://192.169.0.1']) {
+      assert.equal(isLocal(url), false, `${url} needs --i-am-authorised`);
+    }
+  });
+
+  it('refuses something that is not a URL at all rather than guessing', () => {
+    for (const bad of ['not a url', '', 'localhost:3000', '://x']) assert.equal(isLocal(bad), false);
+  });
+});

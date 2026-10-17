@@ -4062,6 +4062,54 @@ it is not that claim. Only the top-level seal is excluded now.
 
 1,123 tests.
 
+### Phase 71: `localhost.evil.example` Was "This Machine"
+
+`tewip secure --url` is the only path in Tewip that touches a running server, and it carries a consent
+control: a non-local address is refused unless the person says `--i-am-authorised`, because *"scanning
+a system you do not run is not Tewip's decision to make."* That refusal had never been tested.
+
+First the ordinary path, against a deliberately insecure server written for the purpose and run on
+this machine: no security headers, a session cookie with no flags, and `/.env` and `/.git/config`
+served with real contents. **Six findings, every one verifiable against what the server actually
+does** - the served `.env`, the served `.git/config`, no Content-Security-Policy, the unflagged
+cookie, no `X-Content-Type-Options`, and a page that can be framed. It also judged correctly in a way
+worth noticing: the cookie finding asks for `HttpOnly, SameSite` and **not** `Secure`, because the URL
+is plain http on localhost where `Secure` would be wrong advice.
+
+The central promise held under the one test that matters. The `.env` it fetched contained
+`OPENAI_API_KEY=sk-...` and `DB_PASSWORD=hunter2`; the report says *"GET …/.env answered 200 with the
+file's real contents"* and **neither string appears anywhere in the output.** A secret is located,
+never quoted.
+
+The refusal fires too, and in the right order - the `throw` is ahead of the first request, so nothing
+is sent to an address that was not consented to.
+
+**Then the control itself was probed, and five hostnames walked straight past it.** `isLocal` was a
+prefix match:
+
+    /^(?:localhost|127\.|0\.0\.0\.0|\[::1\]|::1|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/
+
+| address | was | should be |
+| --- | --- | --- |
+| `localhost.evil.example` | **this machine** | needs consent |
+| `localhostile.example` | **this machine** | needs consent |
+| `10.evil.example` | **this machine** | needs consent |
+| `127.0.0.1.evil.example` | **this machine** | needs consent |
+| `172.16.evil.example` | **this machine** | needs consent |
+
+Each one *starts with* something local-looking, so each was scanned with no questions asked.
+`localhost.<anything>` is one of the oldest allowlist bypasses there is, and a careless paste reaches
+it as easily as a malicious one. A control that can be walked past by appending a domain is not a
+control; it is a sentence in the help text.
+
+A name is now local only if it **is** `localhost` or ends in a reserved local suffix (`.localhost`,
+`.local`), and an address only if its octets really fall in a private range - parsed as four numbers,
+not matched as text. Link-local `169.254/16` is deliberately **not** local: `169.254.169.254` is where
+a cloud instance keeps its credentials, and asking before touching it is precisely what this function
+is for. Sixteen cases are pinned, the five bypasses among them.
+
+1,127 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

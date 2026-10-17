@@ -205,11 +205,47 @@ export async function scanWeb(url: string, { timeoutMs = 15_000, probeExposed = 
 }
 
 /** Localhost, a private address, or a name only this machine resolves. */
+/** The four octets of a dotted IPv4 address, or null for anything else - including a name. */
+function ipv4(host: string): [number, number, number, number] | null {
+  const parts = host.split('.');
+  if (parts.length !== 4) return null;
+  const numbers = parts.map((p) => (/^\d{1,3}$/.test(p) ? Number(p) : -1));
+  return numbers.every((n) => n >= 0 && n <= 255) ? (numbers as [number, number, number, number]) : null;
+}
+
+/**
+ * Is this address the person's own machine or network?
+ *
+ * **This is a consent control, not a convenience.** `secure --url` refuses a non-local address
+ * without `--i-am-authorised`, because scanning a system you do not run is not Tewip's decision to
+ * make - so anything this returns `true` for is scanned with no questions asked.
+ *
+ * It was a prefix match, and five hostnames walked straight past it: `localhost.evil.example`,
+ * `localhostile.example`, `10.evil.example`, `127.0.0.1.evil.example` and `172.16.evil.example` were
+ * all "this machine", because each *starts with* something local-looking. `localhost.<anything>` is
+ * one of the oldest allowlist bypasses there is, and a careless paste reaches it as easily as a
+ * malicious one.
+ *
+ * So a name is local only if it **is** `localhost` or ends in a reserved local suffix, and an address
+ * is local only if its octets really fall in a private range. Link-local 169.254/16 is deliberately
+ * **not** local: `169.254.169.254` is the cloud metadata endpoint, and asking before touching it is
+ * exactly the point of this function.
+ */
 export function isLocal(url: string): boolean {
+  let host: string;
   try {
-    const host = new URL(url).hostname;
-    return /^(?:localhost|127\.|0\.0\.0\.0|\[::1\]|::1|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host) || host.endsWith('.local') || host.endsWith('.localhost');
+    host = new URL(url).hostname.toLowerCase();
   } catch {
     return false;
   }
+  // `new URL('http://[::1]').hostname` is "[::1]" in Node, so both spellings are accepted.
+  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
+  if (host.endsWith('.localhost') || host.endsWith('.local')) return true;
+  const octets = ipv4(host);
+  if (!octets) return false;
+  const [a, b] = octets;
+  if (a === 0 || a === 127) return true; // 0.0.0.0 and the whole loopback range
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  return a === 172 && b >= 16 && b <= 31;
 }

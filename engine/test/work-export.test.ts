@@ -184,7 +184,9 @@ describe('why nothing was filed', () => {
   it('says that a model-only verdict is capped on purpose, and what would lift it', () => {
     const said = whyNothingWasFiled([unsureBug(0.45)], [unsureBug(0.45)]);
     assert.match(said, /capped at 0\.45 on purpose/);
-    assert.match(said, /A person's correction on the failure in CI, or a rule that agrees/);
+    // Phase 65 moved the "what would lift it" half into its own sentence, because the honest answer
+    // for a CI user is history rather than a vaguer "a rule that agrees".
+    assert.match(said, /A person's correction on the failure in CI settles it immediately/);
   });
 
   it('does not blame the model when the rules were the ones that hesitated', () => {
@@ -203,5 +205,41 @@ describe('why nothing was filed', () => {
 
   it('keeps the bar where it is, because a ticket on a model\'s word is the thing not to do', () => {
     assert.equal(CONFIDENT_ENOUGH, 0.8);
+  });
+});
+
+// Phase 65: the Phase 64 recommendation, measured and refused.
+//
+// The suggestion was to let the rules call a plain value mismatch a real bug without history, since
+// "expected 4, received 3" needs no model. Measured over 2,767 hand-labelled real failures from nine
+// projects: 293 value mismatches, of which **TIMING 265 (90.4%)** and REAL_BUG 26 (8.9%). A flaky
+// test fails its assertion too. The rule declines for a good reason and keeps declining.
+describe('what a refusal tells a CI user to do about it', () => {
+  const diagnosed = (category: string, confidence: number, source: string) =>
+    ({ category, confidence, source } as unknown as TriageItem['diagnosis']);
+  const modelBug = item({ diagnosis: diagnosed('REAL_BUG', 0.45, 'AI gpt-5.4-mini'), source: 'AI gpt-5.4-mini' });
+
+  it('names history as the thing that is missing, not just the confidence', () => {
+    const said = whyNothingWasFiled([modelBug], [modelBug]);
+    assert.match(said, /What would change this: history/);
+    assert.match(said, /stable failing streak/);
+  });
+
+  it('says why a wrong value is not enough on its own, with the measured number', () => {
+    const said = whyNothingWasFiled([modelBug], [modelBug]);
+    assert.match(said, /a flaky test produces the same wrong value/);
+    assert.match(said, /nine times out of ten/, 'the 8.9% measured over 2,767 labelled failures');
+  });
+
+  it('gives the two things that actually settle it', () => {
+    const said = whyNothingWasFiled([modelBug], [modelBug]);
+    assert.match(said, /--name <project>/, 'keep the runs and the streak becomes readable');
+    assert.match(said, /correction on the failure in CI settles it immediately/);
+  });
+
+  it('does not lecture about history when there was no real bug to begin with', () => {
+    const env = item({ diagnosis: diagnosed('ENV', 0.8, 'rules rules-9'), source: 'rules rules-9' });
+    const said = whyNothingWasFiled([env], []);
+    assert.doesNotMatch(said, /What would change this/, 'nothing to change: there was no bug');
   });
 });

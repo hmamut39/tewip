@@ -188,6 +188,19 @@ const envServerError: Rule = {
  * Declines when the server failed during the test: the wrong value may come from the
  * backend (ENV) or from a test that provokes errors on purpose, which only the LLM layer,
  * seeing the whole trace, can tell apart (rules-3).
+ *
+ * **Do not remove the history requirement.** Phase 64 found that `tewip bugs` files almost nothing
+ * from one CI run - 1 ticket out of 1,964 real failures - because every test in a single run has
+ * `runs < 2` and this rule declines. The proposed fix was to let a plain value mismatch stand on its
+ * own: "expected 4, received 3 needs no model" is an obvious-sounding argument, and it was measured
+ * in Phase 65 over **2,767 hand-labelled real failures from nine projects**:
+ *
+ *     293 value mismatches -> TIMING 265 (90.4%), REAL_BUG 26 (8.9%), ENV 2 (0.7%)
+ *
+ * Per project it is 0%, 0%, 0%, 4%, 5%, 6%, 7%, 11%, 39%. **A flaky test fails its assertion too -
+ * that is what failing looks like.** The mismatch is not the signal; the history around it is, which
+ * is what the streak conditions below are reading and what one CI run cannot supply. Re-derive with
+ * `node eval/mismatch-precision.ts` before changing any of this.
  */
 const realBugAssertion: Rule = {
   id: 'real-bug-assertion',

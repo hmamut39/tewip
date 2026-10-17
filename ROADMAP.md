@@ -3764,6 +3764,51 @@ it. Both are real designs; neither should be chosen by inference.
 
 1,091 tests.
 
+### Phase 65: The Recommendation Was Measured, And It Was Wrong
+
+Phase 64 ended with two options and a recommendation:
+
+> Either the rules should recognise a plain value mismatch themselves - **the strongest candidate,
+> since "expected 4, received 3" needs no model** - or `bugs` should be able to file a model-only bug
+> while saying so in the ticket.
+
+The first thing was to measure it rather than build it. There are **2,767 hand-labelled real failures
+from nine public projects** sitting in `eval/`, every label established by hand. Among them, 293
+carry a value mismatch. What those 293 actually turned out to be:
+
+| what it really was | count | share |
+| --- | --- | --- |
+| **TIMING** (a flaky test) | **265** | **90.4%** |
+| REAL_BUG | 26 | 8.9% |
+| ENV | 2 | 0.7% |
+
+Per project: 0%, 0%, 0%, 4%, 5%, 6%, 7%, 11%, 39%. Nine independent sets, none of them near a number
+that could justify opening a ticket. **A flaky test fails its assertion too - that is what failing
+looks like.** The mismatch is not the signal. The history around it is: a stable failing streak with
+no earlier flakiness, which is precisely what `real-bug-assertion` already requires and precisely
+what one CI run cannot supply.
+
+So the recommendation was wrong, the rule's caution was right, and `tewip bugs` having little to file
+from a single run is a correct answer rather than a defect. The thing worth building was not the
+feature - it was the evidence that the feature should not exist.
+
+`eval/mismatch-precision.ts` re-derives the table above from whatever labelled sets are present, and
+prints what is missing rather than a number from nothing when they are not (the labels are a team's
+own data and are never committed). `real-bug-assertion` now carries the numbers in its own comment,
+with **"Do not remove the history requirement"** and the command to re-check, because the argument
+for removing it is intuitive and will be made again.
+
+**What did change** is the answer a CI user gets. The refusal said the AI layer is capped and left it
+there; a reader cannot act on that. It now names the missing thing and what to do:
+
+> **What would change this: history.** The rules will not call a wrong value a bug without a stable
+> failing streak behind it, because a flaky test produces the same wrong value - on real labelled
+> data a value mismatch is a flaky test **nine times out of ten**. Keep this project's runs
+> (`--name <project>`, or let the Action keep them) and the same failure in a second and third run is
+> what the rules read. A person's correction on the failure in CI settles it immediately.
+
+1,095 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

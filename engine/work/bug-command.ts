@@ -65,8 +65,13 @@ export function whyNothingWasFiled(items: TriageItem[], unsure: TriageItem[]): s
   return [
     `${items.length} failure(s). ${unsure.length} of them Tewip reads as a real bug, and none of those reaches the ${CONFIDENT_ENOUGH.toFixed(2)} confidence it requires before opening a ticket in somebody's name - the highest is ${highest.toFixed(2)}.`,
     byModel > 0
-      ? `${byModel === unsure.length ? 'All' : `${byModel}`} of them came from the AI layer, which is capped at 0.45 on purpose: a model's unsupported word is not enough to file on. A person's correction on the failure in CI, or a rule that agrees, is what would make it enough.`
+      ? `${byModel === unsure.length ? 'All' : `${byModel}`} of them came from the AI layer, which is capped at 0.45 on purpose: a model's unsupported word is not enough to file on.`
       : '',
+    // What a CI user can actually do about it. The rules decline a value mismatch without a stable
+    // failing streak, and on one run there is no streak to read - which is not over-caution:
+    // measured over 2,767 labelled real failures, a value mismatch is TIMING 90% of the time and a
+    // real bug 9% of the time (`node eval/mismatch-precision.ts`). History is what separates them.
+    'What would change this: history. The rules will not call a wrong value a bug without a stable failing streak behind it, because a flaky test produces the same wrong value - on real labelled data a value mismatch is a flaky test nine times out of ten. Keep this project\'s runs (`--name <project>`, or let the Action keep them) and the same failure in a second and third run is what the rules read. A person\'s correction on the failure in CI settles it immediately.',
     `Nothing was filed. These are listed in \`tewip explain\` with their evidence${kinds.length > 0 ? `, alongside ${kinds.join(', ')} failures that are deliberately never filed` : ''}.`,
   ]
     .filter(Boolean)

@@ -34,6 +34,15 @@ export const MAX_CHANGED_LINES = 20;
 export const MAX_ATTEMPTS = 3;
 
 const CR = String.fromCharCode(13);
+
+/**
+ * Does this text come back as the same text after a trip through UTF-8?
+ *
+ * The caller hands over a string already decoded from disk, so a byte that was not valid UTF-8 is
+ * already a U+FFFD by the time it gets here - and that replacement character is the tell. Nothing
+ * legitimate in source code contains it.
+ */
+const roundTrips = (text: string): boolean => !text.includes(String.fromCharCode(0xfffd));
 const NL = String.fromCharCode(10);
 
 export type CodeFixStatus =
@@ -41,6 +50,8 @@ export type CodeFixStatus =
   | 'not-eligible'
   | 'no-target'
   | 'outside-project'
+  /** The file is not valid UTF-8, so a change to it could not be undone exactly. Nothing was written. */
+  | 'cannot-restore'
   | 'test-does-not-fail'
   | 'test-never-ran'
   | 'model-declined'
@@ -194,6 +205,14 @@ async function tryFile(
   // threw away four correct fixes in a real measurement, so both sides are read in LF here and the
   // file is written back in whatever it used.
   const raw = deps.readFile(target.file);
+  // A file whose text does not survive a round trip through UTF-8 cannot be written back as it was,
+  // and every failure path here writes `raw` back. A legacy latin-1 source file - `// caf\xe9`, which
+  // older codebases are full of - would be returned re-encoded, three bytes where one had been, the
+  // character destroyed and nothing reported. Refusing is the only honest option: a fix that cannot
+  // be undone is not a fix Tewip is willing to try.
+  if (!roundTrips(raw)) {
+    return stop('cannot-restore', `${rel} is not valid UTF-8, so Tewip cannot change it and put it back exactly as it was. Nothing was written. Convert the file to UTF-8 if you want it fixed here.`);
+  }
   const crlf = raw.includes(CR + NL);
   const asFile = (text: string) => (crlf ? text.split(NL).join(CR + NL) : text);
   const original = crlf ? raw.split(CR + NL).join(NL) : raw;

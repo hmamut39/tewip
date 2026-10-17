@@ -100,7 +100,7 @@ export interface ProveOptions {
  * same control the write gate uses: a check that cannot fail proves nothing, and neither does a test
  * that cannot see the code.
  */
-function testsLoadIt(root: string, full: string, original: string, test: string, framework: Framework, runMs: number): boolean {
+function testsLoadIt(root: string, full: string, original: string, originalBytes: Buffer, test: string, framework: Framework, runMs: number): boolean {
   const control = /\.py$/i.test(full)
     ? `raise RuntimeError("tewip control")${String.fromCharCode(10)}${original}`
     : /\.(js|cjs|mjs|ts|tsx|mts|cts|jsx)$/i.test(full)
@@ -110,7 +110,7 @@ function testsLoadIt(root: string, full: string, original: string, test: string,
     writeFileSync(full, control, 'utf8');
     return !runTest(framework, resolve(root, test), runMs).passed;
   } finally {
-    restore(full, original);
+    restore(full, originalBytes);
   }
 }
 
@@ -128,8 +128,21 @@ export function proveFile(root: string, file: string, covering: string[], framew
     return finish(proof, started);
   }
 
-  const original = readFileSync(full, 'utf8');
-  const stopGuarding = guardAgainstBeingKilled(full, original);
+  // Bytes for putting it back, text for making the mutants - and a refusal when the two cannot be
+  // reconciled. Holding only the utf8 string meant a file that is not valid UTF-8 was written back
+  // re-encoded: a latin-1 `// caf\xe9` came back 18 bytes instead of 16, with the character
+  // destroyed. Worse, `restore` verified its own work by comparing the **decoded strings**, which
+  // were equally lossy on both sides, so it reported success every time. A check that cannot fail
+  // proves nothing - this project's own rule, inside the function written to enforce it.
+  const originalBytes = readFileSync(full);
+  const original = originalBytes.toString('utf8');
+  if (!Buffer.from(original, 'utf8').equals(originalBytes)) {
+    proof.blocked =
+      'this file is not valid UTF-8, so Tewip cannot change it and put it back exactly as it was. Nothing was written. ' +
+      'Convert the file to UTF-8 if you want it proved; a mutation Tewip cannot undo is not worth the answer.';
+    return finish(proof, started);
+  }
+  const stopGuarding = guardAgainstBeingKilled(full, originalBytes);
   // The whole set first, then the sample: `found` is what the file allows and `mutants` is what
   // there was time to ask about, and the report has to be able to tell the reader the difference.
   const candidates = candidateMutants(original);
@@ -163,7 +176,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
   // The control: break the file outright and check that a covering test notices. Without this, a file
   // the tests never load would produce a full report of things they "failed to catch".
   say('checking the tests really load this file');
-  if (!testsLoadIt(root, full, original, usable[0], framework, runMs)) {
+  if (!testsLoadIt(root, full, original, originalBytes, usable[0], framework, runMs)) {
     proof.blocked = `${usable[0]} passes even when this file is made unusable, so the tests are not loading the file that was edited - they are reading an installed copy or a build output. Nothing here can be proved until they run against this source (for a Python src layout, install it in editable mode: pip install -e .).`;
     return finish(proof, started, stopGuarding);
   }
@@ -204,7 +217,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
       fate = 'did-not-compile';
       noticedBy = error instanceof Error ? error.message.slice(0, 120) : '';
     } finally {
-      restore(full, original);
+      restore(full, originalBytes);
     }
     proof.tried.push({ mutant, fate, noticedBy, seconds: Math.round((Date.now() - at) / 100) / 10 });
   }
@@ -216,9 +229,9 @@ export function proveFile(root: string, file: string, covering: string[], framew
  * Puts the file back and checks that it really went back. Anything less would mean this command can
  * leave somebody's source broken, which would make it unusable however good its answers were.
  */
-function restore(full: string, original: string): void {
-  writeFileSync(full, original, 'utf8');
-  if (readFileSync(full, 'utf8') !== original) {
+function restore(full: string, original: Buffer): void {
+  writeFileSync(full, original);
+  if (!readFileSync(full).equals(original)) {
     throw new Error(`${full} could not be put back as it was. Check it before doing anything else: git checkout -- "${full}"`);
   }
 }
@@ -231,7 +244,7 @@ function restore(full: string, original: string): void {
  * code had stopped working. Found by killing one of these runs during development and finding a flipped
  * comparison still sitting in the repository.
  */
-function guardAgainstBeingKilled(full: string, original: string): () => void {
+function guardAgainstBeingKilled(full: string, original: Buffer): () => void {
   const putBack = (signal: NodeJS.Signals) => () => {
     try {
       restore(full, original);

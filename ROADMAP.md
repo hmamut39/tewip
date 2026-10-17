@@ -4110,6 +4110,55 @@ is for. Sixteen cases are pinned, the five bypasses among them.
 
 1,127 tests.
 
+### Phase 72: "Put Back Byte For Byte" Was Not True, And The Check That Guaranteed It Could Not Fail
+
+Three commands write to a developer's source code and all three promise the same thing: what cannot
+be proved is put back **byte for byte**. `prove` breaks a file on purpose; `build` writes a feature
+test-first; `fix --code` proposes a change to application code. It is the riskiest promise in the
+product, so it was measured instead of read.
+
+Three files were written, each one a shape a real codebase really contains, and each was remembered,
+overwritten and restored:
+
+| the file | result |
+| --- | --- |
+| `export const s = "日本語";` | byte for byte |
+| a BOM and CRLF line endings | byte for byte |
+| `// café` saved in **latin-1** | **CHANGED — 16 bytes in, 18 bytes out** |
+
+The workspace held each file as a **utf8 string**. A byte that is not valid UTF-8 - `0xE9`, which is
+how `é` is stored in files older than about 2010 and which enterprise codebases are full of - is
+decoded to U+FFFD and written back as the three bytes `EF BF BD`. The character is destroyed, the
+file grows, and nothing anywhere says so. "Byte for byte" was true only of files that were already
+UTF-8.
+
+**`prove` had the same bug and, worse, a verification that could not catch it.** Its restore is
+deliberate and documented - *"after putting it back, the bytes are compared, and a mismatch is
+reported loudly rather than shrugged off, because the alternative is leaving somebody's code broken
+on disk"* - and the comparison was between the **decoded strings**, which are equally lossy on both
+sides. Run on a latin-1 file:
+
+> prove's own verification says: **restored**
+> the bytes say: **CORRUPTED** (16 → 18 bytes)
+
+A check that cannot fail proves nothing. That is this project's own rule, written in this project's
+own words, and it was being broken inside the one function built to enforce it - in the one command
+that edits files the developer did not ask it to touch.
+
+The workspace now remembers and restores **bytes**. `prove` holds bytes for the restore and text for
+the mutants, and when those two cannot be reconciled it refuses outright rather than editing
+something it cannot undo:
+
+> **math.js**: this file is not valid UTF-8, so Tewip cannot change it and put it back exactly as it
+> was. Nothing was written. Convert the file to UTF-8 if you want it proved; **a mutation Tewip cannot
+> undo is not worth the answer.**
+
+Verified: not one mutant written, and the file untouched byte for byte. `fix --code` gained the same
+refusal - every one of its failure paths writes the original back, so the same file would have been
+returned re-encoded - under a status of its own, `cannot-restore`.
+
+1,133 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

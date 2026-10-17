@@ -17,7 +17,15 @@ export interface AppliedEdit extends FileEdit {
 
 export class Workspace {
   private readonly root: string;
-  private readonly touched = new Map<string, string | null>();
+  /**
+   * What each touched file held, as **bytes**.
+   *
+   * It was a utf8 string, and "put back byte for byte" was then only true of files that are valid
+   * UTF-8. A legacy latin-1 source file - `// caf\xe9`, which older codebases are full of - was
+   * decoded to U+FFFD and written back as three different bytes: 16 bytes in, 18 bytes out, the
+   * character destroyed, and nothing reported. Measured, not reasoned about.
+   */
+  private readonly touched = new Map<string, Buffer | null>();
 
   constructor(root: string) {
     this.root = resolve(root);
@@ -26,7 +34,7 @@ export class Workspace {
   /** Remembers a file's contents the first time it is touched, so it can always be restored. */
   private remember(path: string): void {
     if (this.touched.has(path)) return;
-    this.touched.set(path, existsSync(path) ? readFileSync(path, 'utf8') : null);
+    this.touched.set(path, existsSync(path) ? readFileSync(path) : null);
   }
 
   write(path: string, content: string): void {

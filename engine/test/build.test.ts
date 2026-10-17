@@ -10,6 +10,10 @@ import { describe, it } from 'node:test';
 import type { LlmClient } from '../llm/client.ts';
 import { belongsHere, runBuild } from '../build/build-command.ts';
 import { applyEdits, Workspace } from '../build/apply.ts';
+import { createHash } from 'node:crypto';
+import { mutantsFor } from '../prove/mutants.ts';
+import { proveFile } from '../prove/prove.ts';
+import type { Framework } from '../quality/frameworks.ts';
 
 const NL = String.fromCharCode(10);
 const lines = (...l: string[]) => l.join(NL);
@@ -224,3 +228,71 @@ describe('what it may write at all', () => {
 function readdirNames(dir: string): string[] {
   return existsSync(dir) ? readdirSync(dir) : [];
 }
+
+// Phase 72: "put back byte for byte" is the riskiest promise in this product, so it was measured
+// rather than read. It was not true.
+describe('putting a file back exactly as it was', () => {
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  const dir = () => mkdtempSync(join(tmpdir(), 'tewip-bytes-'));
+
+  // `// caf<e9>` - one latin-1 byte, which older codebases are full of.
+  const LATIN1 = Buffer.from([0x2f, 0x2f, 0x20, 0x63, 0x61, 0x66, 0xe9, 0x0a, 0x6d, 0x6f, 0x64, 0x75, 0x6c, 0x65, 0x3b, 0x0a]);
+  const BOM_CRLF = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('export const a = 1;' + String.fromCharCode(13) + String.fromCharCode(10), 'utf8')]);
+  const UTF8 = Buffer.from('export const s = "日本語";' + String.fromCharCode(10), 'utf8');
+
+  for (const [name, bytes] of [['a latin-1 source file', LATIN1], ['a file with a BOM and CRLF', BOM_CRLF], ['plain UTF-8', UTF8]] as Array<[string, Buffer]>) {
+    it(`restores ${name} byte for byte`, () => {
+      // The workspace held each file as a utf8 **string**, so a byte that is not valid UTF-8 was
+      // decoded to U+FFFD and written back as three different bytes: 16 in, 18 out, the character
+      // destroyed, and nothing reported. Measured on all three shapes, not reasoned about.
+      const root = dir();
+      const path = join(root, 'source.js');
+      writeFileSync(path, bytes);
+      const before = sha(path);
+
+      const workspace = new Workspace(root);
+      workspace.write(path, '// Tewip put something else here' + String.fromCharCode(10));
+      assert.notEqual(sha(path), before, 'it really did change the file first');
+      workspace.restore();
+
+      assert.equal(sha(path), before, 'and put it back with the same bytes');
+      assert.equal(readFileSync(path).length, bytes.length);
+    });
+  }
+
+  it('removes a file it created, rather than leaving an empty one', () => {
+    const root = dir();
+    const path = join(root, 'new.js');
+    const workspace = new Workspace(root);
+    workspace.write(path, 'export const x = 1;');
+    assert.equal(existsSync(path), true);
+    workspace.restore();
+    assert.equal(existsSync(path), false);
+  });
+});
+
+describe('proving a file Tewip could not put back', () => {
+  it('refuses to touch it at all, rather than restoring it wrongly', () => {
+    // `prove` held the original as a utf8 string and verified its own restore by comparing the
+    // **decoded strings** - equally lossy on both sides - so it reported "put back exactly as it
+    // was" every time while the bytes had changed. A check that cannot fail proves nothing, which is
+    // this project's own rule, inside the function written to enforce it.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-prove-bytes-'));
+    const path = join(root, 'math.js');
+    const bytes = Buffer.concat([Buffer.from([0x2f, 0x2f, 0x20, 0x63, 0x61, 0x66, 0xe9, 0x0a]), Buffer.from('export const add = (a, b) => a + b;' + String.fromCharCode(10), 'utf8')]);
+    writeFileSync(path, bytes);
+    const before = createHash('sha256').update(readFileSync(path)).digest('hex');
+
+    const framework = { label: 'node', testDir: root, fileFor: (n: string) => `${n}.test.js` } as unknown as Framework;
+    const proof = proveFile(root, 'math.js', ['test/math.test.js'], framework, { limit: 2, budgetSeconds: 30 });
+
+    assert.match(proof.blocked, /not valid UTF-8/);
+    assert.match(proof.blocked, /Nothing was written/);
+    assert.deepEqual(proof.tried, [], 'not one mutant may be written to a file that cannot be put back');
+    assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'), before, 'and the file is untouched');
+  });
+
+  it('still finds mutants in the same file once it is valid UTF-8', () => {
+    assert.ok(mutantsFor('if (a > b) { return 1; }' + String.fromCharCode(10), 4).length > 0);
+  });
+});

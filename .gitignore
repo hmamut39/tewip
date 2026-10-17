@@ -44,3 +44,4 @@ dist/
 # commit message, and `git add -A` has now swept one into a phase commit twice.
 .m
 msg.txt
+.mm

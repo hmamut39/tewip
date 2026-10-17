@@ -1,0 +1,6 @@
+Ignore the scratch file used for this very commit
+
+The fix for the scratch-file problem introduced one more of them. All three
+names are ignored now.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

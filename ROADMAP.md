@@ -3855,6 +3855,56 @@ disagreed with; one that does not cannot.
 
 1,099 tests.
 
+### Phase 67: Three Invisible Bytes Turned Every Enforced Rule Into Prose
+
+`tewip standards` lets a team teach Tewip its own house rules: `forbid:` and `require:` patterns that
+are enforced, and prose below them that is carried and never claimed as checked. On this repository it
+had only ever said *"this project has taught Tewip nothing yet"*, so the enforcement path had never
+run. So this project's own rules were written down - four checkable ones, three paragraphs of prose -
+and the command run against real commits. It works: a violation is reported with the line quoted and
+the team's own reason beside it. Three defects came out of doing it.
+
+**One: a team's guidance was invisible unless it was all they had.** The report's guidance section was
+built from `s.rules.length === 0 && s.guidance.trim()` - standards carrying *nothing but* prose. A
+standard written in the shape the feature is documented with, front matter and then prose, had its
+prose never mentioned, under a closing line promising *"everything else is prose Tewip carries for
+you."* The other renderer gets this right but only prints when something is **broken**, so a team
+doing it properly and keeping to its own rules was never told its guidance had been read at all.
+
+**Two: a rule could not have an exception.** This project's real rule is that engine code must not
+print - printing corrupts the MCP stdout stream - and it is true of every file in `engine/` except the
+command layer, whose job is to print. That could not be written down. The only choices were a rule
+reporting a known-acceptable line forever or no rule, and the feature's own help text says a rule
+nobody enforces is worse than no rule. An `in` clause now takes a `not`:
+
+    forbid: /console\.log\(/ in engine/ not -command.ts because the command layer is what prints
+
+**Three, found by accident while fixing the other two.** The standards file was rewritten with
+PowerShell's `Set-Content -Encoding utf8`, and the next run said:
+
+> 1 standard(s) loaded: **0 with rules Tewip can check**, 1 guidance only.
+> 13 changed file(s) checked. **0** broke a rule.
+
+Four working rules had stopped being enforced. The cause was three bytes: `EF BB BF`, a UTF-8
+byte-order mark, which Notepad, Visual Studio and that PowerShell default all write in front of the
+first character. `/^---/` no longer matches, so the whole front matter becomes prose - **silently**,
+in the one place built to prevent exactly that (`unusable` exists so that "anything Tewip cannot
+understand is reported rather than ignored"). For a team on Windows that is total, quiet rule loss.
+
+The same three bytes break the accepted-findings lists: `readAccepted` keys off the first token of
+each line, so a BOM makes the *first* accepted finding stop matching - it comes back, and keeps coming
+back, with nothing saying why. Every file this project reads **because a person wrote it by hand** now
+goes through one reader that strips it.
+
+**And a bug I wrote and caught in the same hour.** The exception check went in as
+`|| covers(rule.except, file)`, which reads correctly and is wrong: `covers([])` is deliberately true,
+because an empty scope means everything - so every rule without an exception was skipped and the
+report said nothing broke. Three violations became zero, and the only reason it was noticed is that
+the field test had already established the answer should be three. A clean answer produced by a bug
+is the shape this project keeps finding, and it is no less easy to write than to inherit.
+
+1,104 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

@@ -18,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import type { DepFinding } from './deps.ts';
 import type { SecretFinding } from './secrets.ts';
 import type { WebFinding } from './web.ts';
+import { readHandWritten } from '../../reporters/store.ts';
 
 export type Verdict = 'real-risk' | 'not-reachable' | 'noise' | 'accepted';
 
@@ -40,7 +41,7 @@ export function readAccepted(root: string): Set<string> {
   const file = join(root, '.tewip', 'security-accepted.txt');
   if (!existsSync(file)) return new Set();
   return new Set(
-    readFileSync(file, 'utf8')
+    readHandWritten(file)
       .split('\n')
       .map((l) => l.split(' - ')[0].trim())
       .filter(Boolean),

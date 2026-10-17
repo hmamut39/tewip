@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { normalise } from '../quality/source-text.ts';
 import { dirname, join, relative, resolve } from 'node:path';
 import { sourceFiles } from '../secure/secrets.ts';
+import { readHandWritten } from '../../reporters/store.ts';
 import { JS_LIKE, MARKUP, tags } from './markup.ts';
 import { checkFile, type Finding } from './checks.ts';
 import { readAxeReport, type AxeRun, type BrowserFinding } from './reports.ts';
@@ -65,7 +66,7 @@ export function readAccepted(root: string): Set<string> {
   const file = join(root, '.tewip', 'access-accepted.txt');
   if (!existsSync(file)) return new Set();
   return new Set(
-    readFileSync(file, 'utf8')
+    readHandWritten(file)
       .split('\n')
       .map((l) => l.split(' - ')[0].trim())
       .filter((l) => l !== '' && !l.startsWith('#')),

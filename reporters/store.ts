@@ -10,6 +10,20 @@ const COLLECT_DIR = process.env.TRIAGE_DATA_DIR ? resolve(PROJECT_ROOT, process.
 export const TRIAGE_FILE = join(COLLECT_DIR, 'triage.jsonl');
 export const RUNS_FILE = join(COLLECT_DIR, 'runs.jsonl');
 
+/**
+ * A file a person wrote, read as text, without the byte-order mark Windows editors put in front.
+ *
+ * Notepad, Visual Studio and PowerShell's `Set-Content -Encoding utf8` all write three invisible
+ * bytes before the first character. Nothing downstream expects them: a standards file stops being
+ * enforced because `/^---/` no longer matches, and the first line of an accepted-findings list stops
+ * matching the finding it was written to accept - so a judged finding comes back and keeps coming
+ * back, with nothing anywhere saying why. Every file this project reads **because a person wrote it
+ * by hand** goes through here.
+ */
+export function readHandWritten(file: string): string {
+  return readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+}
+
 export function appendJsonl(file: string, rows: readonly unknown[]): void {
   if (rows.length === 0) return;
   mkdirSync(dirname(file), { recursive: true });

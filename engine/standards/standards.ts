@@ -23,6 +23,17 @@ export interface Rule {
   pattern: string;
   /** Files it applies to, as glob-ish suffixes or path fragments. Empty means the standard's own scope. */
   where: string[];
+  /**
+   * Files the rule does **not** apply to, from a `not` clause: `in engine/ not -command.ts`.
+   *
+   * Every real house rule has an exception, and until this existed none could be written. This
+   * project's own rule - engine code must not print, because printing corrupts the MCP stdout
+   * stream - is true of every file in `engine/` except the command layer, whose job is to print. With
+   * no way to say that, the only choices were a rule that reports a known-acceptable line forever or
+   * no rule at all. The help text for this feature says a rule nobody enforces is worse than no
+   * rule; a rule that cries wolf becomes one within a week.
+   */
+  except: string[];
   /** Why, in the team's words. Printed with every violation. */
   because: string;
 }
@@ -55,8 +66,16 @@ export interface Violation {
  * unusable rather than silently ignored - a rule nobody is enforcing is worse than no rule, because
  * somebody believes in it.
  */
-export function readStandard(file: string, text: string): Standard {
+export function readStandard(file: string, rawText: string): Standard {
   const name = file.split(/[\\/]/).pop()?.replace(/\.md$/i, '') ?? file;
+  // A leading byte-order mark, which Notepad, Visual Studio and PowerShell's `Set-Content -Encoding
+  // utf8` all write by default on Windows. Three invisible bytes before `---` stop the front matter
+  // matching, so **every enforced rule in the file silently becomes prose** and the report says
+  // "0 with rules Tewip can check" without once mentioning why. Found by accident: this project's own
+  // standards file was rewritten by a PowerShell command and four working rules stopped being
+  // enforced with no error anywhere. For a team on Windows that is total, silent rule loss - the
+  // exact thing `unusable` exists to prevent, happening in the one place it could not report.
+  const text = rawText.replace(/^﻿/, '');
   const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   const body = front ? text.slice(front[0].length).trim() : text.trim();
   const standard: Standard = { name, description: '', appliesTo: [], rules: [], guidance: body, unusable: '' };
@@ -84,7 +103,12 @@ export function readStandard(file: string, text: string): Standard {
   return standard;
 }
 
-/** `forbid: /waitForTimeout/ in tests because a fixed wait hides a race` */
+/**
+ * `forbid: /waitForTimeout/ in tests because a fixed wait hides a race`
+ *
+ * The `in` clause may carry an exception: `in engine/ not -command.ts`. Everything before `not` is
+ * where the rule applies, everything after it is where it does not.
+ */
 function parseRule(kind: 'forbid' | 'require', value: string, scope: string[]): Rule | null {
   const shape = /^\/(.+?)\/([a-z]*)\s*(?:\bin\s+([^]*?))?\s*(?:\bbecause\s+([^]*))?$/i.exec(value.trim());
   if (!shape) return null;
@@ -93,10 +117,12 @@ function parseRule(kind: 'forbid' | 'require', value: string, scope: string[]): 
   } catch {
     return null;
   }
+  const [inside, outside] = (shape[3] ?? '').split(/\bnot\b/);
   return {
     kind,
     pattern: shape[2] ? `/${shape[1]}/${shape[2]}` : shape[1],
-    where: shape[3] ? list(shape[3]) : scope,
+    where: inside && inside.trim() ? list(inside) : scope,
+    except: outside ? list(outside) : [],
     because: (shape[4] ?? '').trim(),
   };
 }
@@ -138,7 +164,11 @@ export function check(standards: Standard[], file: string, text: string): Violat
   for (const standard of standards) {
     if (!covers(standard.appliesTo, file)) continue;
     for (const rule of standard.rules) {
-      if (!covers(rule.where, file)) continue;
+      // `covers([])` is deliberately true - an empty scope means everything - so an exception has to
+      // be checked for existence first. Written the short way, `|| covers(rule.except, file)`, every
+      // rule with no exception is skipped and the report says nothing broke: a clean answer produced
+      // by a bug, which is the exact shape this project keeps finding.
+      if (!covers(rule.where, file) || (rule.except.length > 0 && covers(rule.except, file))) continue;
       let pattern: RegExp;
       try {
         pattern = regexOf(rule);

@@ -90,11 +90,21 @@ export function renderStandards(standards: Standard[], violations: Violation[], 
   }
 
   const checkable = standards.filter((s) => s.rules.length > 0);
-  const guidanceOnly = standards.filter((s) => s.rules.length === 0 && s.guidance.trim());
+  // Every standard that carries prose, not only the ones carrying nothing else.
+  //
+  // This was `s.rules.length === 0 && s.guidance.trim()`, so a standard written in the shape the
+  // feature is documented with - front matter rules, then prose below them - had its prose
+  // **invisible in this report**. Found by writing this project's own house rules in exactly that
+  // shape: four rules were listed as enforced and three paragraphs of guidance were never mentioned,
+  // under a closing line promising "everything else is prose Tewip carries for you". The other
+  // renderer, `renderViolations`, gets this right but only prints when something is broken - so a
+  // team doing it properly and keeping to its own rules is never told its guidance was read at all.
+  const carrying = standards.filter((s) => s.guidance.trim().length > 0);
+  const guidanceOnly = carrying.filter((s) => s.rules.length === 0);
   const lines = [
     '# What this project has taught Tewip',
     '',
-    `${standards.length} standard(s) loaded: ${checkable.length} with rules Tewip can check, ${guidanceOnly.length} guidance only.`,
+    `${standards.length} standard(s) loaded: ${checkable.length} with rules Tewip can check, ${carrying.length} carrying guidance it cannot${guidanceOnly.length > 0 ? ` (${guidanceOnly.length} guidance only)` : ''}.`,
     ...(checkedFiles > 0 ? ['', `${checkedFiles} changed file(s) checked. **${violations.length}** broke a rule.`] : []),
     '',
     '## Checked and enforced',
@@ -109,14 +119,18 @@ export function renderStandards(standards: Standard[], violations: Violation[], 
   }
   lines.push('');
 
-  if (guidanceOnly.length > 0) {
+  if (carrying.length > 0) {
     lines.push(
       '## Carried, but not checked',
       '',
       'Tewip passes these to the model when it writes or fixes something, and quotes them in reports. It',
       'cannot verify them, and it will never report them as kept.',
       '',
-      ...guidanceOnly.map((s) => `- **${s.name}**${s.description ? ` — ${s.description}` : ''}`),
+      ...carrying.map((s) => {
+        const words = s.guidance.trim().split(/\s+/).length;
+        const also = s.rules.length > 0 ? ` (alongside its ${s.rules.length} enforced rule${s.rules.length === 1 ? '' : 's'})` : '';
+        return `- **${s.name}**${s.description ? ` — ${s.description}` : ''}: ${words} word(s) of guidance${also}`;
+      }),
       '',
     );
   }

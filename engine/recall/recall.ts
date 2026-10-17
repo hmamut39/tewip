@@ -139,11 +139,21 @@ export function recall(question: string, all: Memory[], { testId, limit = 5 }: R
 }
 
 /** What a person reads. Every line names the run it came from, so nothing has to be believed. */
-export function renderRecall(question: string, found: Recalled[]): string {
+/**
+ * What a person reads.
+ *
+ * `searched` is not decoration. "Nothing in this project's history resembles it" is only an answer
+ * if something was actually compared against, and on a real 1,305-failure history this said exactly
+ * that while the searchable set was **empty** - see `recallReport`. The number belongs in the report
+ * body rather than only on stderr, because an MCP client and a `> file` both keep the body and throw
+ * stderr away, which is precisely where a reader would have caught it.
+ */
+export function renderRecall(question: string, found: Recalled[], searched?: number): string {
   const lines = [`# What this project already knows`, '', `Asked: ${question.replace(/\s+/g, ' ').slice(0, 160)}`, ''];
   if (found.length === 0) {
+    const against = searched === undefined ? 'this project\'s history' : `the ${searched} diagnosed failure(s) kept here`;
     lines.push(
-      'Nothing in this project\'s history resembles it. That is an answer, not a failure: it means',
+      `Nothing in ${against} resembles it. That is an answer, not a failure: it means`,
       'this is new here, and there is no earlier decision to follow.',
     );
     return lines.join('\n');

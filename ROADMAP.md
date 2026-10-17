@@ -3382,6 +3382,73 @@ Saying that is better than writing a test that pretends to.
 
 1,045 tests.
 
+### Phase 59: The Audit — Which Clean Answers Were Unreachable
+
+Four phases in eight had found the same class of bug: `secure` discarded every secret it found (51),
+the shadow run had been dead a month (54), `flaky` could never recommend a quarantine (57), `prove`
+reported a third of a file as all of it (58). Four confident, well-formatted, empty answers, each
+looking exactly like good news. So rather than wait for the fifth, this phase went looking for it:
+**every read-only command run on real data, asking one question of each - is there a state where
+this returns a clean answer for a structural reason rather than because nothing is wrong?**
+
+Seventeen commands, on this repo and on the 1,305 gutenberg failures already on disk. Most answered
+honestly, and the honest ones share a shape worth naming - they say what would make them non-empty:
+
+> `trace`: No plan has been kept here, so there is nothing to trace.
+> `learn`: Nothing yet: nobody has corrected anything here.
+> `standards`: This project has taught Tewip nothing yet.
+> `pursue`: nothing kept here matches "keep the suite green" - no test, no scenario, no failure - so
+> acting would mean acting on something Tewip cannot see.
+
+**One was not honest.** `tewip recall "Timeout 30000ms exceeded"`, asked of a history holding 1,305
+real failures of which **660 were timeouts**:
+
+> Nothing in this project's history resembles it. That is an answer, not a failure: it means this is
+> new here, and there is no earlier decision to follow.
+>
+> *Searched 1305 kept failure(s) and 0 correction(s). No model was called.*
+
+Both halves false. Nothing was searched - the searchable set was **zero** - and the question was the
+single most common failure in the store.
+
+`memories()` keeps only records carrying a `diagnosis` field, and **nothing on the collection path
+writes one**. The reporter and the harvest store the raw failure; the category is worked out when a
+report is rendered. `note`, `flaky` and the risk digest had all been diagnosing on read for months
+via `buildItems(..., { llm: null, reuseStoredDiagnoses: true })`. Recall was the one retrieval layer
+that demanded a field nobody writes - so it was permanently empty on every project that had not been
+through `tewip explain`, and empty in the way that reads like an answer.
+
+It now diagnoses on read, rules only, because recall's promise is no model and no network and a
+question asked of local history must not start costing money because of how it is indexed. Same
+question, same data, after:
+
+> 3 earlier failure(s) look like this one.
+> - **TIMING** — chromium > editor/collaboration/collaboration-stress.spec.ts > three users
+>   concurrently edit a large post
+>   - Decided by rules on 2026-10-16, run `gutenberg-38872024228-a1`
+>   - The error then: TimeoutError: locator.waitFor: Timeout 17500ms exceeded...
+>
+> *Searched 1305 diagnosed failure(s)*
+
+**The denominator moved into the report body.** "Nothing resembles it" is only an answer if something
+was compared against, and the count was on stderr - which an MCP client and a `> file` both throw
+away, which is precisely where a reader would have caught this. An empty answer now reads "Nothing in
+the 412 diagnosed failure(s) kept here resembles it", and a store nothing can be read from says so
+instead of returning a clean one.
+
+**The same inflation, found next door.** `tewip learn` divides the team's corrections by "diagnoses
+kept here" to say how often Tewip is wrong - and the denominator was every kept failure, diagnosed or
+not. On a store of 1,305 undiagnosed failures that makes Tewip look arbitrarily more accurate than it
+is, which is the one direction a tool selling honesty about its own limits must never round.
+
+What the audit says about the other sixteen: none of them manufactures a clean answer, and the five
+that read a stored category fall back to `UNKNOWN` rather than to a claim. The root cause is now
+written down: **the collection path keeps raw failures and the diagnosis is a read-time product.**
+Phase 57's `flaky` bug and this one are the same bug seen twice, and any future command that reads
+`record.diagnosis` directly will be the third.
+
+1,048 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

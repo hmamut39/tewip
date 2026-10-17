@@ -150,7 +150,7 @@ server.registerTool(
     answer(async () => {
       if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
       const { recallReport } = await import('../engine/recall/recall-command.ts');
-      return recallReport({ root, question, testId: test }).report;
+      return (await recallReport({ root, question, testId: test })).report;
     }),
 );
 

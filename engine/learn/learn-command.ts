@@ -34,7 +34,13 @@ function gather(root: string, only?: string): { corrections: Correction[]; recor
 
 export function runLearn(cmd: LearnCommand): string {
   const { corrections, records } = gather(cmd.root, cmd.name);
-  const learned = whatWeLearned(corrections, loadVerdicts(cmd.root), records);
+  // The denominator is diagnoses, not kept failures. A store can hold thousands of failures that
+  // nothing has diagnosed yet - the harvest writes exactly that - and counting those as decisions
+  // divides the corrections by a number far larger than the decisions Tewip actually made, making
+  // it look more accurate than it is. Found next to the same mistake in `recall`, which called 1,305
+  // undiagnosed failures "searched".
+  const diagnosed = records.filter((r) => (r.diagnosis as { category?: string } | undefined)?.category).length;
+  const learned = whatWeLearned(corrections, loadVerdicts(cmd.root), records, diagnosed);
   const report = renderLearning(learned);
   console.log(report);
 

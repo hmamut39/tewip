@@ -2,12 +2,13 @@
 // not a guess - every answer names the run it came from - and that a person's correction outranks
 // Tewip's own conclusion, because what the team decided beats what the tool decided.
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendJsonl, readJsonl } from '../../reporters/store.ts';
 import { describe, it } from 'node:test';
 import { memories, recall, renderRecall } from '../recall/recall.ts';
+import { recallReport } from '../recall/recall-command.ts';
 import { errorShape } from '../signature.ts';
 import type { Correction } from '../corrections.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
@@ -152,5 +153,67 @@ describe('appending to a JSONL file', () => {
     const file = join(dir, 'untouched.jsonl');
     appendJsonl(file, []);
     assert.equal(existsSync(file), false, 'a run with no failures should leave no trace');
+  });
+});
+
+// Phase 59: the audit that went looking for a command whose clean answer was unreachable.
+//
+// Recall was it. `memories()` keeps only records that carry a `diagnosis`, and nothing on the
+// collection path writes one - the reporter and the harvest both store the raw failure, and the
+// category is worked out when a report is rendered. So on a real 1,305-failure history recall had
+// nothing to search, and said so as if that were a finding: "Nothing in this project's history
+// resembles it... this is new here", footed by "Searched 1305 kept failure(s)". 660 of those 1,305
+// failures were the timeout being asked about.
+describe('recalling from a history nothing has diagnosed yet', () => {
+  const NOW = '2026-10-16T08:00:00.000Z';
+  const raw = (testId: string, errorMessage: string, runId: string) =>
+    JSON.stringify({
+      schemaVersion: 1, testId, file: 'editor/various/blocks.spec.js', status: 'failed',
+      errorMessage, errorStack: '', duration: 31_000, retry: 0, attachments: [],
+      runId, gitSha: 'abc1234', timestamp: NOW,
+    });
+  const summary = (runId: string, attempts: Record<string, number>) =>
+    JSON.stringify({ schemaVersion: 1, runId, gitSha: 'abc1234', branch: 'trunk', startedAt: NOW, finishedAt: NOW, status: 'failed', attempts });
+
+  const project = (): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-recall-'));
+    const where = join(root, '.tewip', 'history', 'app');
+    mkdirSync(where, { recursive: true });
+    const timeout = 'TimeoutError: locator.waitFor: Timeout 17500ms exceeded. Call log: - waiting for getByRole(\'button\', { name: /Collaborators list/ }) to be visible';
+    writeFileSync(join(where, 'triage.jsonl'), [
+      raw('editor > collaborators are listed', timeout, 'r1'),
+      raw('editor > collaborators are listed', timeout, 'r2'),
+      raw('editor > a paragraph keeps its colour', 'Error: expect(received).toBe(expected) Expected: "red" Received: "blue"', 'r3'),
+    ].join(String.fromCharCode(10)) + String.fromCharCode(10));
+    writeFileSync(join(where, 'runs.jsonl'), [
+      summary('r1', { 'editor > collaborators are listed': 1 }),
+      summary('r2', { 'editor > collaborators are listed': 1 }),
+      summary('r3', { 'editor > a paragraph keeps its colour': 1 }),
+    ].join(String.fromCharCode(10)) + String.fromCharCode(10));
+    return root;
+  };
+
+  it('finds the earlier failures even though none of them carries a stored diagnosis', async () => {
+    const root = project();
+    const { report, searched } = await recallReport({ root, question: 'locator.waitFor: Timeout 30000ms exceeded waiting for getByRole' });
+    assert.equal(searched, 3, 'every kept failure is searchable, diagnosed on read the way the note already does');
+    assert.match(report, /earlier failure\(s\) look like this one/);
+    assert.match(report, /collaborators are listed/, 'the two timeouts are what the question was about');
+    assert.doesNotMatch(report, /this is new here/, 'it is not new here: it has happened twice');
+  });
+
+  it('counts what it searched, not what is on disk', async () => {
+    const root = project();
+    const { searched } = await recallReport({ root, question: 'something nothing here resembles at all: quantum flux capacitor' });
+    assert.equal(searched, 3);
+    const { report } = await recallReport({ root, question: 'something nothing here resembles at all: quantum flux capacitor' });
+    assert.match(report, /the 3 diagnosed failure\(s\) kept here/, 'an empty answer has to carry the denominator it was empty against');
+  });
+
+  it('says nothing has been kept rather than that nothing resembles it', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-recall-empty-'));
+    const { report, searched } = await recallReport({ root, question: 'anything' });
+    assert.equal(searched, 0);
+    assert.match(report, /Nothing has been kept here yet/);
   });
 });

@@ -3601,6 +3601,58 @@ is in the author's data directory, which is how it came to run nowhere else in t
 
 Extension 0.13.0. 1,074 tests, 0 skipped, now run somewhere other than one laptop.
 
+### Phase 62: Fourteen Of Fifteen Entries Were Guesses, And Eleven Were The Same Wrong Guess
+
+`tewip review` is what a team runs before anyone reads a diff. Its headline section is "Tests that
+cover this change", and run against the Phase 61 change it listed **fifteen** of them:
+
+> - **engine/test/extension.test.ts** (imports the changed code) — covers:
+>   extensions/vscode/version-compare.js
+> - **engine/test/a2a.test.ts** (shares its words, so this one is a guess) — covers:
+>   extensions/vscode/engine-version.js
+> - **engine/test/junit.test.ts** (shares its words, so this one is a guess) — covers:
+>   extensions/vscode/engine-version.js
+> - **engine/test/perf.test.ts** … **schema.test.ts** … **web-scan.test.ts** … **write.test.ts** …
+
+Eleven test files were said to cover the editor extension's version check: the A2A server's tests,
+the JUnit reader's, the performance reader's, the migration reader's. None has anything to do with
+the extension. **Fourteen of the fifteen entries were guesses and eleven were the same wrong guess.**
+
+The name-based fallback required two shared words, and two were always found:
+
+- **engine** - because every test in this repository lives in `engine/test/`;
+- **version** - because fixtures everywhere say `schemaVersion: 1`.
+
+Both are structural noise. The heuristic was matching on a directory name and a field name present in
+almost every file, and the honest part of the design - *marking those entries as guesses* - was doing
+the opposite of its job: a section where fourteen of fifteen lines are labelled "this one is a guess"
+teaches a reviewer to skip the section, including the one line that was a fact.
+
+A word that most test files contain is not evidence about any of them, which is the rule `recall`
+already applies to error text. So a shared word now has to be **rare across the test corpus** (in at
+most a quarter of the test files - *engine* was in 100% of them), and at least one of the matching
+words has to come from the **changed file's own name** rather than from a folder it happens to sit in.
+
+Two more things should never have been asked about at all. A changed **test file** is its own test -
+`fix-data.test.ts` was listed as covering `extension.test.ts`. And a **declaration file** executes
+nothing: `version-compare.d.ts` was matched to `perf.test.ts` because both contain "version" and
+"compare", which is not wrong by the rule, and the review also demanded a test for it -
+*"a mistake there would reach production unnoticed"* - about a file that cannot contain a mistake of
+that kind.
+
+Same change, after: **one entry, an import-based fact**, and two genuinely untested files, both of
+which really are untestable without a running editor. Fifteen lines became one true one.
+
+Field-tested on a real Python project of 34 test files: 15 covering entries, **every one of them an
+import, no guesses at all** - the shape this heuristic exists for and does not interfere with.
+
+`pick` and `prove` are unaffected, and that was checked rather than assumed: both call
+`importingTests`, which has always discarded `how === 'name'`. The only consumer of the guess was the
+review's own display. Where a file loses a bogus name match it becomes untraceable, and `pick` then
+runs the whole suite and says why - the safe direction.
+
+1,079 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

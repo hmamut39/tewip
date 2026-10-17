@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { coverageFor, isCode, uncovered } from '../review/coverage.ts';
+import { coverageFor, isCode, isCoverableCode, uncovered } from '../review/coverage.ts';
 import { renderReview, reviewChange } from '../review/review.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 
@@ -116,5 +116,65 @@ describe('what the history adds', () => {
     assert.match(text, /imports the changed code/);
     assert.match(text, /npx vitest run test\/cart\.test\.ts/);
     assert.match(text, /No model was called, so this cost nothing/);
+  });
+});
+
+// Phase 62: what `review` claimed covered a real change to extensions/vscode/engine-version.js.
+//
+// Eleven test files - a2a, junit, perf, schema, write, web-scan and five more, none of which has
+// anything to do with the editor extension. Two shared words were required and two were always
+// found: *engine*, because every test in this repository lives in `engine/test/`, and *version*,
+// because fixtures everywhere say `schemaVersion: 1`. Fourteen of the fifteen entries in that
+// section were guesses and eleven were the same wrong guess - in the headline section of the
+// command. A section that is mostly noise is a section a reviewer learns to skip.
+describe('a word match that is really a coincidence', () => {
+  it('does not treat a word most tests contain as evidence about any of them', () => {
+    const many: Record<string, string[]> = {
+      'engine/thing-version.ts': ['export const thing = () => 0;'],
+    };
+    // Eight tests that all mention "version" and all sit under engine/, like the real repository.
+    for (let i = 0; i < 8; i += 1) {
+      many[`engine/test/area${i}.test.ts`] = [`it("area${i} keeps schemaVersion", () => { const schemaVersion = 1; });`];
+    }
+    const coverage = coverageFor(project(many), ['engine/thing-version.ts']);
+    assert.deepEqual(coverage, [], 'a word in every test file says nothing about any of them');
+  });
+
+  it('still makes the guess when the shared words are the file\'s own and rare', () => {
+    const root = project({
+      'src/checkout-payment.ts': ['export const pay = () => 0;'],
+      'test/checkout-payment-flow.test.ts': ['it("checkout payment happens once", () => {});'],
+      'test/unrelated.test.ts': ['it("something else", () => {});'],
+      'test/also-unrelated.test.ts': ['it("nothing to do with it", () => {});'],
+    });
+    const coverage = coverageFor(root, ['src/checkout-payment.ts']);
+    assert.equal(coverage.length, 1, 'the one whose words really are the changed file\'s');
+    assert.equal(coverage[0].how, 'name');
+  });
+
+  it('will not match on the folder a change happens to live in', () => {
+    // "engine" was in the path of every test, so it counted towards the two words required.
+    const root = project({
+      'engine/widgets/pump.ts': ['export const pump = () => 0;'],
+      'engine/test/engine-widgets-other.test.ts': ['it("engine widgets do something else", () => {});'],
+    });
+    assert.deepEqual(coverageFor(root, ['engine/widgets/pump.ts']), [], 'sharing a directory name is not sharing a subject');
+  });
+
+  it('never asks whether a test file or a declaration file is covered', () => {
+    // A changed test is its own test, and a .d.ts executes nothing. `version-compare.d.ts` was
+    // matched to `perf.test.ts` because both say "version" and "compare" - not wrong by the rule,
+    // but a question that should never have been asked.
+    assert.equal(isCoverableCode('src/cart.ts'), true);
+    assert.equal(isCoverableCode('src/types.d.ts'), false);
+    assert.equal(isCoverableCode('engine/test/cart.test.ts'), false);
+    assert.equal(isCoverableCode('tests/test_cart.py'), false);
+    assert.equal(isCode('src/types.d.ts'), true, 'it is still code for every other purpose');
+  });
+
+  it('does not demand a test for a file that executes nothing', () => {
+    // "version-compare.d.ts has no test that imports it. A mistake there would reach production
+    // unnoticed" is a demand the reader cannot act on.
+    assert.deepEqual(uncovered(['src/types.d.ts', 'src/cart.ts'], []), ['src/cart.ts']);
   });
 });

@@ -1035,6 +1035,11 @@ import does not show.
 notice it, then run the **whole** suite to find out which tests really catch it. A failure is dropping a
 catching test.
 
+Re-derived on 2026-10-17 against a suite that had grown to 1,136 tests: **9 judged changes, 0 catching
+tests lost, 5.7% of the suite selected.** The harness refuses to report at all when it could not read
+which tests caught anything, because a selection cannot be shown safe by changes nothing was observed
+to catch.
+
 | Project | Judged cases | Catching test lost | Suite selected |
 | --- | --- | --- | --- |
 | This repository (node --test, 76 test files) | 8 | **0** | 7–9% |

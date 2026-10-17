@@ -148,8 +148,40 @@ function main(): void {
   report(cases);
 }
 
+/**
+ * Could this run judge anything at all?
+ *
+ * The whole measurement rests on knowing which test files really caught each mutant, which is read
+ * out of the suite's output. When that reading finds nothing - a changed reporter, a suite command
+ * that does not run, a runner whose format moved - every case is excluded as "caught by nothing" and
+ * the report printed:
+ *
+ *     Narrowed, and the catching test was lost:  **0**
+ *     No change that the suite catches was lost by the selection.
+ *
+ * A clean safety verdict from zero evidence, and exit code 0. The comment above `catchersFrom`
+ * records this happening once already, when only TAP was read; the parser was fixed and the report
+ * was never taught to say so. This is the number the README publishes.
+ */
+export function nothingToJudge(cases: Case[], judged: Case[]): string {
+  if (cases.length === 0) return 'no change was made at all, so nothing was measured';
+  if (judged.length > 0) return '';
+  return (
+    `all ${cases.length} change(s) were reported as caught by nothing, which almost certainly means the suite's output could not be read rather than that the suite is blind. ` +
+    'Check that the suite command runs and that its reporter prints failing test files; until then this run establishes nothing about safety either way.'
+  );
+}
+
 function report(cases: Case[]): void {
   const judged = cases.filter((c) => c.caughtBy.length > 0);
+  const blind = nothingToJudge(cases, judged);
+  if (blind) {
+    process.stdout.write(
+      ['# Is narrowing the test run safe? **Cannot say.**', '', blind, '', 'Nothing here is a pass. A selection cannot be shown safe by changes nothing was observed to catch.', ''].join(NL),
+    );
+    process.exitCode = 1;
+    return;
+  }
   const narrowed = judged.filter((c) => !c.everything);
   const kept = narrowed.filter((c) => c.caughtBy.some((f) => c.selected.includes(f)));
   const lost = narrowed.filter((c) => !c.caughtBy.some((f) => c.selected.includes(f)));
@@ -188,4 +220,5 @@ function report(cases: Case[]): void {
   );
 }
 
-main();
+// Run only when this file is the program, so the measurement can also be imported and tested.
+if (process.argv[1] && import.meta.filename === process.argv[1]) await main();

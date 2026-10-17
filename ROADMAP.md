@@ -4159,6 +4159,47 @@ returned re-encoded - under a status of its own, `cannot-restore`.
 
 1,133 tests.
 
+### Phase 73: The Published Safety Number Held; Its Harness Would Have Said So Either Way
+
+`pick` narrows a test run, and the one failure that matters is dropping the test that would have
+caught the bug. The README publishes a number for that - 8 judged cases, **0** catching tests lost,
+7-9% of the suite selected - so it was re-derived rather than trusted, with `eval/pick-safety.ts`:
+real mutants in real source, the catchers decided by running the **whole** suite, and the selection
+computed from the source exactly as it would be on a pull request.
+
+**It held, and it is now better than published:** 9 judged changes, **0** catching tests lost, and
+**5.7%** of the suite selected - tighter than 7-9%, because the suite grew to 1,136 tests while the
+selection stayed targeted. The claim is honest and slightly conservative.
+
+A re-derivation that only confirms is not a phase, so the harness was asked the other question: what
+does it say when it learns nothing? Given a suite command whose output it cannot read:
+
+> Narrowed, and the catching test was kept:  0 of 0 (n/a)
+> Narrowed, and the catching test was lost:  **0**
+>
+> **No change that the suite catches was lost by the selection.**
+
+A clean safety verdict from zero evidence, and **exit code 0**. Every case had been excluded as
+"caught by nothing at all", which the report counts as saying nothing - and then concluded nothing was
+lost. This is the harness behind a number in the README, and the comment above its output parser
+records the same thing happening once already, when only TAP was read: *"the first run of this
+measurement cheerfully reported that nothing could judge the selection."* The parser was fixed; the
+report was never taught to say so.
+
+It now refuses:
+
+> \# Is narrowing the test run safe? **Cannot say.**
+>
+> all 2 change(s) were reported as caught by nothing, which almost certainly means the suite's output
+> could not be read rather than that the suite is blind... **Nothing here is a pass. A selection
+> cannot be shown safe by changes nothing was observed to catch.**
+
+with a non-zero exit, so a scripted re-derivation fails loudly rather than republishing a number it
+did not measure. The harness also ran `main()` on import, which made it untestable; it is guarded now,
+the same way `eval/mismatch-precision.ts` was written in Phase 65, and the refusal is pinned by tests.
+
+1,136 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

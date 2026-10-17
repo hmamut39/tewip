@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { pick, renderPick, type Candidate, type PickInput } from '../pick/pick.ts';
+import { nothingToJudge } from '../../eval/pick-safety.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -215,5 +216,33 @@ describe('refusing to narrow', () => {
     const picked = pick({ ...base, changed: ['src/orphan.ts'], reaching: new Map(), unreferenced: ['src/orphan.ts'] });
     assert.match(picked.runEverything, /nothing in this project refers to src\/orphan\.ts/);
     assert.deepEqual(picked.opaque, [], 'not an untraceable file: a file nothing names');
+  });
+});
+
+// Phase 73: the safety number this project publishes for `pick` was re-derived rather than trusted.
+// It held - 9 judged changes, **0** catching tests lost, 5.7% of the suite selected, better than the
+// 7-9% in the README because the suite grew while the selection stayed targeted. Then the harness
+// itself was asked what it says when it learns nothing.
+describe('what the safety measurement claims when it measured nothing', () => {
+  const judgedCase = { file: 'a.ts', line: 1, kind: 'k', caughtBy: ['test/a.test.ts'], selected: ['test/a.test.ts'], everything: '', share: 0.1 };
+  const blindCase = { ...judgedCase, caughtBy: [] };
+
+  it('refuses when every change was reported as caught by nothing', () => {
+    // It printed "Narrowed, and the catching test was lost: **0**" followed by "No change that the
+    // suite catches was lost by the selection", and exited 0: a clean safety verdict from zero
+    // evidence. The comment above the output parser records this happening once already, when only
+    // TAP was read - the parser was fixed and the report was never taught to say so.
+    const why = nothingToJudge([blindCase, blindCase], []);
+    assert.match(why, /all 2 change\(s\) were reported as caught by nothing/);
+    assert.match(why, /the suite's output could not be read/);
+    assert.match(why, /establishes nothing about safety either way/);
+  });
+
+  it('refuses when no change was made at all', () => {
+    assert.match(nothingToJudge([], []), /no change was made at all/);
+  });
+
+  it('says nothing when there is something real to judge', () => {
+    assert.equal(nothingToJudge([judgedCase, blindCase], [judgedCase]), '', 'one judgeable change is enough to report on');
   });
 });

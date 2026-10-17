@@ -41,6 +41,8 @@ Tewip never changes your code from the editor.
 
 The extension is a thin shell over that command line, so updating `tewip-ai` updates what every command here can do, with no new version of this extension.
 
+That also means an old `tewip-ai` gives old answers here and looks exactly the same doing it. So the first time you run a Tewip command, the extension checks whether a newer command line is published and offers to install it. It asks `registry.npmjs.org` at most once a day, never on startup, and **Tewip: Check For Updates** turns it off.
+
 Most of what Tewip answers costs nothing: three quarters of real failures are decided by deterministic rules that call no model at all. Set `OPENAI_API_KEY` only for the rest.
 
 ## Also available as

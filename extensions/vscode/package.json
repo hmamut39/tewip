@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - can these tests actually fail?",
   "description": "Proves the work: can these tests fail at all, what will this migration do to a live database, who cannot use this interface, is it slower, and why did CI fail.",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -154,6 +154,11 @@
           "type": "string",
           "default": "tewip",
           "markdownDescription": "How to run Tewip: leave it as `tewip` when it is installed with `npm install -g tewip-ai`, or give the path to `cli/tewip.ts` (or `dist/cli/tewip.js`) in a checkout."
+        },
+        "tewip.checkForUpdates": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Say so when the installed `tewip` is older than the one published. This extension is a thin shell that runs whatever `tewip` is on your PATH, so an old command line gives old answers and nothing else would tell you. Asks `registry.npmjs.org` at most once a day, and only after you run a Tewip command. Turn it off and the check falls back to the minor version this build was written against."
         }
       }
     }

@@ -1,0 +1,57 @@
+# The unit suite, on every push and every pull request.
+#
+# Phase 61 went looking for why the extension's engine-version guard had drifted fifteen minor
+# versions without anybody noticing, wrote a test that fails when it drifts again - and then found
+# that **no workflow ran the unit suite at all**. 1,074 tests, every one of them green on the
+# author's machine and never run anywhere else.
+#
+# Every guard written in this repository is a guard against a mistake made once already. A guard
+# nothing runs is a comment. The corpus workflow measures what Tewip says about other people's code
+# and is deliberately weekly because it clones large repositories; this is the cheap half, and it
+# runs every time.
+#
+# It also typechecks, because the source is .ts run directly by Node with types stripped: nothing
+# else would ever catch a type error.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: The unit suite
+        run: npm run test:engine
+
+      # Not a style rule for its own sake: a file nobody can hold in their head is a file where the
+      # next bug hides. Test files are exempt, because a thorough one is long by nature.
+      # One pipeline and one awk, deliberately: a `while read` loop fed by a pipe counts in a
+      # subshell and loses the result, which is how a check like this passes while finding things.
+      - name: Every source file under 300 lines
+        run: |
+          git ls-files '*.ts' '*.js' \
+            | grep -Ev '(^|/)(node_modules|dist|out|fixtures)/' \
+            | grep -Ev '\.test\.ts$' \
+            | xargs -r wc -l \
+            | awk '$2 != "total" && $1 >= 300 { print "::error file=" $2 "::" $1 " lines; this project keeps source files under 300"; bad = 1 } END { exit bad }'

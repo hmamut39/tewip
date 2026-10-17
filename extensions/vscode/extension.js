@@ -215,28 +215,43 @@ const isItSlower = fileCommand({ verb: 'perf', busy: 'Tewip is checking whether 
 // Proving breaks the file and runs the tests that cover it, once per change, so it is slow by nature.
 const wouldTestsCatch = fileCommand({ verb: 'prove', busy: 'Tewip is breaking this file to see whether the tests notice (this takes minutes)…', needsFile: true, extra: ['--limit', '4'] });
 
+/**
+ * Registers a command, and has the first use of any of them trigger the engine-version check.
+ *
+ * The check used to run from `activate`, which `onStartupFinished` means every time the editor
+ * starts - so it asked the npm registry on behalf of someone who had not asked Tewip for anything.
+ * A tool that reaches the network on startup is doing something the person did not request, and
+ * this one has no reason to: nothing is stale until a command is run. So the first command a person
+ * runs triggers it, unawaited, and it never delays that command.
+ */
+function registerWatched(context, id, handler) {
+  return vscode.commands.registerCommand(id, (...args) => {
+    void checkEngineVersion(context);
+    return handler(...args);
+  });
+}
+
 function activate(context) {
-  // Not awaited: the check must never delay a command the person asked for.
-  void checkEngineVersion();
+  const command = (id, handler) => registerWatched(context, id, handler);
   context.subscriptions.push(
-    vscode.commands.registerCommand('tewip.explainReport', explainReport),
-    vscode.commands.registerCommand('tewip.ciReport', ciReport),
-    vscode.commands.registerCommand('tewip.review', reviewChange),
-    vscode.commands.registerCommand('tewip.flaky', flakyDossier),
-    vscode.commands.registerCommand('tewip.secure', securityCheck),
-    vscode.commands.registerCommand('tewip.learn', whatWeLearned),
-    vscode.commands.registerCommand('tewip.trace', traceRequirements),
-    vscode.commands.registerCommand('tewip.attest', evidenceBundle),
-    vscode.commands.registerCommand('tewip.recall', recallMemory),
-    vscode.commands.registerCommand('tewip.pursue', pursueGoal),
-    vscode.commands.registerCommand('tewip.done', isThisDone),
-    vscode.commands.registerCommand('tewip.vouch', couldItFail),
-    vscode.commands.registerCommand('tewip.prove', wouldTestsCatch),
-    vscode.commands.registerCommand('tewip.pick', whichTests),
-    vscode.commands.registerCommand('tewip.schema', readMigrations),
-    vscode.commands.registerCommand('tewip.standards', houseRules),
-    vscode.commands.registerCommand('tewip.access', whoCannotUseIt),
-    vscode.commands.registerCommand('tewip.perf', isItSlower),
+    command('tewip.explainReport', explainReport),
+    command('tewip.ciReport', ciReport),
+    command('tewip.review', reviewChange),
+    command('tewip.flaky', flakyDossier),
+    command('tewip.secure', securityCheck),
+    command('tewip.learn', whatWeLearned),
+    command('tewip.trace', traceRequirements),
+    command('tewip.attest', evidenceBundle),
+    command('tewip.recall', recallMemory),
+    command('tewip.pursue', pursueGoal),
+    command('tewip.done', isThisDone),
+    command('tewip.vouch', couldItFail),
+    command('tewip.prove', wouldTestsCatch),
+    command('tewip.pick', whichTests),
+    command('tewip.schema', readMigrations),
+    command('tewip.standards', houseRules),
+    command('tewip.access', whoCannotUseIt),
+    command('tewip.perf', isItSlower),
   );
   // Editors that support it pick Tewip up as an MCP server with no configuration; others can
   // still add "tewip mcp" to their MCP settings by hand.

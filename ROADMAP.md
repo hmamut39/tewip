@@ -3529,6 +3529,69 @@ never fires at all.
 
 1,062 tests.
 
+### Phase 61: The Guard Against A Stale Engine Had Gone Fifteen Versions Stale
+
+The editor extension is a thin shell: it runs whatever `tewip` is on the PATH, which is why every
+phase of engine work reaches its users through `npm i -g tewip-ai` and not through a new build of it.
+That design is right. Its one cost was found on 2026-10-12 and written into the code at the time:
+
+> the shell looks identical whether the engine behind it is current or fifty versions old - it was
+> running 0.4.0 against an extension built for 0.54.0, and nothing anywhere said so.
+
+The answer then was a constant, `NEEDS_ENGINE = 54`, hand-typed at the minor version the build was
+written against, with a warning when the installed command line was older. By this phase the engine
+was on **0.69** and the constant still said **54**. The guard against a stale engine had itself gone
+fifteen versions stale, and anyone sitting anywhere between 0.54 and 0.68 was told nothing at all
+while six phases of work went past them.
+
+**A number a human has to remember to update is not a guard, it is a second thing to forget.**
+
+So the comparison is no longer against a constant. It is against what is actually published, asked of
+the same registry the user installed from. The conditions on that are the interesting part, because a
+tool that reaches the network unasked is doing something the person did not request:
+
+- **at most once a day**, remembered in the extension's own global state so reloading a window is not
+  a reason to ask again - and a *failed* lookup is not remembered, because being offline for a minute
+  should not mean being quiet for a day;
+- **only after a Tewip command is run.** The check used to run from `activate`, and the extension
+  activates on `onStartupFinished` - so it asked npm on behalf of somebody who had not asked Tewip
+  for anything. Nothing is stale until a command is run, so the first command triggers it;
+- **refusable**, with `tewip.checkForUpdates`;
+- **on major and minor only.** A patch release of the engine does not change what the extension can
+  ask for, and warning about one is a nag with nothing behind it.
+
+The constant survives as the fallback for when npm cannot be asked, because being unable to ask is
+not a reason to say nothing.
+
+**The extension had no test of any kind.** Zero, across every phase - it requires `vscode`, which
+only exists inside the editor, so the whole thing was unreachable from `node --test` and nobody had
+split out the part that wasn't. The comparison now lives in `version-compare.js`, which requires
+nothing, and twelve tests pin the things that can rot silently:
+
+- the comparison itself, including the case that went unreported for six phases (0.54 against 0.69);
+- that the fallback floor stays within ten minor versions of the engine beside it, with a message
+  naming the file to edit - **the drift that caused this phase now fails the build**;
+- that the floor is never *ahead* of the engine, which would warn everyone forever;
+- that the npm lookup is refusable and does not run from `activate`;
+- that every command the extension puts in a menu has a handler behind it, and that nothing is
+  registered which was never contributed and so could not be reached;
+- that a built `.vsix` exists for the version in the manifest, because the VS Code Marketplace upload
+  is manual and a release whose file was never built is a release that only reached Open VSX.
+
+**And then the obvious question.** The drift test "fails the build" - which build? There was no
+workflow running the unit suite. **1,074 tests, every one of them green on the author's machine and
+never run anywhere else.** The corpus workflow measures what Tewip says about other people's code
+and is weekly because it clones large repositories; the Action's self-check runs five verbs against
+this repo; nothing ran `node --test`. Every guard in this repository is a guard against a mistake
+already made once, and a guard nothing runs is a comment.
+
+So `tests.yml` now runs the typecheck, the suite and the 300-line rule on every push and every pull
+request. The line-count step is one pipeline and one `awk` on purpose: a `while read` loop fed by a
+pipe counts in a subshell and loses the result, which is how a check like that comes to pass while
+finding things.
+
+Extension 0.13.0. 1,074 tests, now run somewhere other than one laptop.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

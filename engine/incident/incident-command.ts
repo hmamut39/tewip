@@ -11,7 +11,7 @@
 // never ran is reported as exactly that and the file is removed, because a test wrongly labelled
 // "reproduces the outage" is worse than no test: the next person will trust it.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { noModelHelp } from '../llm/providers.ts';
 import { writerFromEnv } from '../quality/model.ts';
 import { usageLine } from '../llm/usage.ts';
@@ -72,6 +72,17 @@ export interface IncidentResult {
   kept: boolean;
 }
 
+/**
+ * How to import a source file from the folder the test will be written in.
+ *
+ * Always relative and always with a `./` or `../` in front, because a bare `access/render.ts` is a
+ * package specifier to Node, not a path.
+ */
+export function importPathFor(root: string, testDir: string, file: string): string {
+  const path = relative(resolve(testDir), resolve(root, file)).split('\\').join('/');
+  return path.startsWith('.') ? path : `./${path}`;
+}
+
 export async function runIncident(cmd: IncidentCommand): Promise<IncidentResult> {
   const incident = readIncident(readFileSync(resolve(cmd.file), 'utf8'));
   const framework = chooseFramework(detectFrameworks(cmd.root), cmd.framework, false);
@@ -89,7 +100,15 @@ export async function runIncident(cmd: IncidentCommand): Promise<IncidentResult>
   const testFile = join(framework.testDir, fileName);
   mkdirSync(dirname(testFile), { recursive: true });
 
-  const draft = await draftTest(model, { framework, fileName, pages: [], feature: `A production incident: ${incident.title}`, code }, asScenario(incident));
+  // Each source file with the path to import it by from the test's own folder. Without this the
+  // model only had project-relative paths and every import it wrote was wrong for any framework
+  // whose test folder is not the project root.
+  const withImports = code.map((c) => ({ ...c, importPath: importPathFor(cmd.root, framework.testDir, c.file) }));
+  const draft = await draftTest(
+    model,
+    { framework, fileName, pages: [], feature: `A production incident: ${incident.title}`, code: withImports, testDir: relative(cmd.root, framework.testDir).split('\\').join('/') || '.' },
+    asScenario(incident),
+  );
   writeFileSync(testFile, draft.code, 'utf8');
   console.error('Wrote the test; running it now, because a test nobody ran proves nothing…');
 

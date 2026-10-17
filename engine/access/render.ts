@@ -49,7 +49,16 @@ function section(title: string, findings: Finding[], lines: string[]): void {
 }
 
 export function renderAccess(result: Omit<AccessResult, 'report'>, scanned: string): string {
-  const { barriers, questions, accepted, filesRead, browser } = result;
+  // A missing list means an empty one. `accepted` and the browser run's own lists were read
+  // straight off the object, so a caller that left one out got
+  // `TypeError: Cannot read properties of undefined (reading 'length')` from the renderer rather
+  // than a report - and this is an exported function the MCP tool also calls. It happened twice in
+  // one hour during Phase 68, and the test that pins it was written by `tewip incident` from the
+  // real stack trace of the second time.
+  const { barriers = [], questions = [], accepted = [], filesRead = 0 } = result;
+  const browser = result.browser
+    ? { ...result.browser, barriers: result.browser.barriers ?? [], questions: result.browser.questions ?? [], advice: result.browser.advice ?? [], superseded: result.browser.superseded ?? [] }
+    : result.browser;
   const lines = ['# Tewip accessibility check', ''];
 
   lines.push(`Read ${filesRead} markup ${filesRead === 1 ? 'file' : 'files'} under \`${scanned}\`, without rendering any of them.`, '');

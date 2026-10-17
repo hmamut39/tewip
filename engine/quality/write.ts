@@ -38,7 +38,8 @@ const RULES = `Rules:
 - Wait for conditions, never for fixed times.
 - Do not hard-code values that change as the app's content grows (counts, totals, dates, ids) unless the scenario is about that exact value: check their shape instead (a number of books, a date), so the test does not break the day a record is added.
 - One test file, complete, runnable as is, no placeholders. It must actually run here: Tewip runs it against the app now, and a skipped test proves nothing. A guard like the example's (skip where the app lacks something) is fine, as long as it does not skip here.
-- mutation.find must be an exact substring of your code that appears once, inside the main assertion (the value or condition it expects); mutation.replace is what to put there instead so that the test must fail if it is a real check. Keep the code valid: change an expected value, not the syntax.`;
+- mutation.find must be an exact substring of your code that appears once, inside the main assertion (the value or condition it expects); mutation.replace is what to put there instead so that the test must fail if it is a real check. Keep the code valid: change an expected value, not the syntax.
+- To import something from codeUnderTest, use that entry's importPath exactly as given. It is already relative to the folder the test will be written in (testWillBeWrittenIn); its \`file\` is relative to the project root and is there to tell you where the code lives, not how to import it.`;
 
 const DRAFT_SYSTEM = `You are Tewip's test writer, a senior SDET. Write one automated test for the scenario given.\n\n${RULES}`;
 
@@ -67,8 +68,20 @@ export interface WriteContext {
   fileName: string;
   pages: PageFacts[];
   feature: string;
-  /** The source files the feature lives in, so a failing check can be weighed against documented intent. */
-  code?: Array<{ file: string; content: string }>;
+  /**
+   * The source files the feature lives in, so a failing check can be weighed against documented
+   * intent - each with the path to import it by **from where the test will be written**.
+   *
+   * `file` alone is project-relative, and the model was given nothing else. For a framework whose
+   * test folder is not the project root, every generated import was wrong: a test written into
+   * `engine/test/` importing `../engine/access/render.ts` resolves to `engine/engine/access/...`,
+   * which does not exist, so the file would not load and `incident` reported "the test never ran -
+   * something was missing or would not compile" about a test that was otherwise correct. Measured on
+   * a real stack trace from this repository.
+   */
+  code?: Array<{ file: string; content: string; importPath?: string }>;
+  /** Where the test will be written, relative to the project root, so an import can be relative to it. */
+  testDir?: string;
   /**
    * The team's own guidance from `.tewip/standards/`, for the parts of house style no pattern can check.
    * A test written in the project's own conventions is one somebody will keep; one written in Tewip's
@@ -88,6 +101,9 @@ function contextFor(ctx: WriteContext, scenario: Scenario) {
     exampleTest: example,
     pages: ctx.pages.map((p) => ({ readAt: p.url, title: p.title, accessibilitySnapshot: p.aria })),
     codeUnderTest: ctx.code?.length ? ctx.code : undefined,
+    // Where the test file itself will sit, so a relative import can be written correctly rather
+    // than guessed from a project-relative path.
+    testWillBeWrittenIn: ctx.testDir || undefined,
     houseRules: ctx.houseRules || undefined,
   };
 }

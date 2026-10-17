@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { framesFromStack, ourFrames, readIncident } from '../incident/incident.ts';
 import { judgeReproduction } from '../incident/reproduced.ts';
+import { importPathFor } from '../incident/incident-command.ts';
 
 const NL = String.fromCharCode(10);
 const lines = (...l: string[]) => l.join(NL);
@@ -130,5 +131,71 @@ describe('judging whether a test reproduced it', () => {
     // The overlap is measured against the incident's own words, not the output's, so twenty lines
     // of stack trace cannot earn a match by sheer length.
     assert.equal(judgeReproduction(untyped, { passed: false, output: noisy }).verdict, 'failed-differently');
+  });
+});
+
+// Phase 69: field-tested on a real stack trace from this repository - a real TypeError thrown by
+// real code, captured from the error object the way a production logger would. Two defects stopped
+// the command dead, and both were in the plumbing rather than the idea.
+describe('a stack trace as a modern Node actually prints it', () => {
+  const REAL = [
+    "TypeError: Cannot read properties of undefined (reading 'length')",
+    '    at renderAccess (file:///C:/Users/Afiyat/triage-agent/engine/access/render.ts:129:37)',
+    '    at file:///C:/Users/Afiyat/scratch/crash.ts:4:1',
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)',
+  ].join(String.fromCharCode(10));
+
+  it('reads an ESM frame, which is a file:// URL and has colons in it', () => {
+    // The file group was `[^():]+?` - no colons allowed - and a `file://` URL has one in the scheme
+    // and a Windows path another in the drive letter. Not one ESM frame could be read, on any
+    // platform, in any project with "type": "module". The command's whole premise is writing a test
+    // against the code the trace names, and it could not name the code: on this very trace it said
+    // "it names no file inside this project" about a file in this project.
+    const frames = framesFromStack(REAL);
+    assert.equal(frames.length, 3);
+    assert.equal(frames[0].file, 'C:/Users/Afiyat/triage-agent/engine/access/render.ts');
+    assert.equal(frames[0].line, 129);
+    assert.equal(frames[0].fn, 'renderAccess');
+    assert.equal(frames[0].ours, true);
+  });
+
+  it('reads a POSIX file:// URL as a rooted path', () => {
+    const [frame] = framesFromStack('    at pay (file:///app/src/pay.ts:42:9)');
+    assert.equal(frame.file, '/app/src/pay.ts');
+  });
+
+  it('decodes a path that was escaped into the URL', () => {
+    const [frame] = framesFromStack('    at go (file:///app/my%20code/pay.ts:7:1)');
+    assert.equal(frame.file, '/app/my code/pay.ts');
+  });
+
+  it('still keeps the runtime out of "ours"', () => {
+    assert.equal(framesFromStack(REAL).at(-1)?.ours, false, 'node:internal is not the team\'s code');
+  });
+
+  it('did not lose the formats that already worked', () => {
+    const others = [
+      '    at handler (/app/src/pay.ts:42:9)',
+      '  File "/app/pay.py", line 42, in charge',
+      '    at com.shop.Pay.charge(Pay.java:42)',
+    ].join(String.fromCharCode(10));
+    assert.deepEqual(
+      framesFromStack(others).map((f) => `${f.file}:${f.line}`),
+      ['/app/src/pay.ts:42', '/app/pay.py:42', 'Pay.java:42'],
+    );
+  });
+});
+
+describe('how the written test imports the code it is about', () => {
+  it('is relative to the folder the test will be written in', () => {
+    // The model was given project-relative paths and nothing else, so a test written into
+    // engine/test/ imported '../engine/access/render.ts' - which resolves to
+    // engine/engine/access/render.ts, does not exist, and made `incident` report
+    // "the test never ran - something was missing or would not compile" about a correct test.
+    assert.equal(importPathFor('/p', '/p/engine/test', 'engine/access/render.ts'), '../access/render.ts');
+  });
+
+  it('keeps a leading ./ so Node reads it as a path, not a package', () => {
+    assert.equal(importPathFor('/p', '/p', 'src/pay.ts'), './src/pay.ts');
   });
 });

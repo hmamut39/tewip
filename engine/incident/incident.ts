@@ -36,19 +36,48 @@ const RUNTIME = /^(?:node:|internal[\\/]|java\.|javax\.|sun\.|System\.|Microsoft
 
 const ours = (file: string): boolean => Boolean(file) && !LIBRARY.test(file) && !RUNTIME.test(file);
 
-const frame = (file: string, line: unknown, fn: string): Frame => ({
-  file: String(file ?? '').replace(/\\/g, '/'),
-  line: Number(line) || 0,
-  fn: String(fn ?? ''),
-  ours: ours(String(file ?? '')),
-});
+/**
+ * A `file://` URL back into the path it names.
+ *
+ * Node has printed ESM stack frames as URLs since v12, and ESM is the default for every project with
+ * `"type": "module"` - which this one is. `file:///app/src/pay.ts` and `file:///C:/app/src/pay.ts`
+ * are what a real trace contains, and a path is what every later step needs.
+ */
+function asPath(file: string): string {
+  const text = String(file ?? '').replace(/\\/g, '/');
+  if (!/^file:\/\//i.test(text)) return text;
+  const withoutScheme = text.replace(/^file:\/\/\/?/i, '');
+  // A Windows drive keeps its letter; everything else is rooted.
+  const path = /^[a-z]:/i.test(withoutScheme) ? withoutScheme : `/${withoutScheme}`;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path; // a malformed escape is not a reason to lose the frame
+  }
+}
+
+const frame = (file: string, line: unknown, fn: string): Frame => {
+  const path = asPath(file);
+  return { file: path, line: Number(line) || 0, fn: String(fn ?? ''), ours: ours(path) };
+};
 
 /** A stack trace as every language prints it, which is the fallback when there is no tool. */
 export function framesFromStack(stack: string): Frame[] {
   const out: Frame[] = [];
   for (const line of stack.split('\n')) {
-    // JavaScript: "at handler (/app/src/pay.ts:42:9)" or "at /app/src/pay.ts:42:9"
-    const js = /^\s*at\s+(?:(?<fn>[^(]+?)\s+\()?(?<file>[^():]+?):(?<line>\d+):\d+\)?\s*$/.exec(line);
+    // JavaScript: "at handler (/app/src/pay.ts:42:9)" or "at /app/src/pay.ts:42:9", and - what a
+    // modern Node actually prints - "at handler (file:///C:/app/src/pay.ts:42:9)".
+    //
+    // The file group was `[^():]+?`: no colons allowed. A `file://` URL has one in the scheme and a
+    // Windows path has another in the drive letter, so **not one ESM frame could be read** - on any
+    // platform, in any project with `"type": "module"`, which is most of them and is this one. The
+    // command's whole premise is writing a test against the code the trace names, and it could not
+    // name the code. Found on a real trace from this repository: `incident` reported "it names no
+    // file inside this project" about `engine/access/render.ts:129`, which is in this project.
+    //
+    // The group now takes anything and the tail anchors it: `:digits:digits` at the end of the line
+    // is what makes a JavaScript frame, and a JVM frame has only one number so it still falls through.
+    const js = /^\s*at\s+(?:(?<fn>[^(]+?)\s+\()?(?<file>.+?):(?<line>\d+):\d+\)?\s*$/.exec(line);
     if (js?.groups) {
       out.push(frame(js.groups.file, js.groups.line, (js.groups.fn ?? '').trim()));
       continue;

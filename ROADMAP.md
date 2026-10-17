@@ -3950,6 +3950,60 @@ again.
 
 1,108 tests.
 
+### Phase 69: Not One Modern Node Stack Trace Could Be Read
+
+`tewip incident` reads a Sentry payload, an OpenTelemetry span or a pasted stack trace, writes a test
+against the code the trace names, runs it, and keeps it **only** if it fails for the incident's own
+reason. That "only if" is the whole feature and it had never met a real trace.
+
+The material was to hand. An hour earlier, writing the Phase 68 tests, a fixture missing one field had
+crashed `renderAccess`. That crash was reproduced deliberately and its stack captured from the error
+object, the way a production logger would:
+
+    TypeError: Cannot read properties of undefined (reading 'length')
+        at renderAccess (file:///C:/Users/Afiyat/triage-agent/engine/access/render.ts:129:37)
+
+> Read a stack trace incident · **It names no file inside this project**, so the test is written from
+> the error alone.
+
+The file is in this project. The frame pattern was `(?<file>[^():]+?)` - **no colons allowed** - and a
+`file://` URL has one in the scheme while a Windows path has another in the drive letter. Node has
+printed ESM frames as URLs since v12, and ESM is the default for every project with
+`"type": "module"`, which is most of them and is this one. **Not one ESM frame could be read, on any
+platform.** The command whose premise is writing a test against the code the trace names could not
+name the code, so the model guessed at exports - `render`, `renderAxTree`, `renderTree`, none of which
+exist - and nothing compiled.
+
+With the pattern fixed it found the file and the function, and failed differently:
+
+> Your code in the trace: engine/access/render.ts:129 (renderAccess)
+> **Nothing is kept** — the test never ran - something was missing or would not compile
+
+**The second defect.** The model was given the file as `engine/access/render.ts`, relative to the
+project root, and was never told where its test would be written. The test went into `engine/test/`
+and imported `../engine/access/render.ts`, which resolves to `engine/engine/access/render.ts`. Every
+generated import was wrong for any framework whose test folder is not the project root. Each source
+file now arrives with the path to import it by, computed from the test's own folder, and the prompt
+says to use it exactly.
+
+Third run, same trace:
+
+> **# Reproduced: TypeError: Cannot read properties of undefined (reading 'length')**
+> ## The test is red for the right reason
+> **Do:** keep this test: it is red for the reason production was, so a fix that turns it green has
+> fixed the incident
+
+So the fix was made: `renderAccess` now reads a missing list as an empty one. It is an exported
+function the MCP tool also calls, and a missing list throwing instead of meaning "none" had already
+been hit twice in one hour. The test went green and is kept, renamed, in
+`engine/test/access-render-shape.test.ts` - the `incident` command's own output, with a comment added
+recording where it came from and nothing else edited.
+
+That is the whole loop, on real data, for the first time: a real crash, a real trace, a test that was
+red for the right reason, a fix, and the same test green.
+
+1,116 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

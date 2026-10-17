@@ -3130,6 +3130,49 @@ unaffected. And nothing is inferred when there is no report: the answer stays "c
 
 1,006 tests.
 
+### Phase 54: The Thing Measuring the Flagship Command Had Been Dead for a Month
+
+Twenty-nine verbs have never had a field trial, and the one that most deserves one is `explain` -
+the command this project was originally built for, the one the extension was named after for its
+first eleven phases. It is also the only command with a measurement apparatus already built: the
+**weekly shadow run**, which harvests real CI failures from five public projects, labels them from
+CI evidence, and scores Tewip's triage against them.
+
+Before pointing it at anything, the obvious question: what does the shadow run currently say?
+
+**It had failed on 28 September, 5 October and 12 October.** Three weeks. The only symptom was a red
+tick on a scheduled workflow nobody watches, and the thing it measures is the thing this project
+exists to do.
+
+Two causes, neither visible from outside.
+
+**A week with no failures killed the job.** `evidence.ts` wrote its output without creating the
+directory first, so a project whose CI happened not to fail in the window - which is a *good* week -
+died with `ENOENT` on the write. A week with no failures is a result. It now writes an empty evidence
+file and says so.
+
+**And the datasets had outgrown being read.** `readJsonl` used `readFileSync(file, 'utf8')`, which
+builds one string, and a string in Node cannot exceed `0x1fffffe8` characters - about 512MB. These
+files only ever grow: every CI failure harvested from a public project is appended and kept, so that
+accuracy is measured against everything ever collected rather than one week of it. gutenberg's
+crossed the line, and every run since died there.
+
+It now reads in 8MB chunks, carrying a partial line between reads. That carry is the whole
+difficulty: a UTF-8 character straddling a chunk boundary decodes to U+FFFD and takes its line with
+it, which would have been a silent corruption of the ground truth rather than a crash. Verified on a
+12MB file of deliberately multibyte text - **120,000 rows, none mangled**, first and last intact.
+
+Both fixed, and both proved by running the pipeline on the projects that broke it.
+
+**What this says about the project, which is the uncomfortable part.** Phase 44 built a corpus
+because unit tests could not see what Tewip says about other people's code. That corpus runs on every
+release and is checked. The shadow run measures the one thing the corpus does not - how good the
+triage *judgement* is, against failures nobody staged - and it ran on a schedule, reported into a
+step summary, and was watched by nobody. A measurement that nothing acts on decays into a red tick.
+
+Phase 55 is the field trial this was supposed to be: what the shadow run actually says about
+`explain`, now that it can speak.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

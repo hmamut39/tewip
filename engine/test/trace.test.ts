@@ -74,3 +74,42 @@ describe('the thread from a requirement to a run', () => {
     assert.match(renderTrace([]), /No plan has been kept here/);
   });
 });
+
+// Phase 66: field-tested by writing a real plan with `tewip plan` for a real feature of this
+// repository and tracing it. All twelve scenarios came back **"no test in this project can be named
+// for it, so nothing is checking it"** - in a repository with 1,095 passing tests. Two reasons, and
+// each was its own defect.
+describe('what trace can see, and what it says when it cannot see', () => {
+  const idTest = 'tests/tewip-ct-001.test.js > cart > adds up multiple item lines';
+
+  it('finds a test by scenario id in an older run, not only in the newest one', () => {
+    // The id was matched against the newest run alone, so a test that ran last week and not today
+    // could not be found at all - and was reported as nothing checking it, which is a far stronger
+    // claim than "it did not run today". The branch written to say that was unreachable.
+    const traced = tracePlan(plan([{ id: 'CT-001', title: 'adds up lines' }]), [run('r1', [idTest], '2026-09-20T10:00:00.000Z'), run('r2', ['something else'])], []);
+    assert.equal(traced.scenarios[0].test, idTest, 'the test exists in the kept history');
+    assert.equal(traced.scenarios[0].standing, 'never-run');
+    assert.match(traced.scenarios[0].why, /ran before but not in the last run/);
+  });
+
+  it('still calls it passing when that test is in the newest run', () => {
+    const traced = tracePlan(plan([{ id: 'CT-001', title: 'adds up lines' }]), [run('r1', ['older']), run('r2', [idTest])], []);
+    assert.equal(traced.scenarios[0].standing, 'passing');
+  });
+
+  it('does not claim nothing checks a scenario when no run has been kept at all', () => {
+    // This is the field-test case: a real plan, a real suite, and no kept run - so Tewip has no list
+    // of the project's tests and was saying "nothing is checking it" as though it had looked.
+    const traced = tracePlan(plan([{ id: 'CT-003', title: 'zero quantity' }]), [], []);
+    assert.equal(traced.scenarios[0].standing, 'not-covered');
+    assert.match(traced.scenarios[0].why, /no run has been kept for this project/);
+    assert.match(traced.scenarios[0].why, /this is not a claim that nothing checks it/);
+    assert.match(traced.scenarios[0].why, /tewip explain/, 'and what to do about it');
+  });
+
+  it('says how many tests it did search when it has some', () => {
+    const traced = tracePlan(plan([{ id: 'CT-003', title: 'zero quantity' }]), [run('r1', ['a', 'b']), run('r2', ['b', 'c'])], []);
+    assert.match(traced.scenarios[0].why, /no test among the 3 that the 2 kept run\(s\) name matches it/);
+    assert.match(traced.scenarios[0].why, /nothing Tewip can see is checking it/, 'what it can see, not what exists');
+  });
+});

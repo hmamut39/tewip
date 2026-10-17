@@ -72,19 +72,44 @@ export function testFor(scenario: PlanFile['scenarios'][number], attempted: stri
   return id.length >= 4 ? (attempted.find((t) => clean(t).includes(id)) ?? '') : '';
 }
 
+/**
+ * Why no test could be named - and what that does and does not establish.
+ *
+ * "no test in this project can be named for it, so nothing is checking it" was printed whatever the
+ * reason, including when **no run had been kept here at all**. Field-tested on this repository, which
+ * has 1,095 passing tests and a kept history belonging to a different project: all twelve scenarios
+ * of a real plan came back "nothing is checking it". Tewip was not looking at this project's tests,
+ * because it only ever sees the tests a kept run names, and it said so as though it had looked.
+ *
+ * The distinction matters because the two cases call for opposite actions: write a test, or keep
+ * your runs so the ones you have can be seen.
+ */
+function notCoveredBecause(runs: RunSummary[], knownTests: number): string {
+  if (runs.length === 0) {
+    return 'no run has been kept for this project, so Tewip has no list of its tests to match against - this is not a claim that nothing checks it. Run `tewip explain <report>` once and ask again';
+  }
+  return `no test among the ${knownTests} that the ${runs.length} kept run(s) name matches it, so nothing Tewip can see is checking it`;
+}
+
 /** Joins one plan to what the runs actually say. Nothing here is inferred from anything else. */
 export function tracePlan(plan: PlanFile, runs: RunSummary[], records: TriageRecord[]): TracedRequirement {
   const newest = runs.at(-1);
   const attempted = newest ? Object.keys(newest.attempts ?? {}) : [];
   const everAttempted = new Set(runs.flatMap((r) => Object.keys(r.attempts ?? {})));
+  // A scenario's own id was matched against the **newest run only**, so a test that ran last week
+  // and not today could not be found at all - and the answer for it was "no test in this project can
+  // be named for it, so nothing is checking it", which is a different and much stronger claim than
+  // "it did not run today". The branch below that exists to say exactly that ("ran before but not in
+  // the last run") was unreachable for every scenario the plan did not name a test for.
+  const everyTest = [...everAttempted];
   const failures = new Map<string, TriageRecord>();
   for (const record of records) if (record.runId === newest?.runId) failures.set(record.testId, record);
 
   const scenarios = plan.scenarios.map((scenario): TracedScenario => {
-    const test = testFor(scenario, attempted);
+    const test = testFor(scenario, everyTest);
     const base = { id: scenario.id, title: scenario.title, priority: scenario.priority ?? '', test, runId: newest?.runId ?? '', when: newest?.finishedAt ?? '' };
     if (!test) {
-      return { ...base, standing: 'not-covered', diagnosis: '', why: 'no test in this project can be named for it, so nothing is checking it' };
+      return { ...base, standing: 'not-covered', diagnosis: '', why: notCoveredBecause(runs, everAttempted.size) };
     }
     if (!everAttempted.has(test)) {
       return { ...base, standing: 'never-run', runId: '', when: '', diagnosis: '', why: `${test} is named as the cover, but no run kept here has attempted it` };

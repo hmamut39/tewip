@@ -3809,6 +3809,52 @@ there; a reader cannot act on that. It now names the missing thing and what to d
 
 1,095 tests.
 
+### Phase 66: Twelve Scenarios, 1,095 Passing Tests, And "Nothing Is Checking It"
+
+`tewip trace` answers the question an executive actually asks - *is this requirement covered, and is
+it passing right now* - by joining plans to tests to runs. On this repository it had only ever said
+"No plan has been kept here", so its real behaviour had never run.
+
+So a real plan was written for a real feature, with `tewip plan`, and it is worth noting how good
+that part is: it read **300 existing tests, 12 changed files and 60 past failures**, and produced
+twelve scenarios whose risk table cites this project's own history back at it -
+
+> **high** · A sampled proof reads like a whole-file proof. · *Roadmap history also calls out capped
+> answers reading as whole answers as a prior mistake.*
+
+Then `tewip trace` on that plan:
+
+> 12 scenario(s) across 1 requirement(s): 0 passing, 0 failing, 0 never run, **12 not covered**.
+> - **NOT COVERED** — PV-001: Reports sampled tries as N of total possible changes...
+>   - *no test in this project can be named for it, so nothing is checking it*
+
+In a repository with **1,095 passing tests**, three of which were written in Phase 58 for exactly
+PV-001, PV-002 and PV-005. Two defects, one sentence.
+
+**First: it could only see the newest run.** A scenario's id was matched against
+`Object.keys(newest.attempts)` - the single most recent kept run. A test that ran last week and not
+today could not be found at all, and the branch written to say precisely that - *"ran before but not
+in the last run, so its standing now is unknown"* - was **unreachable** for every scenario the plan
+did not name a test for. The id now matches against every test any kept run names, and that branch
+finally does its job.
+
+**Second: it said "nothing is checking it" without having looked at this project's tests.** Trace only
+ever sees tests that appear in a kept run, and the history kept here belongs to a different project
+entirely. So the sentence asserted something far stronger than the evidence: not "I could not find
+one" but "nothing checks this". The two cases now read differently, because they call for opposite
+actions - write a test, or keep your runs so the tests you have can be seen:
+
+> no run has been kept for this project, so Tewip has no list of its tests to match against - **this
+> is not a claim that nothing checks it**. Run `tewip explain <report>` once and ask again
+
+> no test among the **2,941** that the **650** kept run(s) name matches it, so nothing **Tewip can
+> see** is checking it
+
+That second number is the Phase 59 lesson applied: an answer that says what it searched can be
+disagreed with; one that does not cannot.
+
+1,099 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

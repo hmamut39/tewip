@@ -2,6 +2,10 @@
 // not a guess - every answer names the run it came from - and that a person's correction outranks
 // Tewip's own conclusion, because what the team decided beats what the tool decided.
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readJsonl } from '../../reporters/store.ts';
 import { describe, it } from 'node:test';
 import { memories, recall, renderRecall } from '../recall/recall.ts';
 import { errorShape } from '../signature.ts';
@@ -83,5 +87,48 @@ describe('what the project already knows', () => {
     const history = memories([record('a > one', 'x'.repeat(500), 'ENV')]);
     assert.ok(history[0].error.length <= 220);
     assert.ok(!renderRecall('x'.repeat(500), recall('x'.repeat(500), history)).split(NL).some((l) => l.length > 400));
+  });
+});
+
+// Phase 54: the weekly shadow run had been red for three weeks and nobody was looking.
+//
+// It is the only thing measuring how good `explain` actually is - the command this whole project
+// was built for - and it died in two different places, neither of which anyone would notice from
+// the outside.
+describe('reading a JSONL file that only ever grows', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tewip-jsonl-'));
+
+  it('reads a file larger than one chunk without mangling a character', () => {
+    // `readFileSync(file, 'utf8')` builds one string, and a string in Node cannot exceed about
+    // 512MB. The shadow datasets only ever grow - every CI failure harvested from a public project
+    // is appended and kept - and gutenberg's crossed the limit, so every run since died on that
+    // line. Reading in chunks introduces its own hazard: a UTF-8 character straddling a chunk
+    // boundary decodes to U+FFFD and takes its whole line with it.
+    const file = join(dir, 'big.jsonl');
+    const rows: string[] = [];
+    for (let i = 0; i < 120_000; i += 1) rows.push(JSON.stringify({ i, s: `ünïcödé-Ⅷ-日本語-${'x'.repeat(60)}` }));
+    writeFileSync(file, `${rows.join('\n')}\n`);
+
+    const back = readJsonl<{ i: number; s: string }>(file);
+    assert.equal(back.length, 120_000);
+    assert.equal(back.filter((r) => !r.s.startsWith('ünïcödé-Ⅷ-日本語-')).length, 0, 'a character was split across a chunk');
+    assert.equal(back[0].i, 0);
+    assert.equal(back[back.length - 1].i, 119_999);
+  });
+
+  it('still skips a malformed line rather than losing the file', () => {
+    const file = join(dir, 'ragged.jsonl');
+    writeFileSync(file, '{"a":1}\n{"a":2}\n\n{"bad"\n{"a":3}\n');
+    assert.deepEqual(readJsonl(file), [{ a: 1 }, { a: 2 }, { a: 3 }]);
+  });
+
+  it('reads the last line when the file does not end in a newline', () => {
+    const file = join(dir, 'nonl.jsonl');
+    writeFileSync(file, '{"a":1}\n{"a":2}');
+    assert.equal(readJsonl(file).length, 2);
+  });
+
+  it('yields nothing for a file that is not there', () => {
+    assert.deepEqual(readJsonl(join(dir, 'absent.jsonl')), []);
   });
 });

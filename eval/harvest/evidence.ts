@@ -3,7 +3,7 @@
 // again, whether the same test also fails on unrelated branches). Labels are decided from
 // this evidence before the pipeline's answers are looked at.
 // Usage: node eval/harvest/evidence.ts <source> [dataset name, default = source]
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lastFailedAttempts } from '../../engine/dataset.ts';
 import { datasetFiles, readJsonl, readRunSummaries, readTriageRecords } from '../../reporters/store.ts';
@@ -148,7 +148,15 @@ async function main(): Promise<void> {
   }
 
   const target = join(files.dir, 'evidence.jsonl');
-  writeFileSync(target, out.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf8');
+  // The directory, before writing into it. A project with no failing runs in the window harvests
+  // nothing, so nothing creates the dataset directory, and this line then threw ENOENT and failed
+  // the whole job. The weekly shadow run - the only thing measuring how good `explain` actually is -
+  // had been red for three weeks on exactly that, with no symptom but a tick nobody was watching.
+  //
+  // A week with no failures is a result, not an error: it writes an empty evidence file and says so.
+  mkdirSync(files.dir, { recursive: true });
+  writeFileSync(target, out.length > 0 ? out.map((e) => JSON.stringify(e)).join('\n') + '\n' : '', 'utf8');
+  if (out.length === 0) console.log(`[evidence] nothing to write: no failing run in this window for ${target}`);
   const counts = out.reduce<Record<string, number>>((acc, e) => ({ ...acc, [e.basis]: (acc[e.basis] ?? 0) + 1 }), {});
   console.log(`[evidence] ${out.length} case(s) written to ${target}`);
   console.log(counts);

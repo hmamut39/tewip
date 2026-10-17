@@ -3590,7 +3590,16 @@ request. The line-count step is one pipeline and one `awk` on purpose: a `while 
 pipe counts in a subshell and loses the result, which is how a check like that comes to pass while
 finding things.
 
-Extension 0.13.0. 1,074 tests, now run somewhere other than one laptop.
+**The first CI run then reported 1,069 of the 1,074.** The missing five were the MCP server suite,
+skipped unless `data/triage.jsonl` happened to exist - and `data/` is gitignored, only the Playwright
+reporter writes that file, and no workflow had ever run the suite. The MCP server is published to the
+registry on every tag, which made those the tests least able to be skipped and the ones being
+skipped. They now build their own dataset in a temporary folder and point the server at it with
+`TRIAGE_DATA_DIR`, the same switch the drift lab uses, and the triage-board test asserts the
+**synthetic run id** rather than the shape of a heading - without that, the test passes off whatever
+is in the author's data directory, which is how it came to run nowhere else in the first place.
+
+Extension 0.13.0. 1,074 tests, 0 skipped, now run somewhere other than one laptop.
 
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.

@@ -49,7 +49,11 @@ const PATTERNS: Array<{ kind: string; what: string; re: RegExp; minEntropy?: num
   { kind: 'sendgrid-key', what: 'a SendGrid key', re: /\b(SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
   { kind: 'twilio-key', what: 'a Twilio key', re: /\b(SK[a-f0-9]{32})\b/g },
   { kind: 'digitalocean-token', what: 'a DigitalOcean token', re: /\b(dop_v1_[a-f0-9]{64})\b/g },
-  { kind: 'private-key', what: 'a private key', re: /(-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----)/g, minEntropy: 0 },
+  // The header *and* some key after it. Matching the header alone made a constant that merely
+  // names the format into a leaked key: Keycloak's PemUtils.java declares
+  // `BEGIN_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----"` so that it can recognise one, and Tewip
+  // told Red Hat they had committed two private keys. There is no key on those lines at all.
+  { kind: 'private-key', what: 'a private key', re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----[\r\n\s]+([A-Za-z0-9+/=]{20,})/g, minEntropy: 0 },
   { kind: 'connection-string', what: 'a database URL with a password in it', re: /\b((?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^:\s'"]+:([^@\s'"]{6,})@[^\s'"]+)/g },
   { kind: 'jwt', what: 'a signed token (JWT)', re: /\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})(?![A-Za-z0-9_-])/g },
   // A password in a web address leaks the same way a database URL does, and is easier to miss.
@@ -71,7 +75,11 @@ export function entropyOf(value: string): number {
 
 const PLACEHOLDER_WORDS = /example|placeholder|dummy|sample|changeme|your[-_ ]?(?:key|token|secret|api)|xxxx|redacted|fake|notreal|test[-_]?key|<[^>]+>|\$\{|\{\{/i;
 /** Files whose whole purpose is to show the shape of a secret, not to hold one. */
-const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\\/]*\.(?:md|rst|txt|adoc)|[^\\/]*example[^\\/]*|[^\\/]*sample[^\\/]*)$/i;
+// An OpenAPI schema is documentation of an API, and every credential in one is an example by
+// construction - nocodb's swagger.json nests them three deep under "Example 1", too far for a
+// one-line lookback to see. The file says what it is, which is a steadier signal than the shape
+// of the JSON around the value.
+const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\\/]*\.(?:md|rst|txt|adoc)|[^\\/]*example[^\\/]*|[^\\/]*sample[^\\/]*|(?:swagger|openapi)[\w.-]*\.(?:json|ya?ml))$/i;
 
 /**
  * Why this match is probably not a live credential, or null when nothing says so.
@@ -82,9 +90,13 @@ const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\
  * there is, and a key pasted into an example file by accident is one of the commonest ways
  * credentials leak. That case is now shown as a template finding instead of being dismissed.
  */
-export function looksPlanted(value: string, line: string, file: string): string | null {
+export function looksPlanted(value: string, line: string, file: string, before = ''): string | null {
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
   if (PLACEHOLDER_WORDS.test(line)) return 'the line around it says it is an example';
+  // JSON and YAML put the key on its own line when the value is long, and an OpenAPI schema is all
+  // long values. nocodb declares `"example":` and then the token underneath it, so reading only the
+  // token's line found nothing and the sample JWTs in its API documentation were reported as real.
+  if (/"?(?:example|sample|placeholder|default|demo)"?\s*:\s*$/i.test(before.trim())) return 'the key above it says it is an example';
   if (/(.)\1{5,}/.test(value)) return 'the value repeats one character, so it is a stand-in';
   return null;
 }
@@ -168,7 +180,7 @@ export function scanSecrets(root: string, files = sourceFiles(root)): SecretFind
           line,
           evidence: redact(lines[line - 1] ?? '', value),
           entropy: Number(entropy.toFixed(2)),
-          placeholder: looksPlanted(value, lines[line - 1] ?? '', rel),
+          placeholder: looksPlanted(value, lines[line - 1] ?? '', rel, lines[line - 2] ?? ''),
           template: inATemplate(rel),
         });
       }

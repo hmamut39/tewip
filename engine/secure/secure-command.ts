@@ -119,20 +119,25 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
 
   // One check can change what another means: a secret in a file the application serves is not
   // "never left the machine", whatever git says about it.
-  const joined = reconcile(items);
-  items.length = 0;
-  items.push(...joined);
+  //
+  // Assigned, not emptied and refilled. `reconcile` returns the array it was given when there is no
+  // web finding to reconcile against - which is every run without `--url`, so almost every run - and
+  // `items.length = 0` then emptied the very array the next line was about to copy back in. Every
+  // secret found was discarded between finding it and reporting it, and the report said "0 need
+  // someone now", which is what a clean repository says too.
+  //
+  // Found in Phase 51 by scanning Keycloak: 49 secrets located, 7 of them triaged as real risks, and
+  // a report that mentioned none of them.
+  let settled = reconcile([...items]);
 
   // A person's decision about a finding wins over Tewip's, and says whose it was.
   const corrections = loadVerdicts(root);
-  const decided = items.map((item) => {
+  settled = settled.map((item) => {
     const said = verdictFor('security', item.where, corrections) ?? verdictFor('security', item.title, corrections);
     return said ? { ...item, verdict: said.verdict as typeof item.verdict, why: `${saidByAPerson(said)} (Tewip had said ${item.verdict})` } : item;
   });
-  items.length = 0;
-  items.push(...decided);
-  items.sort(worstFirst);
-  const report = renderSecurity(items, checked, notChecked, root);
+  settled.sort(worstFirst);
+  const report = renderSecurity(settled, checked, notChecked, root);
   console.log(report);
 
   if (cmd.out) {
@@ -140,5 +145,5 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
     writeFileSync(resolve(cmd.out), `${report}\n`, 'utf8');
     console.log(`\nWritten to ${cmd.out}`);
   }
-  return items;
+  return settled;
 }

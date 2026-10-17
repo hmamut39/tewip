@@ -69,6 +69,10 @@ const SECRET_SEVERITY: Record<string, 'critical' | 'high' | 'medium'> = {
   'jwt': 'medium',
 };
 
+/** A path whose job is to hold test data. */
+const IN_A_TEST =
+  /(^|\/)(tests?|spec|specs|__tests__|testsuite|e2e|fixtures?|testdata|mocks?)(\/|$)|[._-](test|spec)\.[a-z]+$|Tests?\.(java|kt|cs|scala)$|(^|\/)(test|spec|mock|fixture)[-_][\w-]*\.[a-z]+$/i;
+
 export function triageSecret(finding: SecretFinding, root: string, accepted: Set<string>): SecurityItem {
   const where = `${finding.file}:${finding.line}`;
   const key = `secret ${where}`;
@@ -93,6 +97,21 @@ export function triageSecret(finding: SecretFinding, root: string, accepted: Set
       severity: 'medium',
       why: `${finding.evidence} - the file is a template or documentation, but the value itself does not say it is an example`,
       next: 'check whether this was ever a working credential; if it was, rotate it and replace it here with an obvious placeholder',
+    };
+  }
+  // A credential committed on purpose, in a file whose whole job is to hold one. Keycloak's
+  // PemUtilsTest.java carries three keypairs so that it can test reading keypairs, and calling those
+  // "needs someone now" buries the one finding that might not be a fixture under six that are.
+  //
+  // Shown rather than hidden, for the same reason a template is: the commonest accident there is, is
+  // a working key pasted where a fake one belonged. It sits below the ones that need acting on now.
+  if (IN_A_TEST.test(finding.file.split(String.fromCharCode(92)).join('/'))) {
+    return {
+      ...base,
+      verdict: 'not-reachable',
+      severity: 'medium',
+      why: `${finding.evidence} - this is a test file, so the value is probably a fixture put there on purpose`,
+      next: 'confirm it was never a working credential; if it was, rotate it and replace it here with a generated one',
     };
   }
   const tracked = isTracked(root, finding.file);

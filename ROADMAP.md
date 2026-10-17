@@ -3000,6 +3000,50 @@ which is the regression check that matters most for this command.
 The corpus is now **eleven projects and eighteen checks**, and `access` has been measured against
 React, Angular, Vue, Svelte, Razor and Nunjucks.
 
+### Phase 51: `secure` Found Secrets and Reported None of Them
+
+Twenty-nine verbs had never had a field trial. `secure` was chosen because its failure mode is the
+most expensive one there is - telling a team they have committed a credential - and because the
+corpus contains a **password manager** and an **identity server**, both full of test fixtures that
+look exactly like leaks.
+
+The headline is not a false positive.
+
+**On Keycloak the scanner located 49 secrets, triage ranked 7 of them as real risks, and the report
+said "0 need someone now".** Every finding was discarded between being found and being reported:
+
+```ts
+const joined = reconcile(items);   // returns `items` itself when there is no web finding
+items.length = 0;                  // so this empties `joined` too - they are one array
+items.push(...joined);             // and this pushes nothing
+```
+
+`reconcile` returns the array it was handed when there is nothing to reconcile against, which is
+every run without `--url` - almost every run. A zero here reads exactly like a clean repository, and
+that is what the report has been saying since the command was written. Phase 50's sentence applies
+again, four days later: *a zero is the hardest wrong answer to notice, because it looks like the
+answer you wanted.*
+
+With the findings flowing, four false-positive classes had to go, every one of them verified by hand
+against the source:
+
+- **A PEM header with no key under it.** `PemUtils.java` declares
+  `BEGIN_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----"` so that Keycloak can *recognise* a key. The
+  pattern matched the header alone, with `minEntropy: 0`, and Tewip told Red Hat it had leaked two
+  private keys that do not exist.
+- **Keys a test file keeps on purpose.** `PemUtilsTest.java` carries three keypairs so that it can
+  test reading keypairs. They are shown, as a template is, but below the things that need acting on.
+- **A value whose key sits on the line above it.** JSON puts the key on its own line when the value
+  is long, and `looksPlanted` only read the value's own line.
+- **OpenAPI schemas.** nocodb nests its sample tokens three deep under `"Example 1"`, too far for any
+  lookback. The file says what it is, which is a steadier signal than the shape of the JSON around it.
+
+**Keycloak went from 7 "needs someone now" to 0**, nocodb from 5 to 0, and what survives across six
+projects is **nine findings, all defensible**: saleor defaults to `postgres://saleor:saleor@localhost`
+in `settings.py`, bitwarden ships a signed licence key in `GlobalSettings.cs`, and the rest are CI
+service credentials. Hardcoded default credentials in production settings are exactly what a security
+reviewer flags, and Tewip now says so instead of saying nothing.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

@@ -147,3 +147,73 @@ describe('the report', () => {
     assert.match(report, /not a prediction/);
   });
 });
+
+// Phase 52: `pick` measured against five real merged Saleor pull requests.
+//
+// It narrowed 1,229 test files to one and called the other 1,228 "left out because of a fact about
+// the source, not a prediction". The fact was wrong.
+describe('whether anything in the project refers to a file', () => {
+  it('asks for the module name, not the file name', () => {
+    // The reference check searched for the basename *with its extension*, which is a JavaScript
+    // habit: a JS import often writes `./sorting.js` and nothing else does. Python writes
+    // `from ..utils.sorting import x`, Java `import com.x.Sorting`, C# `using X.Sorting`.
+    //
+    //   git grep -l -- "sorting.py"   ->  0 files
+    //   git grep -l -- "sorting"      ->  61 files
+    //
+    // Nothing matched, so the file counted as referenced nowhere - the one condition that lets
+    // selection proceed past a source file no test imports.
+    const nameFor = (file: string) => {
+      const base = file.split('/').pop() ?? '';
+      return base.replace(/\.[A-Za-z0-9]+$/, '') || base;
+    };
+    assert.equal(nameFor('saleor/graphql/utils/sorting.py'), 'sorting');
+    assert.equal(nameFor('src/Core/Settings/GlobalSettings.cs'), 'GlobalSettings');
+    assert.equal(nameFor('app/models/user.rb'), 'user');
+    // a dotfile keeps its name rather than becoming empty
+    assert.equal(nameFor('.eslintrc'), '.eslintrc');
+  });
+});
+
+describe('refusing to narrow', () => {
+  const base = { tests: tests('tests/a.test.ts', 'tests/b.test.ts'), browserTests: false, noHistory: true };
+
+  it('runs everything when a changed file can be traced to no test', () => {
+    // saleor/graphql/utils/sorting.py is shared GraphQL sorting code that every sortBy query runs
+    // through, and the suite has dozens of sorting test files. Skipping them on the strength of an
+    // import graph that cannot see a resolver chain is exactly the risk this command exists not to
+    // take - and its own report called the exclusions facts.
+    const picked = pick({
+      ...base,
+      changed: ['src/sorting.ts'],
+      reaching: new Map(),
+      unreferenced: [],
+    });
+    assert.match(picked.runEverything, /no test can be traced to src\/sorting\.ts/);
+    assert.deepEqual(picked.opaque, ['src/sorting.ts']);
+  });
+
+  it('still narrows when the tests really can be traced', () => {
+    // A selector that always says "run everything" is no selector. On Tewip's own TypeScript, where
+    // imports do carry the name, it still picks 2 files out of 91.
+    const picked = pick({
+      ...base,
+      changed: ['src/sorting.ts'],
+      reaching: new Map([['src/sorting.ts', [{ testFile: 'tests/a.test.ts', how: 'imports' }]]]),
+      unreferenced: [],
+    });
+    assert.equal(picked.runEverything, '');
+    assert.deepEqual(picked.mustRun.map((m) => m.testFile), ['tests/a.test.ts']);
+    assert.deepEqual(picked.skipped.map((s) => s.testFile), ['tests/b.test.ts']);
+  });
+
+  it('separates "nothing refers to it" from "nothing could be traced"', () => {
+    // The exception this was built for. A file nothing refers to anywhere cannot be noticed by any
+    // test, and treating that as "cannot tell" forced the whole suite on every dispatcher change.
+    // It is still said out loud rather than narrowed around silently - and it says the opposite
+    // thing from the untraceable case, which is what makes the distinction worth keeping.
+    const picked = pick({ ...base, changed: ['src/orphan.ts'], reaching: new Map(), unreferenced: ['src/orphan.ts'] });
+    assert.match(picked.runEverything, /nothing in this project refers to src\/orphan\.ts/);
+    assert.deepEqual(picked.opaque, [], 'not an untraceable file: a file nothing names');
+  });
+});

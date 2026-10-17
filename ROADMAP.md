@@ -3044,6 +3044,50 @@ in `settings.py`, bitwarden ships a signed licence key in `GlobalSettings.cs`, a
 service credentials. Hardcoded default credentials in production settings are exactly what a security
 reviewer flags, and Tewip now says so instead of saying nothing.
 
+### Phase 52: `pick` Told You to Skip the Tests That Would Have Caught It
+
+`pick` makes the sharpest falsifiable claim of any command here - *"narrows a test run from facts in
+the source, and refuses to narrow when it cannot show the rest are unaffected"* - so it was run
+against the five real merged Saleor pull requests from Phase 46.
+
+On `#19798`, which changes `saleor/graphql/utils/sorting.py`:
+
+> **1 of 1229 test file(s)** could notice it - 0% of the suite. 1228 can be left out.
+>
+> Each of these is left out because of a fact about the source, not a prediction.
+
+The fact was wrong. `sorting.py` is the shared GraphQL sorting code that every `sortBy` query in the
+product runs through, and the suite has dozens of sorting test files - customers, promotions,
+vouchers, gift cards. All of them were in the 1,228.
+
+The cause is one line. Before narrowing past a source file no test imports, `pick` checks whether
+*anything in the project refers to it at all* - the single condition that lets selection continue -
+and it asked by searching for the basename **with its extension**:
+
+```
+git grep -l -- "sorting.py"   ->  0 files
+git grep -l -- "sorting"      ->  61 files
+```
+
+That is a JavaScript habit. A JS import often writes `./sorting.js`; Python writes
+`from ..utils.sorting import x`, Java `import com.x.Sorting`, C# `using X.Sorting`, Ruby
+`require 'sorting'`. **In every language whose imports do not carry the file extension - which is
+most of them - a changed source file was classified "referenced nowhere", and the whole suite was
+dropped on that basis.**
+
+The extension comes off. A name like `utils` or `index` will now match half a repository, and that
+is the right direction to be wrong in: over-matching means "this is referenced", which stops the
+narrowing; under-matching skips the tests that would have caught the change.
+
+**After the fix, all five Saleor pull requests correctly say "Run the whole suite", naming the file
+it could not trace.** And `pick` still narrows where imports really do show coverage - on Tewip's own
+TypeScript it picks **2 of 91 files**, so a selector that only ever says "run everything" is not what
+this became.
+
+That leaves `pick` honest and, on a Python GraphQL codebase, not yet useful - the same shape as
+`done` in Phase 46. Both are limited by the same thing: coverage followed through imports cannot see
+a framework entry point. Knowing that is worth more than a number that was never true.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

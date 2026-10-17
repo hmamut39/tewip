@@ -130,8 +130,27 @@ function mentionsOf(root: string, file: string, tests: string[]): string[] {
 }
 
 /** Does anything at all in the project refer to this file? Used only to tell "unknown" from "unreachable". */
+/**
+ * Whether anything in the project refers to this file at all.
+ *
+ * This searched for the file name *with its extension*, which is a JavaScript habit: a JS import
+ * often writes `./sorting.js`, and nothing else does. Python writes `from ..utils.sorting import x`,
+ * Java writes `import com.x.Sorting`, C# writes `using X.Sorting`. In all of them the extension
+ * never appears, so the search found nothing and the file was taken to be referenced nowhere.
+ *
+ * That is the most dangerous answer this file can produce. "Nothing refers to it" is the one
+ * condition that lets selection proceed past a source file no test imports - and on saleor it let
+ * `pick` narrow 1,229 test files down to **one**, skipping every sorting test in the suite, for a
+ * change to the GraphQL sorting code that all of them run through. The command's own promise is to
+ * refuse to narrow when it cannot show the rest are unaffected, and here it could not.
+ *
+ * The extension comes off. A name like `utils` or `index` will now match half the repository, and
+ * that is the right direction to be wrong in: over-matching means "this is referenced", which stops
+ * the narrowing. Under-matching skips the tests that would have caught the change.
+ */
 function mentionedAnywhere(root: string, file: string): boolean {
-  const named = file.split('/').pop() ?? '';
+  const base = file.split('/').pop() ?? '';
+  const named = base.replace(/\.[A-Za-z0-9]+$/, '') || base;
   const where = spawnSync('git', ['grep', '-l', '--', named], { cwd: root, encoding: 'utf8', timeout: 60_000 });
   const hits = (where.stdout ?? '')
     .split(String.fromCharCode(10))

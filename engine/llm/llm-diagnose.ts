@@ -47,6 +47,14 @@ export function parseLlmOutput(raw: string): LlmOutput {
  * TEST_DATA both survive a retry too - so the answer becomes UNKNOWN, which routes the failure to a
  * person with the model's reasoning attached rather than replacing one guess with another.
  */
+/**
+ * The most this layer may claim, until a measured run says otherwise.
+ *
+ * Below 0.5 so that it routes to a person by the rule the prompt already states: "Low confidence
+ * routes the failure to a human". See the comment at the call site for the measurement.
+ */
+export const LLM_CONFIDENCE_CEILING = 0.45;
+
 export function contradictsHistory(category: RootCause, context: FailureContext): string | null {
   if (category !== 'REAL_BUG' && category !== 'LOCATOR_DRIFT') return null;
   if (context.thisRun?.anotherAttemptPassed) {
@@ -79,7 +87,22 @@ export async function llmDiagnose(context: FailureContext, rules: Diagnosis, cli
     }
     return {
       category: out.category,
-      confidence: out.confidence,
+      // Capped, because the number it reports is not the number it earns.
+      //
+      // Measured against 752 real labelled CI failures from WordPress/gutenberg - labels taken from
+      // what the developer actually changed to fix each one - this layer decided 90 and got 16
+      // right: **17.8%**. Seventy per cent of those failures are TIMING, so answering "TIMING" to
+      // everything would have scored about 70%. The model is four times worse than the most trivial
+      // baseline there is, and it was reporting 0.90 to 0.96 while being wrong.
+      //
+      // The rules layer, on the same data, is 98.5% and keeps its own confidence untouched.
+      //
+      // Nothing is discarded: the category and the reasoning are still reported, and a person still
+      // sees them. What changes is that no consumer downstream can mistake this for a settled
+      // answer - 0.7 is where a rule becomes actionable and 0.85 is where a fix may be attempted,
+      // and a layer at 17.8% has no business clearing either. Raise this when a measured run earns
+      // it, and not before.
+      confidence: Math.min(out.confidence, LLM_CONFIDENCE_CEILING),
       source: 'llm',
       model: client.model,
       engineVersion: `${rules.engineVersion}+${PROMPT_VERSION}`,

@@ -3173,6 +3173,57 @@ step summary, and was watched by nobody. A measurement that nothing acts on deca
 Phase 55 is the field trial this was supposed to be: what the shadow run actually says about
 `explain`, now that it can speak.
 
+### Phase 55: The Model Layer Was Four Times Worse Than Guessing, and Said 0.92
+
+With the shadow run alive again, it was finally possible to ask the question Phase 54 set up: how
+good is `explain`?
+
+**752 real labelled CI failures from WordPress/gutenberg**, labelled not by opinion but by reading
+what the developer actually changed to fix each one - *"fix only added a wait between the edits"* is
+TIMING, *"fix only replaced the locator"* is LOCATOR_DRIFT.
+
+```
+Rules layer:  662 decided, 652 correct (98.5%)
+LLM layer:     90 decided,  16 correct (17.8%)
+Overall:      668/752 = 88.8%   (target >= 80%: MET)
+```
+
+The headline passes its gate and the headline is carried entirely by the rules. **Seventy per cent
+of those failures are TIMING**, so a classifier that answered "TIMING" to everything and nothing
+else would have scored about 70%. The model layer scored 17.8% - four times worse than the most
+trivial baseline there is - while reporting confidences of 0.90 to 0.96. Almost every miss was a
+flaky timing failure called REAL_BUG or LOCATOR_DRIFT, which is the most expensive mistake this tool
+can make: it sends a team hunting a bug that is not there, and sounds certain doing it.
+
+Two changes, and the second is the one that matters.
+
+**The history now overrules the model.** The prompt has told it since llm-6 that a failure which
+passed on another attempt of the same code cannot be a real bug or a drifted locator, because both
+fail every time. It does not obey, so the same fact is checked in code. It refuses rather than
+rewrites - "cannot be REAL_BUG" is not "is TIMING", since ENV and TEST_DATA also survive a retry -
+and the verdict becomes UNKNOWN with the model's reasoning attached, for a person to read.
+
+Measured, that guard **fired zero times**, and the zero is the finding. The decisive evidence lives
+in a run that happens days later; at the moment of failure it does not exist yet. The model is being
+asked to predict what a developer will do next week, from a page snapshot.
+
+**So the real fix is calibration, not accuracy.** A layer that is 17.8% right has no business
+claiming 0.92, and this product's whole argument is that every answer carries what it is worth.
+Its confidence is now capped below the threshold that routes a failure to a person - beneath 0.7,
+where a rule becomes actionable, and far beneath 0.85, where a fix may be attempted. The category
+and the reasoning are still reported and still read; what changes is that nothing downstream can
+mistake them for a settled answer.
+
+**Raise the ceiling when a measured run earns it, and not before.** That sentence is in the code,
+beside the number.
+
+A note on the deeper question, which is not answered here: whether this task is answerable at all
+from what is available at failure time. The rules reach 98.5% on the 88% of failures they can
+decide; the remainder may be the cases where the evidence genuinely does not contain the answer yet.
+If so, the honest product is one that says so - which, with the ceiling in place, it now does.
+
+1,016 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

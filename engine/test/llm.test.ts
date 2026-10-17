@@ -1,7 +1,7 @@
 // Unit tests for the LLM layer with a fake client: contract enforcement and routing.
 // No network calls; nothing here measures how well a real model classifies.
 import assert from 'node:assert/strict';
-import { contradictsHistory } from '../llm/llm-diagnose.ts';
+import { LLM_CONFIDENCE_CEILING, contradictsHistory } from '../llm/llm-diagnose.ts';
 import { describe, it } from 'node:test';
 import type { Diagnosis, RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { HistoryIndex } from '../history.ts';
@@ -167,5 +167,17 @@ describe('a verdict the run history already rules out', () => {
     // The guard must not swallow the finding the tool exists to make.
     assert.equal(contradictsHistory('REAL_BUG', context()), null);
     assert.equal(contradictsHistory('LOCATOR_DRIFT', context()), null);
+  });
+});
+
+describe('what the model layer is allowed to claim', () => {
+  it('caps its confidence at the measured ceiling', () => {
+    // Measured against 752 real labelled CI failures from WordPress/gutenberg: 90 decided, 16
+    // correct, 17.8%. Seventy per cent of those failures are TIMING, so answering TIMING to
+    // everything scores about 70% - the model is four times worse than the most trivial baseline
+    // there is, and it was reporting 0.90 to 0.96 while being wrong.
+    assert.ok(LLM_CONFIDENCE_CEILING < 0.5, 'below the threshold that routes a failure to a person');
+    assert.ok(LLM_CONFIDENCE_CEILING < 0.7, 'below the threshold at which a rule becomes actionable');
+    assert.ok(LLM_CONFIDENCE_CEILING < 0.85, 'below the threshold at which a fix may be attempted');
   });
 });

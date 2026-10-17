@@ -152,7 +152,9 @@ Usage:
                                     report and it reads that too - Lighthouse runs axe rules, so
                                     either works. Contrast moves out of the unchecked list, rules
                                     that map to no WCAG criterion are reported as advice rather than
-                                    barriers (51 of 174 findings on nine real pages), and what the
+                                    barriers (51 of 174 findings on nine real pages run through axe;
+                                    a Lighthouse report runs a WCAG-aligned subset and produced 2 of
+                                    363 on six real pages, so expect little advice from one), and what the
                                     tool could not determine becomes a question. Lighthouse's ten
                                     manual checks are questions too, never passes. No model, no cost.
   tewip standards [--diff main...HEAD] [--strict] [--out standards.md]

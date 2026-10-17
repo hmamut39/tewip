@@ -16,6 +16,7 @@ import { accessibilityFromLighthouse, criteriaFromLighthouse, rulesRunByLighthou
 import { readLighthouse } from '../perf/lighthouse.ts';
 import { readBrowserRun } from '../access/access-command.ts';
 import { stillNotChecked } from '../access/merge.ts';
+import { renderAccess } from '../access/render.ts';
 
 function a11yAudit(id: string, score: number | null, mode = 'binary', nodes: unknown[] = []) {
   return {
@@ -149,5 +150,47 @@ describe('one command, either tool', () => {
     const run = readBrowserRun(axe);
     assert.equal(run.source, 'axe');
     assert.equal(run.findings[0].criterion, '4.1.2');
+  });
+});
+
+// Phase 68: field-tested with real Lighthouse accessibility runs over six real pages - gov.uk, MDN,
+// Hacker News, python.org, w3.org/WAI and Wikipedia. The findings themselves were right and
+// checkable by hand. The summary line was not.
+describe('the one line a reader actually reads', () => {
+  const finding = (rule: string, severity: 'blocker' | 'serious' = 'blocker') =>
+    ({ rule, severity, selector: 'div', html: '<div>', why: 'because', criterion: '1.1.1', level: 'A' }) as never;
+  const browser = (barriers: unknown[], questions: unknown[] = [], advice: unknown[] = []) =>
+    ({ tool: 'lighthouse' as const, pages: ['https://example.com'], barriers, questions, advice, superseded: [], ranRules: new Set<string>() }) as never;
+  const result = (over: Record<string, unknown>) =>
+    ({ barriers: [], questions: [], accepted: [], filesRead: 0, ...over }) as never;
+
+  it('counts barriers as rules and says in how many places', () => {
+    // Hacker News came back as "244 barriers", of which 238 were one rule - colour contrast - on one
+    // page. Arithmetically right and useless: five things are wrong here, one of them in 238 places.
+    const many = [...Array(238)].map(() => finding('color-contrast')).concat([finding('image-alt'), finding('label')]);
+    const report = renderAccess(result({ browser: browser(many) }), '/project');
+    assert.match(report, /\*\*3 barriers the browser run proves, in 240 places/);
+  });
+
+  it('does not print two different counts both called barriers', () => {
+    // "244 barriers the browser run proves, 0 barriers (0 that stop somebody outright)" - a reader
+    // cannot tell whether the second number corrects the first. With no markup read there is no
+    // markup count to give: zero files examined is not a finding of zero.
+    const report = renderAccess(result({ browser: browser([finding('label')]) }), '/project');
+    const headline = report.split(String.fromCharCode(10)).find((l) => l.startsWith('**')) ?? '';
+    assert.doesNotMatch(headline, /barriers.*barriers/, 'one sentence, one meaning of the word');
+    assert.doesNotMatch(headline, /0 barrier/, 'nothing was read, so nothing is reported as zero');
+  });
+
+  it('still reports the markup count when markup really was read', () => {
+    const report = renderAccess(result({ filesRead: 12, barriers: [finding('image-alt')], browser: browser([]) }), '/project');
+    const headline = report.split(String.fromCharCode(10)).find((l) => l.startsWith('**')) ?? '';
+    assert.match(headline, /no barrier in the browser run/);
+    assert.match(headline, /1 barrier in the markup/, 'and says which half it came from');
+  });
+
+  it('says nothing was checked when no markup was read and no browser run was given', () => {
+    const report = renderAccess(result({ questions: [finding('x')] }), '/project');
+    assert.match(report, /no markup file was read, so nothing was checked/);
   });
 });

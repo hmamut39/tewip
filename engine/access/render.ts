@@ -66,15 +66,34 @@ export function renderAccess(result: Omit<AccessResult, 'report'>, scanned: stri
     lines.push('No barrier was found that reading the markup can settle, and nothing needs a decision.', '');
   } else {
     const stopping = barriers.filter((f) => blocks(f.rule)).length;
-    const counts = [
-      `${barriers.length} ${barriers.length === 1 ? 'barrier' : 'barriers'} (${stopping} that stop somebody outright)`,
-      `${questions.length} for a person to settle`,
-    ];
-    if (accepted.length > 0) counts.push(`${accepted.length} already accepted`);
+    const counts: string[] = [];
     if (browser) {
-      counts.unshift(`${browser.barriers.length} barriers the browser run proves`);
-      if (browser.questions.length > 0) counts.push(`${browser.questions.length} the browser could not determine`);
+      // How many **rules**, then how many places. On Hacker News the browser count was "244
+      // barriers", of which **238 were one rule** - colour contrast - on one page. The number was
+      // arithmetically right and told the reader nothing they could act on: five things are wrong
+      // here, one of them in 238 places. A count of occurrences presented as a count of problems
+      // makes a page look hopeless and hides which five things to fix.
+      const rules = new Set(browser.barriers.map((f) => f.rule)).size;
+      counts.push(
+        browser.barriers.length === 0
+          ? 'no barrier in the browser run'
+          : `${rules} ${rules === 1 ? 'barrier' : 'barriers'} the browser run proves, in ${browser.barriers.length} ${browser.barriers.length === 1 ? 'place' : 'places'}`,
+      );
     }
+    // And this count is from reading markup, which the sentence never said. Beside a browser count
+    // also called "barriers", a reader saw "244 barriers..., 0 barriers" and could not tell whether
+    // the second number corrected the first. With no markup read at all there is no count to give:
+    // zero files examined is not a finding of zero.
+    if (filesRead > 0) {
+      counts.push(`${barriers.length} ${barriers.length === 1 ? 'barrier' : 'barriers'} in the markup (${stopping} that stop somebody outright)`);
+      counts.push(`${questions.length} for a person to settle`);
+    } else if (!browser) {
+      counts.push('no markup file was read, so nothing was checked');
+    } else if (questions.length > 0) {
+      counts.push(`${questions.length} for a person to settle`);
+    }
+    if (accepted.length > 0) counts.push(`${accepted.length} already accepted`);
+    if (browser && browser.questions.length > 0) counts.push(`${browser.questions.length} the browser could not determine`);
     lines.push(`**${counts.join(', ')}.**`, '');
   }
 
@@ -88,8 +107,15 @@ export function renderAccess(result: Omit<AccessResult, 'report'>, scanned: stri
 
   if (browser && browser.advice.length > 0) {
     // Kept out of the counts above on purpose. These are axe's own best-practice rules, which test
-    // no standard: on nine real pages they were 51 of 174 findings, outnumbering every real barrier.
-    // Reporting them as equals is how a team learns to ignore the whole report.
+    // no standard: on nine real pages **run through axe** they were 51 of 174 findings, outnumbering
+    // every real barrier. Reporting them as equals is how a team learns to ignore the whole report.
+    //
+    // That 51-of-174 is an axe number and only an axe number. Measured again on six real pages
+    // through **Lighthouse** - gov.uk, MDN, Hacker News, python.org, w3.org/WAI, Wikipedia - advice
+    // was 2 of 363 findings, 0.6%, because Lighthouse's accessibility category runs a WCAG-aligned
+    // subset of axe and leaves nearly all the best-practice rules out. Both numbers are real; a
+    // published one without the condition it was measured under is the kind of claim this project
+    // exists to stop making.
     const rules = [...new Set(browser.advice.map((f) => f.rule))].sort();
     lines.push('## Advice, not barriers', '');
     lines.push(

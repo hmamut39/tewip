@@ -3905,6 +3905,51 @@ is the shape this project keeps finding, and it is no less easy to write than to
 
 1,104 tests.
 
+### Phase 68: "244 Barriers", And 238 Of Them Were One Thing
+
+`tewip access` was the one command carrying a published accuracy claim in its own help text, so there
+was a number to check rather than only behaviour to watch. Six real pages were audited with real
+Lighthouse 12 and real headless Chrome - gov.uk, MDN, Hacker News, python.org, w3.org/WAI, Wikipedia -
+and every finding was verified by hand against the raw report. **The findings were right.** Hacker
+News really does serve unlabelled spacer images and an unlabelled search input, and the report quotes
+each element with its WCAG criterion and its EN 301 549 clause beside it.
+
+The summary line was the problem, twice.
+
+**It counted occurrences and called them barriers.** Hacker News came back as **244 barriers** - of
+which **238 were one rule**, colour contrast, on one page. The number was arithmetically correct and
+told a reader nothing they could act on: five things are wrong here, one of them in 238 places. A
+count of occurrences presented as a count of problems makes a page look hopeless and hides which five
+things to fix. It now reads:
+
+> **5 barriers the browser run proves, in 244 places, 10 the browser could not determine.**
+
+and gov.uk, which has no failing audit at all, reads *"no barrier in the browser run"* rather than a
+zero among other zeros.
+
+**And it printed two different counts both called "barriers".** The browser count and the
+markup-reading count sat in one sentence - *"244 barriers the browser run proves, **0 barriers** (0
+that stop somebody outright)"* - so the second number read as a correction of the first. It is now
+labelled as being from the markup, and when **no markup file was read at all** no count is printed
+for it, because zero files examined is not a finding of zero.
+
+**The published claim turned out to be true under a condition it never stated.** The help text says
+rules mapping to no WCAG criterion are reported as advice rather than barriers, *"51 of 174 findings
+on nine real pages"* - 29%. Measured again over these six pages: **2 of 363, or 0.6%.** Both numbers
+are real. The first was measured on **axe** runs, where axe's best-practice rules run by default; the
+second on **Lighthouse**, whose accessibility category runs a WCAG-aligned subset and leaves nearly
+all of them out. A reader using Lighthouse would never see that ratio and might reasonably conclude
+the feature was not working. The claim now carries the condition it was measured under, in the help
+text and beside the rationale in the code.
+
+One decision deliberately left alone: advice is excluded from the headline counts, with a stated
+reason - *"reporting them as equals is how a team learns to ignore the whole report"* - and it gets
+its own section saying it is "somebody's good idea rather than a standard". That is a documented
+judgement supported by the axe measurement, and overturning it on taste would be the Phase 64 mistake
+again.
+
+1,108 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

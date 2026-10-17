@@ -17,7 +17,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { choose } from '../engine/pick/pick-command.ts';
 import { renderPick } from '../engine/pick/pick.ts';
-import { readCiContext } from './context.ts';
+import { diffRange, readCiContext } from './context.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -29,7 +29,7 @@ function main(): void {
   // as the runner may or may not have the base fetched; a shallow checkout has neither, and then nothing
   // is claimed.
   const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
-  const chosen = [`origin/${base}...HEAD`, `${base}...HEAD`].map((range) => ({ range, result: choose({ root: ctx.workspace, diff: range }) })).find((a) => a.result !== null);
+  const chosen = [diffRange(ctx), `origin/${base}...HEAD`, `${base}...HEAD`].map((range) => ({ range, result: choose({ root: ctx.workspace, diff: range }) })).find((a) => a.result !== null);
 
   if (!chosen?.result) {
     say(ctx, 'Tewip could not read what this change touched, so the whole suite should run. Set `fetch-depth: 0` on actions/checkout to let it narrow.');

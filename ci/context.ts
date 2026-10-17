@@ -21,6 +21,11 @@ export interface CiContext {
   sha: string;
   branch: string;
   defaultBranch: string;
+  /**
+   * For a push, the commit the branch was at before it. '' for a pull request, a branch's first
+   * push, or outside Actions. Needed because `origin/main...HEAD` is **empty** on a push to main.
+   */
+  pushedFrom: string;
   pr: PullRequest | null;
   token: string;
   apiUrl: string;
@@ -71,6 +76,8 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     sha: pr?.headSha ?? env.GITHUB_SHA ?? '',
     branch: pr?.headRef ?? env.GITHUB_REF_NAME ?? '',
     defaultBranch: event.repository?.default_branch ?? 'main',
+    // GitHub sends all zeros when the push created the branch, which is not a commit to diff from.
+    pushedFrom: pr || /^0*$/.test(String(event.before ?? '')) ? '' : String(event.before ?? ''),
     pr,
     token: env.TRIAGE_GITHUB_TOKEN ?? env.GITHUB_TOKEN ?? '',
     apiUrl: env.GITHUB_API_URL ?? 'https://api.github.com',
@@ -90,4 +97,25 @@ export function readCiContext(env: NodeJS.ProcessEnv = process.env): CiContext {
     testsDir: env.TRIAGE_TESTS_DIR || 'tests',
     stepSummary: env.GITHUB_STEP_SUMMARY || null,
   };
+}
+
+/**
+ * The range the change-based checks should read, and why it is not always "against the default
+ * branch".
+ *
+ * It was `origin/${pr?.baseRef ?? defaultBranch}...HEAD` everywhere, which is right for a pull
+ * request and right for a feature branch - and **empty on a push to the default branch**, because
+ * there HEAD *is* `origin/main`. Found by reading what Tewip's own self-check workflow uploaded:
+ * three of its five checks said "nothing to check" on a commit that changed ten files, and the
+ * summary above them read "5 checks ran, nothing blocking". Gating pull requests and also checking
+ * main after a merge is a normal setup, so this was half of every such install reporting a pass on
+ * a diff it never saw.
+ *
+ * On a push to the default branch the change is what the push added: `before...sha`. A push that
+ * created the branch has no `before`, so the last commit is the honest fallback.
+ */
+export function diffRange(ctx: CiContext): string {
+  if (ctx.pr) return `origin/${ctx.pr.baseRef}...HEAD`;
+  if (ctx.branch && ctx.branch !== ctx.defaultBranch) return `origin/${ctx.defaultBranch}...HEAD`;
+  return ctx.pushedFrom ? `${ctx.pushedFrom}...HEAD` : 'HEAD~1...HEAD';
 }

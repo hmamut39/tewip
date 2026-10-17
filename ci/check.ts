@@ -28,7 +28,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { readCiContext, type CiContext } from './context.ts';
+import { diffRange, readCiContext, type CiContext } from './context.ts';
 import { GitHub } from './github.ts';
 
 const NL = String.fromCharCode(10);
@@ -144,10 +144,17 @@ export function renderChecks(ran: Ran[], unknown: string[]): string {
   const blocking = ran.filter((r) => r.blocking);
   const lines = ['## Tewip', ''];
 
+  // "5 checks ran, nothing blocking" was printed above five checks of which three had nothing to
+  // look at - the push range was empty, so the diff-based ones saw no change at all. A reader takes
+  // that line as the verdict and never opens the five collapsed sections, so the line has to say how
+  // many of the checks actually had something in front of them.
+  const looked = ran.filter((r) => !r.idle);
   lines.push(
     blocking.length > 0
       ? `**${blocking.length} of ${ran.length} checks found something blocking.**`
-      : `**${ran.length} ${ran.length === 1 ? 'check' : 'checks'} ran, nothing blocking.**`,
+      : looked.length === 0
+        ? `**${ran.length} ${ran.length === 1 ? 'check' : 'checks'} ran and none of them had anything to look at.** That is not a pass: nothing was checked. Usually the diff was empty - set \`fetch-depth: 0\` on \`actions/checkout\`.`
+        : `**${looked.length} of ${ran.length} ${ran.length === 1 ? 'check' : 'checks'} had something to look at, and found nothing blocking.**`,
     '',
   );
 
@@ -176,9 +183,9 @@ async function main(): Promise<void> {
   for (const name of unknown) console.error(`[tewip] no check called "${name}"`);
   const gate = ctx.gate === 'blocking';
 
-  // The same range pick as pick mode: a pull request against its base, a branch against the default.
-  const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
-  const range = `origin/${base}...HEAD`;
+  // The same range pick as pick mode, and the same reason it is not simply "against the default
+  // branch": on a push to the default branch that range is empty. See `diffRange`.
+  const range = diffRange(ctx);
 
   const ran: Ran[] = [];
   for (const check of checks) {

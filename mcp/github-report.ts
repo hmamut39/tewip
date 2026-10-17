@@ -40,6 +40,36 @@ async function latestReports(repo: string, branch: string | undefined): Promise<
   return null;
 }
 
+/**
+ * Which of the artifact's reports to show, and in what order.
+ *
+ * This used to be two hard-coded names, `pr-comment.md` and `infra.md`, which are what the Action's
+ * *triage* mode writes. Its **check** mode writes a different set - `checks.md`, `done.md`,
+ * `schema.md`, `standards.md`, `vouch.md`, `access.md` - under the same artifact name, and both
+ * modes were read by the same two lines. Found by running `tewip ci hmamut39/tewip` against Tewip's
+ * own repository, whose self-check workflow runs in check mode: the artifact held 9KB of findings
+ * across six files and the command printed **167 characters** - a title, a run link, and nothing
+ * underneath. The answer to "why did CI fail on my PR?" was a URL.
+ *
+ * So the artifact decides what is shown, not this file. `pr-comment.md` leads when it exists because
+ * it is the one written to be read by a person on a pull request; `infra.md` stays behind its ENV
+ * count because it is about the machines rather than the change; everything else is named and shown.
+ */
+const LEADS = ['pr-comment.md', 'checks.md'];
+
+export function reportsIn(files: Map<string, Buffer>, envCount: number): Array<{ name: string; body: string }> {
+  const text = (name: string) => (files.get(name)?.toString('utf8') ?? '').trim();
+  const names = [...files.keys()].filter((n) => n.endsWith('.md'));
+  const ordered = [...LEADS.filter((n) => names.includes(n)), ...names.filter((n) => !LEADS.includes(n)).sort()];
+  return ordered
+    .filter((name) => (name === 'infra.md' ? envCount > 0 : true))
+    .map((name) => ({ name, body: text(name) }))
+    .filter((r) => r.body.length > 0);
+}
+
+/** A report's own heading if it has one, else its filename turned into words. */
+const titleOf = (name: string): string => name.replace(/\.md$/, '').replace(/[-_]/g, ' ');
+
 export async function githubCiReport(repo: string, pr?: number, branch?: string): Promise<string> {
   const head = pr ? (await ghApi<{ head: { ref: string } }>(`repos/${repo}/pulls/${pr}`)).head.ref : branch;
   const target = pr ? `PR #${pr} (${head})` : head ? `branch ${head}` : 'any branch';
@@ -53,15 +83,19 @@ export async function githubCiReport(repo: string, pr?: number, branch?: string)
     const bundle = JSON.parse(text('triage.json') || '{}') as { runUrl?: string; sha?: string; generatedAt?: string; items?: Array<{ diagnosis: { category: string } }>; fixPr?: string | null };
     const envCount = (bundle.items ?? []).filter((i) => i.diagnosis.category === 'ENV').length;
     const suite = artifact.name.replace(/^(?:tewip|triage-agent)-report-?/, '');
+    const reports = reportsIn(files, envCount);
+    // A header with nothing under it is the worst of the three possible answers here, because it
+    // reads as "CI is fine" to anyone who does not know what the artifact was supposed to contain.
+    const body =
+      reports.length > 0
+        ? reports.map((r, i) => (i === 0 && LEADS.includes(r.name) ? r.body : `## ${titleOf(r.name)}\n\n${r.body}`)).join('\n\n')
+        : `This run's \`${artifact.name}\` artifact has nothing Tewip can show. It holds ${files.size === 0 ? 'no files' : `${files.size} file(s): ${[...files.keys()].sort().join(', ')}`}, and none of them has any content. The run itself is at ${found.run.html_url}.`;
     sections.push(
       [
         `# Tewip CI report: ${repo}, ${target}${suite ? ` - suite "${suite}"` : ''}`,
         `Run: ${bundle.runUrl ?? found.run.html_url} · commit \`${(bundle.sha ?? found.run.head_sha).slice(0, 8)}\` · generated ${bundle.generatedAt ?? artifact.created_at}${bundle.fixPr ? ` · verified fix PR: ${bundle.fixPr}` : ''}`,
-        text('pr-comment.md'),
-        envCount > 0 ? text('infra.md') : '',
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
+        body,
+      ].join('\n\n'),
     );
   }
   return cap(sections.join('\n\n---\n\n'));

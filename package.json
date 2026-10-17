@@ -1,6 +1,6 @@
 {
   "name": "tewip-ai",
-  "version": "0.68.0",
+  "version": "0.69.0",
   "mcpName": "io.github.hmamut39/tewip",
   "description": "Tewip finds why each failing test failed - real bug, flaky test, environment, test data or changed selector - for any stack, from the command line, CI, or your editor.",
   "keywords": [

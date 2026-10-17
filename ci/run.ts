@@ -26,7 +26,7 @@ import { ENGINE_VERSION } from '../engine/engine.ts';
 import { datasetFiles, readRunSummaries, readTriageRecords } from '../reporters/store.ts';
 import type { FixResult } from '../engine/autofix/autofix.ts';
 import { loadCorrections, saveCorrections } from '../engine/corrections.ts';
-import { readCiContext, type CiContext } from './context.ts';
+import { diffRange, readCiContext, type CiContext } from './context.ts';
 import { readCorrections } from './corrections.ts';
 import { autofixAndOpenPr } from './fix-pr.ts';
 import { gate, gateSummary, writeGateOutputs } from './gate.ts';
@@ -77,7 +77,7 @@ async function reportJobDeath(ctx: CiContext, hint: string): Promise<void> {
  */
 function changedFiles(ctx: CiContext): string[] | null {
   const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
-  for (const range of [`origin/${base}...HEAD`, `${base}...HEAD`]) {
+  for (const range of [diffRange(ctx), `origin/${base}...HEAD`, `${base}...HEAD`]) {
     const change = changeSummary(ctx.workspace, range);
     if (change && change.files.length > 0) return change.files.map((f) => f.split(String.fromCharCode(92)).join('/'));
   }

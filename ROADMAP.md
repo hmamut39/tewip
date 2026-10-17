@@ -3449,6 +3449,65 @@ Phase 57's `flaky` bug and this one are the same bug seen twice, and any future 
 
 1,048 tests.
 
+### Phase 60: `tewip ci` Answered "Why Did CI Fail?" With 167 Characters
+
+`tewip ci <owner/repo>` fetches the report the GitHub Action uploaded, so nobody has to open the
+Actions page. It is the command a team reaches for on day one, and it had never been run against a
+real artifact. Pointed at Tewip's own repository, whose self-check workflow runs the Action on every
+push to main:
+
+> \# Tewip CI report: hmamut39/tewip, any branch
+>
+> Run: https://github.com/hmamut39/tewip/actions/runs/39052934354 · commit `91c7f5f0` · generated
+> 2026-10-17T17:15:23Z
+
+**167 characters. A title, a run link, and nothing underneath.** The artifact it had just downloaded
+held six reports and 9KB of findings: `checks.md`, `access.md`, `vouch.md`, `schema.md`,
+`standards.md`, `done.md`.
+
+The Action has two modes and they write different files. *Triage* mode writes `pr-comment.md`,
+`infra.md` and `triage.json`; *check* mode writes one file per verb. Both upload under the same
+artifact name, and `githubCiReport` rendered exactly two hard-coded names. Every repository using
+check mode - the mode for gating a pull request on the quality verbs - got a header. The artifact now
+decides what is shown: `pr-comment.md` leads when it exists because it is the one written for a
+person, `infra.md` stays behind its ENV count because it is about the machines rather than the
+change, and everything else is named and shown. 167 characters became 9,311.
+
+And when there is genuinely nothing to render, it now says which files the artifact held instead of
+printing a header. A header with nothing under it is the worst of the three possible answers, because
+it reads as "CI is fine" to anyone who does not know what was supposed to be in there.
+
+**Reading what the artifact contained found the second bug.** Three of the five checks had reported
+"nothing to check" on a commit that changed ten files:
+
+> **5 checks ran, nothing blocking.**
+> *Is this work done?* — nothing to check · *What will this migration do to a live database?* —
+> nothing to check · *Does this keep the team's own standards?* — nothing to check
+
+The range was `origin/${pr?.baseRef ?? defaultBranch}...HEAD`, which is right for a pull request,
+right for a feature branch, and **empty on a push to the default branch** - there HEAD *is*
+`origin/main`. `tewip done` on that range exits with "nothing changed in origin/main...HEAD", which
+check mode's runner reads as idle, which renders as "nothing to check", which the headline totals as
+"nothing blocking". Gating pull requests and also checking main after a merge is an ordinary setup,
+so half of every such install was reporting a pass on a diff it had never seen. On the same commit,
+with the push's own range:
+
+> For `a6f2e34...HEAD`. Ready as far as 3 check(s) can show, with 3 not checked.
+
+The range now comes from one place, `diffRange(ctx)`, which all three CI modes use: a pull request
+against its base, a branch against the default, and a push to the default branch against what the
+push added (`before...HEAD`, falling back to the last commit when GitHub sends all zeros because the
+push created the branch).
+
+**The headline was the third fix.** "5 checks ran, nothing blocking" counted checks that had run, not
+checks that had anything in front of them. A reader takes that line as the verdict and never opens
+the collapsed sections. It now reads "2 of 3 checks had something to look at, and found nothing
+blocking", and when none of them did: "That is not a pass: nothing was checked." The test that was
+supposed to prevent exactly this - *"the headline must not call it a pass"* - passed throughout,
+because it checked for the word "blocking" after deleting the phrase "nothing blocking".
+
+1,059 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

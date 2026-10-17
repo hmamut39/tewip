@@ -4004,6 +4004,64 @@ red for the right reason, a fix, and the same test green.
 
 1,116 tests.
 
+### Phase 70: The Gate Passed On A Bundle With Its Signature Torn Off
+
+`tewip attest` seals what Tewip checked for a build into one artifact, and `--verify` says whether it
+can be trusted. It makes the strongest claim in the product - *"nothing enters it that Tewip did not
+verify itself"* - and the verify side had only ever been run on bundles nobody had touched. So it was
+attacked instead: a real bundle from this project's real history, two real ed25519 key pairs, and ten
+tampered copies.
+
+**Six crude tampers were all caught**, each with a non-zero exit: a changed failure count, an erased
+"what was not checked" list, a changed commit, a removed digest, an empty digest and a wrong digest.
+The digest check is sound, and the report is honest about what a digest is worth on its own - *"an
+editor can recompute a digest."*
+
+So that is what was done next. Change `failures` from 0 to 99, erase the blind-spot list, **delete the
+signature**, and recompute the digest the way the tool itself computes it. Then verify it the way a
+release gate would, with the public key supplied:
+
+> \# **Checked**: s-attack.json
+> Content matches its digest: **yes**
+> Signature: absent
+>
+> *exit code: 0*
+
+A bundle with its facts rewritten, its blind spots erased and its signature torn off, **passing**,
+with the key right there on the command line. Any gate scripted on `attest --verify` would have let
+it through. The prose was individually true and the verdict was wrong.
+
+Two things were wrong underneath it. `check()` returned the no-signature result **without ever looking
+at whether a key had been given** - so "I was asked who made this and there is nothing here to answer
+with" was reported identically to "nobody asked". Removing a signature is the oldest attack on one,
+and a verifier that treats absence as acceptance is not verifying. And the sentence said *"no
+signature was made"*, which asserts something about the bundle's history that cannot be known from
+the bundle: it may have been removed, which is exactly the case at hand. Now:
+
+> \# **Do not trust this bundle**: s-attack.json
+> Signature: **stripped**
+>
+> a public key was given but this bundle carries no signature, so who produced it cannot be
+> established. The content does match the digest recorded inside it, and **that is worth nothing
+> here**: anyone who edits a bundle can recompute its digest, which is exactly what removing the
+> signature would look like.
+>
+> *exit code: 1*
+
+Every other combination was checked rather than assumed: signed with the right key passes; signed with
+the wrong key is `invalid`; a single corrupted character of the signature is `invalid`; a signed bundle
+checked with no key says the signature **was not checked** rather than valid; and an unsigned bundle
+checked with no key still passes, which is the one legitimate digest-only use.
+
+**A second, smaller hole in the same file.** The seal is left out of its own digest, which it must be -
+but the filter ran at **every depth**, so any field named `seal` anywhere inside a bundle was invisible
+to the digest. Content could be added under `claims[0].seal` without changing the digest or
+invalidating the signature over it. Nothing reads such a field today, which is why this is small rather
+than serious; the claim being made is that the digest covers the content, and a digest with a hole in
+it is not that claim. Only the top-level seal is excluded now.
+
+1,123 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

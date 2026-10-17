@@ -16,7 +16,9 @@ export function verifyAttestation(file: string, keyFile?: string): { ok: boolean
   const bundle = JSON.parse(readFileSync(resolve(file), 'utf8')) as Record<string, unknown>;
   const publicKey = keyFile ? readFileSync(resolve(keyFile), 'utf8') : undefined;
   const checked = check(bundle, publicKey);
-  const ok = checked.contentMatches && checked.signature !== 'invalid';
+  // 'stripped' counts as a failure: the caller supplied a key, so it asked who made this, and a
+  // bundle with no signature cannot answer. See `check` in seal.ts for the attack that exposed it.
+  const ok = checked.contentMatches && checked.signature !== 'invalid' && checked.signature !== 'stripped';
   const report = [
     `# ${ok ? 'Checked' : 'Do not trust this bundle'}: ${file.split(/[\/]/).pop()}`,
     '',

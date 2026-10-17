@@ -35,19 +35,25 @@ export interface Sealed {
  * different bundle.
  */
 export function canonical(bundle: Sealed): string {
-  const ordered = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(ordered);
+  // The seal is left out of its own digest, which it has to be - but only the **top-level** one.
+  // The filter used to apply at every depth, so any field named `seal` anywhere inside the bundle
+  // was invisible to the digest: content could be added under `claims[0].seal` without changing the
+  // digest or invalidating the signature over it. Nothing reads such a field today, which is why
+  // this is small rather than serious; the claim being made is that the digest covers the content,
+  // and a digest with a hole in it is not that claim.
+  const ordered = (value: unknown, top = false): unknown => {
+    if (Array.isArray(value)) return value.map((v) => ordered(v));
     if (value && typeof value === 'object') {
       return Object.fromEntries(
         Object.entries(value as Record<string, unknown>)
-          .filter(([k]) => k !== 'seal')
+          .filter(([k]) => !(top && k === 'seal'))
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([k, v]) => [k, ordered(v)]),
       );
     }
     return value;
   };
-  return JSON.stringify(ordered(bundle));
+  return JSON.stringify(ordered(bundle, true));
 }
 
 export const digestOf = (bundle: Sealed): string => createHash('sha256').update(canonical(bundle)).digest('hex');
@@ -73,7 +79,7 @@ export function seal(bundle: Sealed, privateKeyPem?: string): Seal {
 export interface Checked {
   /** True when the content still hashes to the digest recorded inside it. */
   contentMatches: boolean;
-  signature: 'valid' | 'invalid' | 'absent' | 'no-key-given';
+  signature: 'valid' | 'invalid' | 'absent' | 'no-key-given' | 'stripped';
   /** What was actually established, in words that do not overstate it. */
   says: string;
 }
@@ -89,10 +95,28 @@ export function check(bundle: Sealed, publicKeyPem?: string): Checked {
     return { contentMatches: false, signature: bundle.seal?.signature ? 'invalid' : 'absent', says: 'the content does not match the digest recorded inside it: it has been changed since it was written' };
   }
   if (!bundle.seal?.signature) {
+    // A key was given, so authorship is what was asked about - and there is nothing here to answer
+    // with. This used to return the same pass as an unsigned bundle checked without a key, so:
+    // change a fact, erase the "what was not checked" list, delete the signature, recompute the
+    // digest, and `attest --verify bundle.json --key release.pem` printed "Content matches its
+    // digest: yes" and **exited 0**. Any gate scripted on it passed. Removing a signature is the
+    // oldest attack on one, and "there is nothing to check" is a failure to establish what was
+    // asked, not a pass.
+    if (publicKeyPem?.trim()) {
+      return {
+        contentMatches: true,
+        signature: 'stripped',
+        says:
+          'a public key was given but this bundle carries no signature, so who produced it cannot be established. ' +
+          'The content does match the digest recorded inside it, and that is worth nothing here: anyone who edits a bundle can recompute its digest, which is exactly what removing the signature would look like',
+      };
+    }
     return {
       contentMatches: true,
       signature: 'absent',
-      says: 'the content matches its own digest, and nothing more: no signature was made, so this shows the bundle is undamaged, not that nobody edited it - an editor can recompute a digest',
+      // "no signature was made" asserted something about the bundle's history that cannot be known
+      // from the bundle: it may have been removed. What is observable is that it carries none.
+      says: 'the content matches its own digest, and nothing more: this bundle carries no signature, so this shows it is undamaged, not that nobody edited it - an editor can recompute a digest',
     };
   }
   if (!publicKeyPem?.trim()) {

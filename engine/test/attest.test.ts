@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { attestRun, renderAttestation } from '../attest/attest.ts';
+import { generateKeyPairSync } from 'node:crypto';
+import { check, digestOf, seal } from '../attest/seal.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 
 const NL = String.fromCharCode(10);
@@ -100,5 +102,81 @@ describe('the attestation', () => {
     const report = renderAttestation(empty).split(NL);
     assert.ok(report.some((l) => /this bundle makes no claims/.test(l)));
     assert.ok(report.some((l) => /itself worth doubting/.test(l)));
+  });
+});
+
+// Phase 70: the seal, attacked rather than described. Real ed25519 keys, a real bundle, and the
+// oldest attack on a signature - removing it.
+describe('what --verify establishes, and what it must refuse to', () => {
+  const keys = () => {
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    return {
+      priv: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+      pub: publicKey.export({ type: 'spki', format: 'pem' }) as string,
+    };
+  };
+  const bundleOf = (over: Record<string, unknown> = {}): Record<string, unknown> => ({ project: 'p', failures: 0, notChecked: ['a blind spot'], claims: [{ what: 'a' }], ...over });
+  const sealed = (priv?: string, over: Record<string, unknown> = {}): Record<string, unknown> => {
+    const body = bundleOf(over);
+    return { ...body, seal: seal(body as never, priv) };
+  };
+
+  it('accepts a bundle signed by the key it is checked against', () => {
+    const { priv, pub } = keys();
+    const checked = check(sealed(priv) as never, pub);
+    assert.equal(checked.contentMatches, true);
+    assert.equal(checked.signature, 'valid');
+  });
+
+  it('refuses a bundle whose signature was removed, when a key was given', () => {
+    // The attack, measured: change a fact, erase the blind-spot list, delete the signature,
+    // recompute the digest. `attest --verify bundle.json --key release.pem` printed
+    // "Content matches its digest: yes" and **exited 0**, so any gate scripted on it passed.
+    const { priv, pub } = keys();
+    const forged: Record<string, unknown> = { ...sealed(priv), failures: 99, notChecked: [], seal: { digest: '' } };
+    forged.seal = { digest: digestOf(forged as never) };
+
+    const checked = check(forged as never, pub);
+    assert.equal(checked.contentMatches, true, 'the digest really does match - that is the point');
+    assert.equal(checked.signature, 'stripped', 'and it is still not something to trust');
+    assert.match(checked.says, /carries no signature/);
+    assert.match(checked.says, /anyone who edits a bundle can recompute its digest/);
+  });
+
+  it('does not claim a signature was never made, only that there is none', () => {
+    // "no signature was made" asserts something about the bundle's history that cannot be known
+    // from the bundle: it may have been removed.
+    const checked = check(sealed(undefined) as never);
+    assert.equal(checked.signature, 'absent');
+    assert.doesNotMatch(checked.says, /no signature was made/);
+    assert.match(checked.says, /carries no signature/);
+  });
+
+  it('refuses a signature made by a different key', () => {
+    const mine = keys();
+    const theirs = keys();
+    assert.equal(check(sealed(mine.priv) as never, theirs.pub).signature, 'invalid');
+  });
+
+  it('says the signature was not checked when no key is given, rather than valid', () => {
+    const { priv } = keys();
+    const checked = check(sealed(priv) as never);
+    assert.equal(checked.signature, 'no-key-given');
+    assert.match(checked.says, /no public key was given, so the signature was not checked/);
+  });
+
+  it('covers a field named seal anywhere but the top level', () => {
+    // The seal has to be left out of its own digest - but the filter ran at every depth, so content
+    // under `claims[0].seal` was invisible to it and could be added without changing the digest or
+    // invalidating the signature over it.
+    const plain = digestOf(bundleOf({ claims: [{ what: 'a', seal: 'nothing' }] }) as never);
+    const smuggled = digestOf(bundleOf({ claims: [{ what: 'a', seal: 'payload' }] }) as never);
+    assert.notEqual(plain, smuggled, 'a nested seal field has to be part of the content');
+  });
+
+  it('still leaves the top-level seal out of its own digest', () => {
+    const body = bundleOf();
+    const withSeal = (digest: string) => ({ ...body, seal: { digest } }) as never;
+    assert.equal(digestOf(withSeal('aaa')), digestOf(withSeal('bbb')));
   });
 });

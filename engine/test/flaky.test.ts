@@ -2,6 +2,7 @@
 // broken rather than flaky and must not be hidden, and a test whose failures were the application
 // being wrong must never be quarantined - that would hide the bug it exists to catch.
 import assert from 'node:assert/strict';
+import { decide, type FlakyTest } from '../flaky/flaky.ts';
 import { describe, it } from 'node:test';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { flakyTests, readyToRelease, weeklyCost } from '../flaky/flaky.ts';
@@ -120,5 +121,57 @@ describe('the line that quarantines a test', () => {
     const source = ["it('adds an item', () => {", '  expect(1).toBe(1);', '});'].join(NL);
     const changed = applyQuarantine(source, test, 'vitest')!;
     assert.match(changed, /test\.skip\('adds an item'/);
+  });
+});
+
+// Phase 57: `flaky` measured against 1,305 real failures from WordPress/gutenberg.
+//
+// It recommended quarantining nothing. Every quarantine verdict rested on `flakyShare` - how many
+// failures a *previous* `tewip explain` had already called flaky - so on raw history, where nothing
+// has been diagnosed, no test could ever qualify. 124 of the 180 failing tests had failed and then
+// passed on a retry in the same run, and all 124 were filed under "watch". One had done it 93 times.
+describe('flakiness that was observed rather than diagnosed', () => {
+  const test = (over: Partial<FlakyTest> = {}): FlakyTest =>
+    ({
+      testId: 'a > b',
+      title: 'b',
+      file: 'spec/a.spec.js',
+      failedRuns: 93,
+      totalRuns: 650,
+      failedAttempts: 93,
+      wastedMs: 1_200_000,
+      recoveredOnRetry: 0,
+      branches: ['trunk'],
+      categories: [{ category: 'UNKNOWN', count: 93 }],
+      firstSeen: '2026-10-01T00:00:00Z',
+      lastSeen: '2026-10-17T00:00:00Z',
+      verdict: 'watch',
+      why: '',
+      ...over,
+    }) as FlakyTest;
+
+  it('quarantines a test that failed and then passed on the same code', () => {
+    // No diagnosis needed: same run, same commit, same machine, both outcomes.
+    const { verdict, why } = decide(test({ recoveredOnRetry: 93, branches: Array.from({ length: 61 }, (_, i) => `b${i}`) }), { minRuns: 3, alwaysFailsAbove: 0.8 });
+    assert.equal(verdict, 'quarantine');
+    assert.match(why, /failed and then passed on a retry in the same run 93 times/);
+    assert.match(why, /61 different branches/);
+  });
+
+  it('still refuses to hide a test that is simply broken', () => {
+    // Failing nearly every run is not flakiness, and recovering once does not make it so.
+    const { verdict, why } = decide(test({ failedRuns: 95, totalRuns: 100, recoveredOnRetry: 1 }), { minRuns: 3, alwaysFailsAbove: 0.8 });
+    assert.equal(verdict, 'fix-now');
+    assert.match(why, /not flakiness/);
+  });
+
+  it('still refuses to hide a test whose failures looked like real bugs', () => {
+    const { verdict, why } = decide(test({ recoveredOnRetry: 5, categories: [{ category: 'REAL_BUG', count: 80 }] }), { minRuns: 3, alwaysFailsAbove: 0.8 });
+    assert.equal(verdict, 'fix-now');
+    assert.match(why, /Quarantining it would hide a bug/);
+  });
+
+  it('does not quarantine on a single blip', () => {
+    assert.equal(decide(test({ recoveredOnRetry: 1, failedRuns: 1, totalRuns: 400 }), { minRuns: 3, alwaysFailsAbove: 0.8 }).verdict, 'watch');
   });
 });

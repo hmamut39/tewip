@@ -3271,6 +3271,53 @@ everything and is wrong about the part that matters most.
 
 1,020 tests.
 
+### Phase 57: The Quarantine Command Quarantined Nothing
+
+Phase 56 established that about 70% of real CI failures are flaky, which makes `tewip flaky` - the
+command that decides what to quarantine - the one with the most to do. It had never been run on a
+real project's history. The 1,305 failures harvested from WordPress/gutenberg in Phase 56 were still
+on disk, so it was run on those.
+
+**It recommended quarantining nothing.** 180 tests had failed; 7 were correctly called "fix these,
+do not hide them"; the other 173 were "watch".
+
+Every quarantine verdict rested on `flakyShare` - what proportion of a test's failures a *previous*
+`tewip explain` had already classified as flaky. On a project's raw history, where nothing has been
+diagnosed yet, that share is zero for every test, so nothing could ever qualify. The command that
+exists to answer "what can we safely quarantine" was structurally unable to answer it until
+something else had run first.
+
+And the evidence was already in the data, already computed, and used for nothing:
+
+> `recoveredOnRetry` - how often it failed and then passed on a retry in the same run
+
+**124 of the 180 failing tests had recovered on retry. All 124 were filed under "watch".** The worst
+had done it **93 separate times**.
+
+A test that failed and then passed within the same run did both on the same code, the same commit
+and the same machine. That is not evidence of flakiness to be weighed - it is flakiness, observed,
+and it needs no model and no prior diagnosis to see. It is also exactly what Phase 56 identified as
+the one genuinely decisive signal available at failure time.
+
+**0 quarantine recommendations became 48**, and the seven "fix these, do not hide them" held their
+ground - a test that fails nearly every run is broken rather than unreliable, and recovering once
+does not change that. The top recommendation reads:
+
+> **default to a list of pages if there are no menus**
+> 93 of 650 runs, 19.9 CI min lost, passed on a retry 93 times
+> it failed and then passed on a retry in the same run 93 times: the same code did both, which is
+> what a flaky test is. **It failed on 61 different branches**, so it is the test rather than one
+> person's change.
+
+That last clause is the one that ends the argument in a standup.
+
+**The shape of this is becoming familiar.** Phase 51 found `secure` discarding every secret it found.
+Phase 54 found the shadow run dead for a month. This phase found `flaky` unable to recommend a
+quarantine. Three commands that reported a confident, well-formatted, entirely empty answer - and
+each one looked exactly like good news.
+
+1,024 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

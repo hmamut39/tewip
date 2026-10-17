@@ -119,7 +119,9 @@ const flakyShare = (test: FlakyTest) => {
  *   quarantine needs the test to have failed in several runs, and to be unreliable rather than
  *   consistently wrong.
  */
-function decide(test: FlakyTest, { minRuns, alwaysFailsAbove }: { minRuns: number; alwaysFailsAbove: number }): Pick<FlakyTest, 'verdict' | 'why'> {
+/** The verdict for one test, and the sentence that justifies it. Exported so it can be tested
+ * against the shapes real projects produce rather than only through a whole report. */
+export function decide(test: FlakyTest, { minRuns, alwaysFailsAbove }: { minRuns: number; alwaysFailsAbove: number }): Pick<FlakyTest, 'verdict' | 'why'> {
   const rate = share(test);
   const percent = `${Math.round(rate * 100)}% of the ${test.totalRuns} run(s) it was in`;
   const realBugs = test.categories.find((c) => c.category === 'REAL_BUG')?.count ?? 0;
@@ -129,6 +131,27 @@ function decide(test: FlakyTest, { minRuns, alwaysFailsAbove }: { minRuns: numbe
   }
   if (rate > alwaysFailsAbove && test.totalRuns >= minRuns) {
     return { verdict: 'fix-now', why: `it fails in ${percent}. That is not flakiness, it is a test that does not work - hiding it would hide whatever it is telling you.` };
+  }
+  // Observed, not inferred. A test that failed and then passed on a retry within the same run did
+  // both on the same code, same commit, same machine: that is not evidence of flakiness, it is
+  // flakiness, and no diagnosis is needed to see it.
+  //
+  // This mattered more than it looks. Everything below rests on `flakyShare`, which counts how many
+  // failures a *previous* `tewip explain` already called flaky - so on a project's raw history,
+  // where nothing has been diagnosed yet, no test could ever qualify and the command recommended
+  // quarantining nothing at all. Measured on 1,305 real failures from WordPress/gutenberg: **124 of
+  // the 180 failing tests had recovered on retry, and all 124 were filed under "watch"**. One of
+  // them had done it 93 separate times.
+  //
+  // Phase 56 is where this comes from: of the signals available when a test fails, non-determinism
+  // is the one that is genuinely decisive, and it costs nothing to read.
+  if (test.recoveredOnRetry > 0 && test.failedRuns >= minRuns) {
+    const times = test.recoveredOnRetry === 1 ? 'once' : `${test.recoveredOnRetry} times`;
+    const spread = test.branches.length > 1 ? ` It failed on ${test.branches.length} different branches, so it is the test rather than one person's change.` : '';
+    return {
+      verdict: 'quarantine',
+      why: `it failed and then passed on a retry in the same run ${times}: the same code did both, which is what a flaky test is. It failed in ${percent}.${spread}`,
+    };
   }
   if (test.failedRuns >= minRuns && flakyShare(test) >= 0.5) {
     const spread = test.branches.length > 1 ? ` It failed on ${test.branches.length} different branches, so it is the test rather than one person's change.` : '';

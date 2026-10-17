@@ -30,10 +30,53 @@ export function parseLlmOutput(raw: string): LlmOutput {
   };
 }
 
+/**
+ * A verdict the run history already rules out, whatever the model says.
+ *
+ * The prompt has told the model since llm-6 that a failure which passed on another attempt of the
+ * same code cannot be a real bug or a drifted locator - both of those fail every time. Measured
+ * against 547 real labelled CI failures from WordPress/gutenberg, it does not obey: the model layer
+ * decided 87 of them and got **9 right**, and almost every miss was a flaky timing failure called
+ * REAL_BUG or LOCATOR_DRIFT at a confidence of 0.9 or higher.
+ *
+ * Telling a team to hunt a bug that is not there is the most expensive mistake this tool can make,
+ * and an instruction in a prompt is a request, not a guarantee. The same fact is checked here in
+ * code, where it holds.
+ *
+ * It refuses rather than rewrites. "This cannot be REAL_BUG" is not "this is TIMING" - ENV and
+ * TEST_DATA both survive a retry too - so the answer becomes UNKNOWN, which routes the failure to a
+ * person with the model's reasoning attached rather than replacing one guess with another.
+ */
+export function contradictsHistory(category: RootCause, context: FailureContext): string | null {
+  if (category !== 'REAL_BUG' && category !== 'LOCATOR_DRIFT') return null;
+  if (context.thisRun?.anotherAttemptPassed) {
+    return `refused: another attempt of the same code passed in this run, so the failure is not deterministic and cannot be ${category}`;
+  }
+  if (/both failed and passed|not deterministic/i.test(context.history?.pattern ?? '')) {
+    return `refused: the history says "${context.history.pattern}", so the failure is not deterministic and cannot be ${category}`;
+  }
+  return null;
+}
+
 export async function llmDiagnose(context: FailureContext, rules: Diagnosis, client: LlmClient, now = new Date()): Promise<Diagnosis> {
   try {
     const raw = await client.complete({ system: SYSTEM_PROMPT, user: JSON.stringify(context), schemaName: OUTPUT_SCHEMA_NAME, schema: OUTPUT_SCHEMA });
     const out = parseLlmOutput(raw);
+    const refused = contradictsHistory(out.category, context);
+    if (refused) {
+      return {
+        category: 'UNKNOWN',
+        confidence: 0,
+        source: 'llm',
+        model: client.model,
+        engineVersion: `${rules.engineVersion}+${PROMPT_VERSION}`,
+        diagnosedAt: now.toISOString(),
+        evidence: [
+          { source: 'llm', message: `the model said ${out.category} (${out.confidence.toFixed(2)}): ${out.reasoning}` },
+          { source: 'rules', message: refused },
+        ],
+      };
+    }
     return {
       category: out.category,
       confidence: out.confidence,

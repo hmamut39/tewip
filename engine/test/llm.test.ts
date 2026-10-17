@@ -1,6 +1,7 @@
 // Unit tests for the LLM layer with a fake client: contract enforcement and routing.
 // No network calls; nothing here measures how well a real model classifies.
 import assert from 'node:assert/strict';
+import { contradictsHistory } from '../llm/llm-diagnose.ts';
 import { describe, it } from 'node:test';
 import type { Diagnosis, RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { HistoryIndex } from '../history.ts';
@@ -118,3 +119,53 @@ describe('trace DOM reconstruction', () => {
   });
 });
 
+
+// Phase 55: measured against 547 real labelled CI failures from WordPress/gutenberg.
+//
+//   Rules layer:  460 decided, 451 correct (98.0%)
+//   LLM layer:     87 decided,   9 correct (10.3%)
+//
+// Random across five categories is 20%. Almost every miss was a flaky timing failure called
+// REAL_BUG or LOCATOR_DRIFT at 0.9 confidence or higher - the most expensive mistake this tool can
+// make, because it sends a team hunting a bug that is not there and sounds certain doing it.
+//
+// The prompt has told the model since llm-6 that a failure which passed on another attempt cannot be
+// either of those. An instruction in a prompt is a request, not a guarantee.
+describe('a verdict the run history already rules out', () => {
+  const context = (over: Record<string, unknown> = {}) =>
+    ({
+      thisRun: { attempts: 2, failedAttempts: 1, anotherAttemptPassed: false },
+      history: { pattern: 'every recorded attempt failed (3/3) and there is no passing run to compare with' },
+      ...over,
+    }) as never;
+
+  it('refuses REAL_BUG when another attempt of the same code passed', () => {
+    const refused = contradictsHistory('REAL_BUG', context({ thisRun: { attempts: 2, failedAttempts: 1, anotherAttemptPassed: true } }));
+    assert.match(refused ?? '', /not deterministic and cannot be REAL_BUG/);
+  });
+
+  it('refuses LOCATOR_DRIFT on the same evidence, because a drifted selector fails every time', () => {
+    const refused = contradictsHistory('LOCATOR_DRIFT', context({ thisRun: { attempts: 2, failedAttempts: 1, anotherAttemptPassed: true } }));
+    assert.ok(refused);
+  });
+
+  it('refuses when the commit itself both failed and passed', () => {
+    const refused = contradictsHistory('REAL_BUG', context({ history: { pattern: 'this commit both failed and passed (2/3 attempts failed): the failure is not deterministic' } }));
+    assert.match(refused ?? '', /both failed and passed/);
+  });
+
+  it('leaves the categories that survive a retry alone', () => {
+    // "This cannot be REAL_BUG" is not "this is TIMING". ENV and TEST_DATA both survive a retry, so
+    // the guard refuses rather than rewrites, and the answer becomes UNKNOWN for a person to read.
+    const flaky = context({ thisRun: { attempts: 2, failedAttempts: 1, anotherAttemptPassed: true } });
+    assert.equal(contradictsHistory('TIMING', flaky), null);
+    assert.equal(contradictsHistory('ENV', flaky), null);
+    assert.equal(contradictsHistory('TEST_DATA', flaky), null);
+  });
+
+  it('allows REAL_BUG when every attempt really did fail', () => {
+    // The guard must not swallow the finding the tool exists to make.
+    assert.equal(contradictsHistory('REAL_BUG', context()), null);
+    assert.equal(contradictsHistory('LOCATOR_DRIFT', context()), null);
+  });
+});

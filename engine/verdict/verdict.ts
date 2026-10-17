@@ -47,6 +47,12 @@ export interface Evidence {
   changedTests: string[];
   /** Test files that reach the changed source, and how. */
   covering: Array<{ testFile: string; how: string }>;
+  /**
+   * What a coverage report the project already produces says about the changed files, when there is
+   * one. Imports cannot see a test that posts a GraphQL query or hits an HTTP route; a coverage
+   * report can, because it records what actually ran.
+   */
+  coverage?: { from: string; executed: string[]; notExecuted: string[] };
   /** Tests in the change that could never fail. */
   cannotFail: Array<{ name: string; file: string; line: number; why: string }>;
   /** Tests in the change that compare no value. */
@@ -87,6 +93,25 @@ export function decide(evidence: Evidence): Decision {
   // 2. Does anything test the change at all?
   if (evidence.changedSource.length === 0) {
     checks.push({ question: 'Is the changed code tested?', standing: 'not-applicable', answer: 'this change touches no source file', decidedBy: 'the diff' });
+  } else if (evidence.coverage && evidence.coverage.notExecuted.length > 0) {
+    // The report names these files and never ran a line of them. That is not "cannot say" - it is
+    // the suite being measured and found not to reach this code.
+    checks.push({
+      question: 'Is the changed code tested?',
+      standing: 'not-met',
+      answer: `${evidence.coverage.notExecuted.slice(0, 3).join(', ')} ${evidence.coverage.notExecuted.length === 1 ? 'is' : 'are'} in ${evidence.coverage.from} with no line executed, so the suite runs none of this`,
+      decidedBy: `${evidence.coverage.from}, which records what ran rather than what imports what`,
+    });
+  } else if (evidence.coverage && evidence.coverage.executed.length > 0) {
+    // Settles the question imports could not. Phases 46 and 52 both ended at "cannot say" here, on
+    // every real Saleor pull request, because a test that posts a GraphQL query never imports the
+    // resolver chain it exercises.
+    checks.push({
+      question: 'Is the changed code tested?',
+      standing: 'met',
+      answer: `the suite executes ${evidence.coverage.executed.slice(0, 3).join(', ')}${evidence.coverage.executed.length > 3 ? ` and ${evidence.coverage.executed.length - 3} more` : ''}`,
+      decidedBy: `${evidence.coverage.from}, which records what ran rather than what imports what`,
+    });
   } else if (evidence.covering.length === 0 && evidence.changedTests.length > 0) {
     // Nothing *imports* the changed file, and the same change ships tests. Coverage here is followed
     // through imports, which is a fact rather than a name match - and which cannot see a test that

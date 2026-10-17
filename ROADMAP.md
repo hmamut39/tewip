@@ -3088,6 +3088,48 @@ That leaves `pick` honest and, on a Python GraphQL codebase, not yet useful - th
 `done` in Phase 46. Both are limited by the same thing: coverage followed through imports cannot see
 a framework entry point. Knowing that is worth more than a number that was never true.
 
+### Phase 53: The Wall Both Previous Phases Stopped At
+
+Phase 46 ran `done` over six real merged Saleor pull requests and every one came back **"cannot
+say"**. Phase 52 ran `pick` over the same six and every one came back **"run the whole suite"**. Both
+were honest, and both were useless to the team whose code it was, for exactly one reason: coverage
+is followed through imports, and a test that posts a GraphQL query never imports the resolver chain
+it runs through. The same is true of an HTTP route, a Django view, a Rails controller, a Spring
+endpoint - which is most of the web.
+
+The answer was sitting in the project the whole time. **CI already writes a coverage report**, and a
+coverage report records what *ran* rather than what imports what.
+
+Tewip now reads the four formats that between them cover most of what runs anywhere - `lcov.info`
+(JavaScript, Rust, Go), Cobertura `coverage.xml` (pytest-cov, coverlet, simplecov), JaCoCo (Java and
+Kotlin) and Clover (PHPUnit) - with no configuration, from the paths the tools themselves write to.
+One reader for the three XML dialects, because all three say the same thing in the same shape: a
+filename, then elements carrying a line number and a hit count. JaCoCo needed its package joined
+back onto the bare sourcefile name, or every file read as a name matching nothing in the diff.
+
+On the pull request that started this, with a pytest-cov report present:
+
+> **Is the changed code tested? — yes**
+> the suite executes `saleor/graphql/utils/sorting.py`
+> *Decided by coverage.xml, which records what ran rather than what imports what.*
+
+and the other direction, which matters more, is just as plain:
+
+> **Not ready:** `saleor/graphql/utils/sorting.py` is in coverage.xml with no line executed, so the
+> suite runs none of this.
+
+That second one is a verdict Tewip could not previously reach by any route: a definite "no", from
+measurement rather than inference.
+
+**Three things it deliberately does not do.** A report whose files are not on disk is ignored rather
+than believed - a stale report from another checkout would otherwise turn every changed file into
+"in the report, never executed", which is the confident wrong answer this project exists to avoid.
+A report records the suite, not the test, so it answers "is this tested" and not "which tests would
+notice this" - `pick` still narrows from imports and still refuses when it cannot show the rest are
+unaffected. And nothing is inferred when there is no report: the answer stays "cannot say".
+
+1,006 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

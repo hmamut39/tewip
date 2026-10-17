@@ -4,6 +4,7 @@
 // only collects: what changed, what covers it, whether those tests can fail, whether they would catch a
 // bug, what is failing now, and what a kept plan says is still uncovered. Where a layer has nothing to
 // say, it is left as "not checked" rather than filled in with a guess.
+import { describesThisProject, findCoverage, wasExecuted } from '../coverage/read-coverage.ts';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { seal } from '../attest/seal.ts';
@@ -85,6 +86,20 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
   const changedTests = changed.filter((f) => IS_TEST.test(f) && existsSync(resolve(cmd.root, f)));
 
   const known = testFiles(cmd.root);
+    // A coverage report the project already produces, if there is one. Imports cannot see a test that
+  // posts a GraphQL query, hits an HTTP route or renders a controller - and Phases 46 and 52 both
+  // ended at "cannot say" on every real Saleor pull request because of it. A coverage report records
+  // what ran, so it answers the question imports could not.
+  const report = findCoverage(cmd.root);
+  const coverage =
+    report && describesThisProject(report, cmd.root)
+      ? {
+          from: report.from,
+          executed: changedSource.filter((f) => wasExecuted(report, f)),
+          notExecuted: changedSource.filter((f) => report.mentioned.has(f.split('\\').join('/')) && !wasExecuted(report, f)),
+        }
+      : undefined;
+
   const covering: Evidence['covering'] = [];
   for (const file of changedSource) {
     const direct = importingTests(cmd.root, coverageFor(cmd.root, [file], known), file);
@@ -118,6 +133,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
       changedSource,
       changedTests,
       covering,
+    coverage,
       cannotFail: vouched.cannotFail.map((j) => ({ name: j.name, file: j.file, line: j.line, why: j.why })),
       crashOnly: vouched.crashOnly.length,
       unnoticed: proved ? proved.proofs.flatMap((p) => p.tried.filter((t) => t.fate === 'unnoticed').map((t) => ({ file: p.file, line: t.mutant.line, kind: t.mutant.kind }))) : null,

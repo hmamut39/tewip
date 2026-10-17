@@ -23,6 +23,41 @@ Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub re
 **Status: phases 1 to 14 are built; the two auto-fix phases (5 and 8) are the ones still in progress.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
 
 
+## If your CI already writes a coverage report, point Tewip at it
+
+Tewip decides what a test reaches by following imports, which is a fact rather than a name match -
+and which cannot see a test that posts a GraphQL query, hits an HTTP route or renders a controller.
+On a Django, Rails or Spring codebase that is most of the suite, so `tewip done` used to answer
+*"cannot say"* to the question that matters most.
+
+A coverage report settles it, and CI almost certainly produces one already. Nothing to configure:
+
+| format | written by | found at |
+|---|---|---|
+| `lcov.info` | JavaScript, TypeScript, Rust, Go, C++ | `coverage/lcov.info`, `lcov.info` |
+| Cobertura `coverage.xml` | pytest-cov, coverlet (.NET), simplecov | `coverage.xml`, `coverage/coverage.xml` |
+| JaCoCo | Java, Kotlin | `target/site/jacoco/jacoco.xml`, `build/reports/...` |
+| Clover | PHPUnit | `clover.xml`, `build/logs/clover.xml` |
+
+With one present, `done` stops guessing:
+
+```
+### Is the changed code tested?
+
+Yes: the suite executes saleor/graphql/utils/sorting.py.
+
+_Decided by coverage.xml, which records what ran rather than what imports what._
+```
+
+and it will say the opposite just as plainly - *"is in coverage.xml with no line executed, so the
+suite runs none of this"* is a **not ready**, not a shrug.
+
+**What a coverage report cannot do.** It records which lines ran during the whole suite, not which
+test ran them, so it answers *"is this code tested"* and not *"which tests would notice a change
+here"*. `tewip pick` still narrows from imports and still refuses to narrow when it cannot show the
+rest are unaffected. A report from a different checkout is ignored rather than believed: if the files
+it names are not on disk, Tewip says nothing instead of reporting the whole change as untested.
+
 ## Running with no data leaving the building
 
 A hospital, a bank or a government department usually cannot send source code to a hosted API, and

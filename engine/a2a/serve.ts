@@ -132,16 +132,16 @@ export function handleRpc(cmd: A2ACommand, body: unknown): { status: number; pay
 
   const choice = chooseSkill(message);
   if (choice.kind === 'ask') {
-    record(cmd.root, { method, outcome: 'asked-back', why: choice.why });
+    record(cmd.root, { http: 'POST', path: JSONRPC_PATH, method, outcome: 'asked-back', why: choice.why });
     return { status: 200, payload: { jsonrpc: '2.0', id, result: needsInput(askWhich(choice.why)) } };
   }
   if (choice.kind === 'unknown') {
-    record(cmd.root, { method, outcome: 'unknown-skill', asked: choice.asked });
+    record(cmd.root, { http: 'POST', path: JSONRPC_PATH, method, outcome: 'unknown-skill', asked: choice.asked });
     return { status: 200, payload: { jsonrpc: '2.0', id, result: needsInput(askWhich(`"${choice.asked}" is not a skill Tewip has`)) } };
   }
 
   const answered = runSkill(cmd.root, choice.skill, []);
-  record(cmd.root, { method, outcome: 'answered', skill: choice.skill.id, verb: choice.skill.verb, failed: answered.failed });
+  record(cmd.root, { http: 'POST', path: JSONRPC_PATH, method, outcome: 'answered', skill: choice.skill.id, verb: choice.skill.verb, failed: answered.failed });
   return { status: 200, payload: { jsonrpc: '2.0', id, result: completedTask(answered.text, answered.failed) } };
 }
 
@@ -154,11 +154,28 @@ export function serveA2A(cmd: A2ACommand): ReturnType<typeof createServer> {
 
   const server = createServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
+    // What reaches the port, not only what gets answered.
+    //
+    // `record` was called from the three places inside the answering path, so the log held
+    // successful answers and nothing else. Measured by sending four requests and finding one: a POST
+    // to the wrong path, a JSON-RPC call for a method this agent does not have, and a malformed body
+    // all left **no trace at all**. On a port with no authentication those are the entries worth
+    // keeping - a peer probing for methods is exactly what an operator needs to see - and the file's
+    // own comment promises "a record of what another agent asked for and what it was told". A
+    // rejected request is still something another agent asked for.
+    //
+    // The request's body is never recorded, only what it asked for and how it was answered, because
+    // a body from another agent can contain anything.
+    const seen = (outcome: string, extra: Record<string, unknown> = {}) =>
+      record(root, { http: req.method ?? '', path, outcome, ...extra });
+
     if (req.method === 'GET' && path === CARD_PATH) {
+      seen('card-read');
       send(res, 200, agentCard(url, cmd.tewipRoot));
       return;
     }
     if (req.method !== 'POST' || path !== JSONRPC_PATH) {
+      seen('no-such-endpoint');
       send(res, 404, { error: `nothing here. The card is at ${CARD_PATH} and calls go to ${JSONRPC_PATH}` });
       return;
     }
@@ -168,13 +185,22 @@ export function serveA2A(cmd: A2ACommand): ReturnType<typeof createServer> {
         try {
           parsed = JSON.parse(raw);
         } catch {
+          seen('body-not-json');
           send(res, 400, rpcError(null, INVALID_PARAMS, 'the body is not JSON'));
           return;
         }
         const { status, payload } = handleRpc({ ...cmd, root }, parsed);
+        // A JSON-RPC error rides in a 200 response - the transport worked, the call did not - so the
+        // HTTP status cannot be the test. Checking it missed exactly the entry worth having: a peer
+        // asking for a method this agent does not implement.
+        const rpc = (payload as { error?: { message?: string }; result?: unknown }) ?? {};
+        if (rpc.error) seen('refused', { why: rpc.error.message ?? '' });
         send(res, status, payload);
       })
-      .catch((error: Error) => send(res, 413, rpcError(null, INVALID_PARAMS, error.message)));
+      .catch((error: Error) => {
+        seen('body-rejected', { why: error.message });
+        send(res, 413, rpcError(null, INVALID_PARAMS, error.message));
+      });
   });
 
   server.listen(cmd.port, cmd.host, () => {

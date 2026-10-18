@@ -4250,6 +4250,55 @@ Every report a team reads applies corrections; every measurement does not.
 
 1,140 tests.
 
+### Phase 75: Four Claims On An Unauthenticated Port; Three Held
+
+`tewip a2a` opens a port so other agents can ask Tewip questions. Its own file header makes four
+promises, and a listening socket is the place to test promises rather than read them. A real server
+was started against a real history and asked real questions by a real client.
+
+**Three held, and two of them well.** Only the read-only verbs are exposed - `explain`, `vouch`,
+`pick`, `schema`, `access`, `perf`, `standards`, `done` - and `runSkill` is called with an **empty
+argument list**, always, so nothing a peer sends can become a command-line flag: no `--prove` on
+`done`, no `--apply` on anything. It binds to `127.0.0.1` and `Get-NetTCPConnection` confirms that is
+the only address the socket holds. `isLoopback` was probed with the same prefix tricks that broke
+`isLocal` in Phase 71 - `localhost.evil.example`, `127.0.0.1.evil.example` - and it is exact equality,
+so none of them get through. And a message it cannot place really does come back as a question:
+
+> Tewip will not guess which question you are asking: that could be "Why did these tests fail?" or...
+
+**The fourth was false.** The header says:
+
+> **Every request is written to `.tewip/a2a.jsonl`**, the same way `pursue` records what it did, so
+> there is a record of what another agent asked for and what it was told.
+
+Five requests to a running server produced **one** entry. `record()` was called from three places,
+all inside the answering path, so a POST to a path it does not serve, a call for a method it does not
+implement, and a malformed body left **no trace at all**. On a port with no authentication those are
+the entries an operator most needs - a peer probing for methods is precisely what you want to see -
+and a rejected request is still something another agent asked for.
+
+Every request that reaches the port is now recorded with what it asked for and what became of it, and
+never with its body, because a body from another agent can contain anything. Five requests, five
+entries:
+
+    GET   /.well-known/agent-card.json   card-read
+    POST  /                              no-such-endpoint
+    POST  /a2a/v1                        refused  | this agent answers SendMessage only
+    POST  /a2a/v1                        body-not-json
+    POST  /a2a/v1                        answered | could-these-tests-fail
+
+**Two mistakes of mine on the way there**, both caught by re-running the five requests rather than by
+reading the diff. I first keyed the refusal off the HTTP status - and a JSON-RPC error rides in a
+**200**, because the transport worked and the call did not, so the check missed exactly the entry
+worth having. And I wrote the HTTP verb into `method`, which the answering path already uses for the
+RPC method name: two meanings on one key. The verb is `http` now, and all five rows share one shape.
+
+One correction to my own first reading: the agent card looked at first as though it published no URL
+for a peer to call. It does - `supportedInterfaces[0].url` - and I had been looking for a top-level
+`url`, which is the older field name. No defect there.
+
+1,146 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

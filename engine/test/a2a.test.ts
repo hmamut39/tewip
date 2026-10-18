@@ -13,7 +13,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { agentCard, ANSWERABLE, skillById } from '../a2a/card.ts';
 import { askWhich, chooseSkill, textOf } from '../a2a/answer.ts';
-import { handleRpc, isLoopback } from '../a2a/serve.ts';
+import { handleRpc, isLoopback, serveA2A } from '../a2a/serve.ts';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const CMD = { root: process.cwd(), port: 41241, host: '127.0.0.1', tewipRoot: process.cwd() };
 const message = (text: string, metadata?: Record<string, unknown>) => ({
@@ -160,5 +163,101 @@ describe('where it will listen', () => {
     for (const skill of ANSWERABLE) {
       assert.equal(skillById(skill.id)?.verb, skill.verb);
     }
+  });
+});
+
+// Phase 75: the four claims this command makes about itself, each tested against a running server.
+//
+// Three held. Only the read-only verbs are exposed - explain, vouch, pick, schema, access, perf,
+// standards, done - and `runSkill` is called with an **empty argument list**, so nothing a peer sends
+// can become a command-line flag. It binds to 127.0.0.1 and the socket confirms it. And a message it
+// cannot place really does come back as a question rather than a guess.
+//
+// The fourth was false. "Every request is written to .tewip/a2a.jsonl ... so there is a record of
+// what another agent asked for and what it was told" - five requests to a real server produced
+// **one** entry, the one that was answered. A POST to the wrong path, a call for a method this agent
+// does not implement, and a malformed body left no trace at all. On a port with no authentication
+// those are the entries an operator most needs.
+describe('what the record holds about requests that were refused', () => {
+  const start = async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-a2a-'));
+    const server = serveA2A({ root, tewipRoot: root, host: '127.0.0.1', port: 0 } as never);
+    await new Promise<void>((done) => server.once('listening', () => done()));
+    const { port } = server.address() as { port: number };
+    const log = () => (existsSync(join(root, '.tewip', 'a2a.jsonl')) ? readFileSync(join(root, '.tewip', 'a2a.jsonl'), 'utf8').split(String.fromCharCode(10)).filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) : []);
+    return { server, port, log, stop: () => new Promise<void>((done) => server.close(() => done())) };
+  };
+
+  it('records a POST to a path it does not serve', async () => {
+    const a = await start();
+    try {
+      await fetch(`http://127.0.0.1:${a.port}/nope`, { method: 'POST', body: '{}' });
+      const [entry] = a.log();
+      assert.equal(entry?.outcome, 'no-such-endpoint');
+      assert.equal(entry?.path, '/nope');
+      assert.equal(entry?.http, 'POST');
+    } finally {
+      await a.stop();
+    }
+  });
+
+  it('records a call for a method it does not implement', async () => {
+    // This one is the reason the HTTP status could not be the test: a JSON-RPC error rides in a 200
+    // response, because the transport worked and the call did not. Checking the status missed exactly
+    // the entry worth having - a peer probing for methods.
+    const a = await start();
+    try {
+      await fetch(`http://127.0.0.1:${a.port}/a2a/v1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'message/send', params: {} }) });
+      const refused = a.log().find((e) => e.outcome === 'refused');
+      assert.ok(refused, 'a refused call has to leave a trace');
+      assert.match(String(refused?.why ?? ''), /SendMessage only/);
+    } finally {
+      await a.stop();
+    }
+  });
+
+  it('records a body it could not parse, without recording the body', async () => {
+    const a = await start();
+    try {
+      await fetch(`http://127.0.0.1:${a.port}/a2a/v1`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'SECRETVALUE not json' });
+      const entry = a.log().find((e) => e.outcome === 'body-not-json');
+      assert.ok(entry, 'malformed input is still something a peer asked for');
+      assert.doesNotMatch(JSON.stringify(entry), /SECRETVALUE/, 'what a peer sends can contain anything and is never logged');
+    } finally {
+      await a.stop();
+    }
+  });
+
+  it('records a read of the card, which is how a peer finds this agent', async () => {
+    const a = await start();
+    try {
+      await fetch(`http://127.0.0.1:${a.port}/.well-known/agent-card.json`);
+      assert.equal(a.log()[0]?.outcome, 'card-read');
+    } finally {
+      await a.stop();
+    }
+  });
+
+  it('gives every entry the same shape, so the file can be read', async () => {
+    const a = await start();
+    try {
+      await fetch(`http://127.0.0.1:${a.port}/.well-known/agent-card.json`);
+      await fetch(`http://127.0.0.1:${a.port}/nope`, { method: 'POST', body: '{}' });
+      for (const entry of a.log()) {
+        assert.ok(typeof entry.at === 'string' && entry.at.length > 0, 'every entry is timestamped');
+        assert.ok(typeof entry.http === 'string', 'and says which verb arrived');
+        assert.ok(typeof entry.path === 'string', 'and at which path');
+        assert.ok(typeof entry.outcome === 'string', 'and what became of it');
+      }
+    } finally {
+      await a.stop();
+    }
+  });
+});
+
+describe('only the read-only verbs are reachable', () => {
+  it('exposes no verb that writes a file or runs the suite', () => {
+    const writes = new Set(['write', 'fix', 'build', 'prove', 'jira', 'bugs', 'correct', 'pursue', 'incident']);
+    for (const skill of ANSWERABLE) assert.equal(writes.has(skill.verb), false, `${skill.verb} changes things and must not be exposed`);
   });
 });

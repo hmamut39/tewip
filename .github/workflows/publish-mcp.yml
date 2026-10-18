@@ -51,11 +51,18 @@ jobs:
           else
             installable=no
           fi
+          # `version=latest` is the only query that answers this. Asking without it returns the
+          # version history, which is capped and comes back missing the newest releases - it
+          # answered with 59 versions and neither 0.70.13 nor 0.70.14 among them, hours after
+          # 0.70.14 was listed. Reading that as "not listed yet" would have had the nightly run
+          # re-publishing the same version every night, and it was also how the listing was read as
+          # stale while it was current.
           listed="$(node -e "
-            fetch('https://registry.modelcontextprotocol.io/v0/servers?search=' + encodeURIComponent(process.argv[1]) + '&limit=100')
+            fetch('https://registry.modelcontextprotocol.io/v0/servers?search=' + encodeURIComponent(process.argv[1]) + '&version=latest')
               .then((r) => r.json())
               .then((j) => {
-                const mine = (j.servers || []).map((x) => x.server || x).filter((x) => x.name === process.argv[1]);
+                if (!Array.isArray(j.servers)) { console.log('unknown'); return; }
+                const mine = j.servers.map((x) => x.server || x).filter((x) => x.name === process.argv[1]);
                 console.log(mine.some((x) => x.version === process.argv[2]) ? 'yes' : 'no');
               })
               .catch(() => console.log('unknown'));

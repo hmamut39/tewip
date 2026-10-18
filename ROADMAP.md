@@ -4388,6 +4388,48 @@ five shapes are pinned.
 
 1,153 tests.
 
+### Phase 78: The Quote Check Could Not See A Two-Digit Number
+
+`tewip spec` writes an epic and its stories, and makes a claim that can be checked rather than
+believed: *"Anything it says the system already does is quoted from a file it read; what it cannot
+quote becomes an open question."* Run against the real cart project from Phase 77, it produced four
+such claims, and **all four quotes are in the file character for character**, verified by hand.
+
+So the claim held. The mechanism that guarantees it did not.
+
+`quoteHolds` collected the quote's "distinctive parts" - runs of `[A-Za-z0-9_$.]{3,}` - and required
+each to appear **somewhere** in the file, in any order. Six evidence strings were put to it against
+the real `src/cart.js`, and three fabrications passed. The worst was this, offered as evidence that
+the 20% discount cap is enforced:
+
+    const rate = Math.min(percent, 20) / 100;      // the file says 100, not 20
+
+Every part of it is in the file - `const`, `rate`, `Math.min`, `percent`, `100`. **`20` is not a part
+at all**, because the pattern cannot see a two-character number. The one token carrying the entire
+meaning of the line was the one token never checked, and a reader of *"What the code already does -
+each line is quoted from a file Tewip read"* would have concluded the bug was fixed. It is not; that
+unenforced cap is the bug Phase 77 planted.
+
+The comment that sat above this code had named the risk precisely:
+
+> Every distinctive part must be in the file. Anything less lets a quote that is mostly real but
+> wrong where it matters through - **"slice(0, 50)" and "slice(0, 10000)" differ by one word.**
+
+`10000` is five characters and was compared. `50` is two and never was. The example in the comment
+was itself half-broken, which is as good an argument as any for running a thing rather than reading
+it.
+
+Two other fabrications got through for the related reason that parts need no order: a line assembled
+from words the file really contains, in an arrangement it never had, and a flipped free-delivery
+threshold.
+
+A quote must now appear in the file **as one piece**. Whitespace is squashed and quote characters
+normalised - the two differences between a model's copy and a file that carry no meaning - and
+nothing else is forgiven. All four real quotes from the live run still hold; all three fabrications
+now fail, and a failing claim becomes an open question, which is where it belongs.
+
+1,158 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

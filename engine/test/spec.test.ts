@@ -92,3 +92,53 @@ describe('what the specification looks like', () => {
     assert.match(body, /review before you rely on it/);
   });
 });
+
+// Phase 78: field-tested on a real project. The command's claim - "anything it says the system
+// already does is quoted from a file it read" - held on the real run: all four quotes it produced
+// were in the file character for character, checked by hand.
+//
+// The checker that guarantees that did not hold. It collected the quote's "distinctive parts", runs
+// of [A-Za-z0-9_$.]{3,}, and required each to appear somewhere in the file in any order.
+describe('a quote that is mostly real and wrong where it matters', () => {
+  const CART = [
+    'export function discount(items, percent) {',
+    '  const rate = Math.min(percent, 100) / 100;',
+    '  return subtotal(items) * rate;',
+    '}',
+    'export function deliveryFee(items) {',
+    '  return subtotal(items) >= 50 ? 0 : 4.99;',
+    '}',
+  ].join(NL);
+  const sources = [{ file: 'src/cart.js', content: CART }];
+
+  it('refuses a number swapped for another, which is the whole meaning of the line', () => {
+    // Offered as evidence that a 20% cap is enforced, against a file whose cap is 100. Every part of
+    // it is in the file - const, rate, Math.min, percent, 100 - and `20` is not a part at all,
+    // because the pattern could not see a two-character number. The one token carrying the entire
+    // meaning was the one token not checked.
+    assert.equal(quoteHolds('src/cart.js: const rate = Math.min(percent, 20) / 100;', sources), false);
+    assert.equal(quoteHolds('src/cart.js: const rate = Math.min(percent, 100) / 100;', sources), true, 'the real line still holds');
+  });
+
+  it('refuses a threshold swapped for another', () => {
+    assert.equal(quoteHolds('src/cart.js: return subtotal(items) >= 75 ? 0 : 4.99;', sources), false);
+    assert.equal(quoteHolds('src/cart.js: return subtotal(items) >= 50 ? 0 : 4.99;', sources), true);
+  });
+
+  it('refuses a line assembled from words the file really contains', () => {
+    // Every word here is in the file; this arrangement of them never was.
+    assert.equal(quoteHolds('src/cart.js: return discount(items, percent) - subtotal(items);', sources), false);
+  });
+
+  it('refuses a function that does not exist, however plausible', () => {
+    assert.equal(quoteHolds('src/cart.js: export function loyaltyDiscount(items) {', sources), false);
+  });
+
+  it('still forgives the two differences that carry no meaning', () => {
+    // A model copies a line with different indentation and different quote characters; neither
+    // changes what the line says, and refusing those would demote true claims into questions.
+    assert.equal(quoteHolds('src/cart.js:      const rate   =  Math.min(percent, 100) / 100;', sources), true, 'whitespace');
+    const quoted = [{ file: 'src/a.js', content: "const greeting = 'hello';" }];
+    assert.equal(quoteHolds('src/a.js: const greeting = "hello";', quoted), true, 'quote characters');
+  });
+});

@@ -108,9 +108,29 @@ function readable(facts: PlanFacts): Array<{ file: string; content: string }> {
 }
 
 /**
- * A quote is real when the file is one Tewip read and the distinctive parts of the quote are in it.
- * Whitespace and quote style differ between a model's copy and the file, so the comparison is on
- * the words and symbols, not on the exact spacing.
+ * A quote is real when the file is one Tewip read and the quote appears in it **as one piece**.
+ *
+ * This used to collect the quote's "distinctive parts" - runs of `[A-Za-z0-9_$.]{3,}` - and require
+ * each to appear somewhere in the file, in any order. Three fabrications got through a real check
+ * against a real file, and the worst was this, offered as evidence that a 20% discount cap is
+ * enforced:
+ *
+ *     const rate = Math.min(percent, 20) / 100;     // the file says 100, not 20
+ *
+ * Every part of that - `const`, `rate`, `Math.min`, `percent`, `100` - is in the file. **`20` is
+ * not a part at all**, because `{3,}` cannot see a two-character number. So the one token that
+ * carried the entire meaning was the one token not checked, and a reader of "What the code already
+ * does - each line is quoted from a file Tewip read" would have concluded the bug was fixed.
+ *
+ * The comment that used to sit here saw the risk and named it exactly - *"a quote that is mostly
+ * real but wrong where it matters... 'slice(0, 50)' and 'slice(0, 10000)' differ by one word"* -
+ * and `50` was never a word it could compare. A line assembled from real words in an order the file
+ * has never contained got through for the same reason.
+ *
+ * So the quote has to be in the file contiguously. Whitespace is squashed and quote characters are
+ * normalised, because those are the two differences between a model's copy and the file that carry
+ * no meaning; nothing else is forgiven. A claim that fails this becomes an open question, which is
+ * the right place for it.
  */
 export function quoteHolds(evidence: string, sources: Array<{ file: string; content: string }>): boolean {
   const at = evidence.indexOf(': ');
@@ -119,12 +139,8 @@ export function quoteHolds(evidence: string, sources: Array<{ file: string; cont
   const quote = evidence.slice(at + 2).trim();
   const source = sources.find((s) => s.file === file || s.file.endsWith(`/${file}`) || file.endsWith(s.file));
   if (!source || quote.length < 3) return false;
-  const parts = quote.match(/[A-Za-z0-9_$.]{3,}/g) ?? [];
-  if (parts.length === 0) return false;
-  const body = source.content;
-  // Every distinctive part must be in the file. Anything less lets a quote that is mostly real but
-  // wrong where it matters through - "slice(0, 50)" and "slice(0, 10000)" differ by one word.
-  return parts.every((part) => body.includes(part));
+  const squash = (text: string) => text.replace(/["'`]/g, '"').replace(/\s+/g, ' ').trim();
+  return squash(source.content).includes(squash(quote));
 }
 
 /**

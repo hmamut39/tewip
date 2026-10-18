@@ -85,26 +85,58 @@ ${noModelHelp()}`);
     const fileName = framework.fileFor(scenario.id);
     const file = join(framework.testDir, fileName);
     if (existsSync(file) || (cmd.moveTo && existsSync(join(cmd.moveTo, fileName)))) {
-      results.push({ id: scenario.id, title: scenario.title, file, outcome: { kind: 'rejected', reason: `${fileName} already exists; left untouched`, repairs: 0, passedReliably: false } });
+      // Every file this command writes carries "tewip" in its name, so one already sitting here is
+      // one of its own - an unverified draft from a run that did not finish, not a test the team
+      // wrote. Calling that "left untouched" sounds like a decision and hides that the file is in
+      // the test folder, where the suite is running it.
+      //
+      // Matched case-insensitively on the whole name rather than as a prefix, because only the
+      // JavaScript frameworks produce `tewip-ls-002.spec.ts`: pytest gives `test_tewip_ls_002.py`
+      // and JUnit `TewipLs002Test.java`, and a prefix check would have handed Python and Java teams
+      // the misleading message this fix exists to remove.
+      const mine = /tewip/i.test(fileName);
+      results.push({
+        id: scenario.id,
+        title: scenario.title,
+        file,
+        outcome: {
+          kind: 'rejected',
+          reason: mine
+            ? `${fileName} is already here from a run that did not finish, and was never verified. It is in your test folder, so your suite is running it: delete it, or move it to .tewip/drafts/, then ask again.`
+            : `${fileName} already exists and was written by somebody else; left untouched`,
+          repairs: 0,
+          passedReliably: false,
+        },
+      });
       continue;
     }
     console.error(`  ${scenario.id} ${scenario.title}`);
-    // Stopped part-way (Ctrl+C), a draft that was never verified must not stay in the project.
+    // A draft that was never verified must not stay in the project, however the run ended.
+    //
+    // SIGINT and SIGTERM were covered; nothing else was. A run of this interrupted another way -
+    // a closed pipe, an uncaught throw, a kill - left the draft in the **test folder**, where the
+    // project's own suite then runs it. Seen for real: a two-scenario run was cut short by a broken
+    // shell command, the suite went from green to red, and the next `write` reported the leftover as
+    // "already exists; left untouched", which reads like a decision rather than a casualty.
+    //
+    // `renameSync` is synchronous, so an `exit` handler can still do it: that covers every way out.
+    const rescue = () => {
+      if (!existsSync(file)) return;
+      mkdirSync(drafts, { recursive: true });
+      renameSync(file, join(drafts, fileName));
+    };
     const leaveNothing = () => {
-      if (existsSync(file)) {
-        mkdirSync(drafts, { recursive: true });
-        renameSync(file, join(drafts, fileName));
-      }
+      rescue();
       process.exit(130);
     };
-    process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing);
+    process.once('SIGINT', leaveNothing).once('SIGTERM', leaveNothing).once('exit', rescue);
     let outcome: Outcome;
     try {
       ({ outcome } = await writeAndVerify(model, { framework, fileName, pages, feature: saved.feature, code, houseRules: guidanceFor(loadStandards(cmd.root), fileName) }, scenario, file, { runs: cmd.runs, repairs: cmd.repairs, mutateSource: cmd.mutateSource, log: (l) => console.error(l) }));
     } catch (error) {
       outcome = { kind: 'rejected', reason: `stopped: ${(error as Error).message}`, repairs: 0, passedReliably: false };
     } finally {
-      process.off('SIGINT', leaveNothing).off('SIGTERM', leaveNothing);
+      process.off('SIGINT', leaveNothing).off('SIGTERM', leaveNothing).off('exit', rescue);
     }
     // Some runners take minutes per run (Angular rebuilds the app for every `ng test`): say how long
     // the rest will take, so a slow run is not mistaken for a stuck one.

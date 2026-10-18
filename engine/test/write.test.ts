@@ -282,3 +282,41 @@ describe('checks that cannot really fail', () => {
     assert.equal(weakChecks(real), null);
   });
 });
+
+// Phase 77: field-tested by building a real project - a real cart module with one real bug, a real
+// passing suite - writing a real plan for it, and letting `write` loose.
+//
+// The double gate works. A scenario the app satisfies was written, run twice, broken on purpose,
+// seen to fail, and kept. A scenario the app **violates** - the 20% discount cap the module does not
+// enforce - produced a correct test that the app failed, and `write` refused to keep it rather than
+// weakening the assertion: "the model blamed the app but could not quote the run's output to show
+// it, so it is not reported as a bug". The unkept draft went to `.tewip/drafts/` with its log.
+describe('a draft left behind by a run that did not finish', () => {
+  it('is recognisable as one Tewip wrote in every framework, not just the JavaScript ones', () => {
+    // The first version of this check was `fileName.startsWith('tewip-')`, which is true only of the
+    // JavaScript frameworks. pytest writes `test_tewip_ls_002.py` and JUnit `TewipLs002Test.java`,
+    // so a Python or Java team would have been handed the misleading message instead.
+    for (const name of ['tewip-ls-002.spec.ts', 'tewip-ls-002.test.js', 'test_tewip_ls_002.py', 'TewipLs002Test.java', 'TewipLs002Test.cs']) {
+      assert.match(name, /tewip/i, `${name} has to be recognisable as a draft Tewip wrote`);
+    }
+  });
+
+  it('is not confused with a test somebody else wrote', () => {
+    for (const name of ['cart.test.js', 'test_cart.py', 'CartTest.java', 'checkout.spec.ts']) {
+      assert.doesNotMatch(name, /tewip/i, `${name} belongs to the team and must be left alone`);
+    }
+  });
+
+  it('names a file for every framework in a shape that carries the scenario id', () => {
+    // The whole rescue rests on the name being derivable from the scenario, so a leftover can be
+    // matched to the scenario it was drafted for.
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-names-'));
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ devDependencies: { '@playwright/test': '1' } }), 'utf8');
+    // Detection wants the config too: a dependency alone is not a configured framework.
+    writeFileSync(join(dir, 'playwright.config.ts'), 'export default {};', 'utf8');
+    const framework = chooseFramework(detectFrameworks(dir), undefined, true);
+    assert.ok(framework, 'a Playwright project is detected');
+    assert.match(framework.fileFor('CART-003'), /tewip/i);
+    assert.match(framework.fileFor('CART-003'), /cart-003/i, 'and says which scenario it was for');
+  });
+});

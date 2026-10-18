@@ -4336,6 +4336,58 @@ because a plan written by the tool asked the question, which is the first time t
 
 1,150 tests.
 
+### Phase 77: The Double Gate Holds; What An Interrupted Run Leaves Behind Does Not
+
+`tewip write` writes a test for a scenario and keeps it **only** if it passed every run against the
+working app **and** failed once its own main check was broken on purpose. That is the strongest claim
+left untested, so a real project was built for it: a cart module with real arithmetic, a real passing
+suite, and one real bug - the rule says no order may be discounted more than 20%, and the cap in the
+code is 100, so the rule is simply not enforced.
+
+`tewip plan` found the bug without being told about it. Of nine scenarios it wrote, three (**P0**)
+target exactly the unenforced cap.
+
+**The gate works, in both directions.** A scenario the app satisfies - free delivery at exactly 50 -
+was drafted, run twice, broken on purpose, seen to fail, and kept. A scenario the app **violates** was
+drafted into a correct test, the app failed it, and `write` refused to keep it rather than weakening
+the assertion:
+
+> rejected: **the model blamed the app but could not quote the run's output to show it**, so it is not
+> reported as a bug
+
+That refusal is the right one, and the unkept draft went to `.tewip/drafts/` with its last error, as
+promised. Verified by running the same scenario alone in a clean copy.
+
+**The defect was in what an interrupted run leaves behind.** A `write` of two scenarios was cut short
+part-way - by a broken shell command of mine, which is as good a simulation of a dropped pipe as any -
+and the draft it had already written stayed in **`tests/`**. The project's suite went from green to
+red because of a test Tewip had not kept, while the report said:
+
+> Kept tests are new files... **Drafts not kept are in `.tewip/drafts/`** with their last error.
+
+`.tewip/drafts/` did not exist. SIGINT and SIGTERM were guarded; nothing else was. `renameSync` is
+synchronous, so an `exit` handler can still rescue the file, and now does - covering every way out
+rather than the two that were listed.
+
+And the next run described that state as a decision:
+
+> tewip-cart-003.test.js **already exists; left untouched**
+
+which reads as "your file, respected" for a file that is breaking the build. Every file this command
+writes carries "tewip" in its name, so a leftover is identifiable with certainty, and it now says so:
+
+> tewip-cart-003.test.js **is already here from a run that did not finish, and was never verified. It
+> is in your test folder, so your suite is running it**: delete it, or move it to .tewip/drafts/,
+> then ask again.
+
+**A hole in my own fix, caught by reading the existing tests rather than by running mine.** The check
+began as `fileName.startsWith('tewip-')`, which is true only of the JavaScript frameworks: pytest
+writes `test_tewip_ls_002.py` and JUnit `TewipLs002Test.java`. A Python or Java team would have been
+handed the misleading message this fix exists to remove. It matches on the whole name now, and all
+five shapes are pinned.
+
+1,153 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

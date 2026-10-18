@@ -88,6 +88,15 @@ export function triageSecret(finding: SecretFinding, root: string, accepted: Set
   if (finding.placeholder) {
     return { ...base, verdict: 'noise', severity: 'low', why: `${finding.placeholder}: ${finding.evidence}`, next: 'nothing: this is not a credential' };
   }
+  if (finding.localOnly) {
+    return {
+      ...base,
+      verdict: 'not-reachable',
+      severity: 'low',
+      why: `${finding.evidence} - ${finding.localOnly}`,
+      next: 'nothing to revoke, because nothing outside this machine accepts it. Worth replacing with a value read from the environment, on a normal schedule.',
+    };
+  }
   if (finding.template) {
     // Only the file's name says this is a template; the value itself looks like a real credential.
     // Dismissing it would hide the commonest accident there is - a working key pasted into an

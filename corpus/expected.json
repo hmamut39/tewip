@@ -145,6 +145,17 @@
             "locks-writes": 98
           },
           "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 4621,
+            "findings": 6,
+            "needs-someone": 0,
+            "noise": 4,
+            "not-reachable": 2
+          },
+          "verified": "read by hand on 2026-10-18, every finding opened in the file. Saleor's six: four noise (three url-credentials on example.com, which RFC 2606 reserves so it cannot be anybody's system, and one user==password stand-in) and two not-reachable (RSA private keys in test fixtures, conftest.py:149 and tests/settings.py:60, both deliberate). Nothing needs anybody. Before this phase the same checkout reported six needing someone now, at high severity, each told to revoke it at the issuer - three of them the Django postgres://saleor:saleor@localhost default, one on a commented-out line."
         }
       ]
     },
@@ -163,6 +174,15 @@
             "barrier": 6
           },
           "verified": "2026-10-12. All 6 barriers opened and read, and all 6 are in the review app rather than the shipped component library: the colour input and two checkboxes whose label points at an id that does not exist (verified in Phase 41 too), two <img> with no alt on the product-page example, and an <iframe> with no title. The component library itself reports none, which is the right answer for a design system built under a legal obligation - and it was reporting six until Phase 45, when `{{- govukAttributes({ id: id, ... }) }}` was understood as a spread rather than as an element with no attributes at all."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 1010,
+            "findings": 0,
+            "needs-someone": 0
+          },
+          "verified": "read by hand on 2026-10-18. 1,010 files read, nothing accused."
         }
       ]
     },
@@ -195,6 +215,15 @@
             "never-runs": 0
           },
           "verified": "2026-10-15. 86 tests, all of them checks, against 88 `public function test*` counted independently with grep - the two missing are in a class that does not extend TestCase. Before Phase 48 this read 95 tests in 39 files with 68 of them 'Tewip would not judge': `$response->assertUnauthorized()` is how a Laravel HTTP test asserts and only `$this->assert` was recognised. Eight of those 39 files were production controllers - testRule, testNotification - endpoints a user hits, not tests; a PHPUnit test is one whose class extends TestCase. One more was a vendored jquery.min.js, which is full of `test(` because that is how a regular expression is applied."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 2153,
+            "findings": 0,
+            "needs-someone": 0
+          },
+          "verified": "read by hand on 2026-10-18. Zero is the whole point: firefly-iii ships .env.example and .env.testing, which is the classic way a secret scanner embarrasses itself, and the scanner read all of its files and accused none of them."
         }
       ]
     },
@@ -253,6 +282,15 @@
             "never-runs": 0
           },
           "verified": "2026-10-15. Zero accusations across 466 Rust tests, which agrees with reading the condemned list and finding it empty. The four zeros are the measurement here: Rust was added in Phase 36 against this exact project, after its lifetimes were being read as unterminated strings, and nothing had held that since."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 234,
+            "findings": 0,
+            "needs-someone": 0
+          },
+          "verified": "read by hand on 2026-10-18. 234 files read, nothing accused."
         }
       ]
     },

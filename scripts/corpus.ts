@@ -18,9 +18,11 @@ import { join, resolve } from 'node:path';
 import { vouchAll } from '../engine/vouch/vouch-command.ts';
 import { findBarriers } from '../engine/access/access-command.ts';
 import { migrationsUnder, readMigration } from '../engine/schema/schema-command.ts';
+import { scanSecrets, sourceFiles } from '../engine/secure/secrets.ts';
+import { triageSecret } from '../engine/secure/triage.ts';
 
 interface Expectation { [key: string]: number }
-interface Check { command: 'vouch' | 'schema' | 'access'; expect: Expectation; verified: string }
+interface Check { command: 'vouch' | 'schema' | 'access' | 'secrets'; expect: Expectation; verified: string }
 interface Repo { name: string; url: string; commit: string; why: string; checks: Check[] }
 
 const MANIFEST = resolve('corpus/expected.json');
@@ -60,6 +62,20 @@ function measure(command: Check['command'], root: string): Expectation {
         out.tests += 1;
         out[judgement.verdict] = (out[judgement.verdict] ?? 0) + 1;
       }
+    return out;
+  }
+  if (command === 'secrets') {
+    // Counted by verdict, because the number that matters is not how many shapes matched but how
+    // many people are told to go and revoke something. Saleor at its pinned commit reported six of
+    // those, all high, three of them the Django localhost default - the kind of false accusation
+    // this corpus exists to catch, and the kind no unit test was ever going to find.
+    const found = scanSecrets(root, sourceFiles(root));
+    const out: Expectation = { filesRead: sourceFiles(root).length, findings: found.length, 'needs-someone': 0 };
+    for (const finding of found) {
+      const verdict = triageSecret(finding, root, new Set<string>()).verdict;
+      out[verdict] = (out[verdict] ?? 0) + 1;
+      if (verdict === 'real-risk') out['needs-someone'] += 1;
+    }
     return out;
   }
   if (command === 'access') {

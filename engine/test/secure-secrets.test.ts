@@ -89,3 +89,65 @@ describe('what a secret scanner must not cry wolf about', () => {
     assert.notEqual(item?.verdict, 'noise');
   });
 });
+
+describe('a credential is judged, not the URL around it', () => {
+  // Measured on Saleor at its pinned commit. The report said "6 need someone now", every one high,
+  // every one told to "revoke it at the issuer first". Three were the Django local-development
+  // default in settings.py - postgres://saleor:saleor@localhost - one of them on a commented-out
+  // line, and the evidence offered was that the value "has the randomness of a real credential
+  // (3.82 bits per character)". That was measured over the whole URL, because the URL rules capture
+  // the URL as group 1 and the password as group 2, and the scanner read group 1.
+  const scan = (files: Record<string, string>) => {
+    const root = project(files);
+    return { root, found: scanSecrets(root, sourceFiles(root)) };
+  };
+
+  it('does not measure a password by the URL it sits in', () => {
+    // `saleor` is six characters of nothing. It only passed the entropy gate because the gate was
+    // reading `postgres://saleor:saleor@localhost:5432/saleor`.
+    const { found } = scan({ 'settings.py': 'DATABASES = {"default": "postgres://saleor:saleor@localhost:5432/saleor"}\n' });
+    assert.deepEqual(found, [], 'a six-letter password is not a credential, whatever the URL around it scores');
+  });
+
+  it('still reports a real password at a real host', () => {
+    const { root, found } = scan({ '.env.production': 'DATABASE_URL=postgres://produser:hS8xQ2mZvEeMnOpQrStUvW@db.acme-prod.internal:5432/main\n' });
+    assert.equal(found.length, 1);
+    assert.equal(found[0].placeholder, null, 'a real host is not a stand-in');
+    assert.equal(found[0].localOnly ?? null, null, 'a real host is not this machine');
+    const [item] = found.map((f) => triageSecret(f, root, new Set()));
+    // How urgent it is depends on whether the value is actually committed, which this fixture - a
+    // bare directory, not a checkout - cannot say. What matters here is that it is not dismissed.
+    assert.notEqual(item.verdict, 'noise');
+  });
+
+  it('does not let a word in the hostname dismiss a real password', () => {
+    // The whole line contains "example", and it is in the host. Before this, the line test read it
+    // as commentary and dropped a working credential into noise. Suppressing a real secret is the
+    // worst thing this scanner can do, and it was one word in an unrelated part of the URL away.
+    const { found } = scan({ '.env': 'DATABASE_URL=postgres://produser:hS8xQ2mZvEeMnOpQrStUvW@db.acme-prod.example-corp.io:5432/main\n' });
+    assert.equal(found.length, 1);
+    assert.equal(found[0].placeholder, null, 'the host is part of the credential, not a note about it');
+  });
+
+  it('calls a reserved domain what it is', () => {
+    // example.com exists under RFC 2606 so that it cannot be anybody's system.
+    const { found } = scan({ 'test_payloads.py': 'webhook.target_url = "http://someone:hS8xQ2mZvEeMnOpQrStUvW@example.com/webhooks"\n' });
+    assert.match(found[0]?.placeholder ?? '', /reserved so that it cannot be anybody/);
+  });
+
+  it('calls a password identical to its username a stand-in', () => {
+    const { found } = scan({ 'docker-compose.yml': '  DATABASE_URL: "postgres://hS8xQ2mZvEeMnOpQrStUvW:hS8xQ2mZvEeMnOpQrStUvW@db.real-host.io:5432/app"\n' });
+    assert.match(found[0]?.placeholder ?? '', /the same word/);
+  });
+
+  it('puts a localhost credential where a person can still see it, without telling them to revoke it', () => {
+    // Not noise: an earlier phase decided a hardcoded password in settings is worth a person
+    // looking at, and that was right. Only the urgency was wrong - there is no issuer.
+    const { root, found } = scan({ 'settings.py': 'DATABASES = {"default": "postgres://app:hS8xQ2mZvEeMnOpQrStUvW@localhost:5432/app"}\n' });
+    const [item] = found.map((f) => triageSecret(f, root, new Set()));
+    assert.equal(item.verdict, 'not-reachable');
+    assert.notEqual(item.verdict, 'noise');
+    assert.match(item.next, /nothing to revoke/);
+    assert.doesNotMatch(item.next, /revoke it at the issuer/);
+  });
+});

@@ -23,6 +23,8 @@ export interface SecretFinding {
   entropy: number;
   /** Set when the value looks like documentation, a fixture or an obvious placeholder. */
   placeholder: string | null;
+  /** Set when the credential is real text but its destination is only this machine. */
+  localOnly?: string | null;
   /** Set when the file is a template or documentation, whatever the value looks like. */
   template: boolean;
 }
@@ -90,14 +92,79 @@ const DOC_FILE = /(?:^|[\\/])(?:\.env\.example|\.env\.sample|\.env\.template|[^\
  * there is, and a key pasted into an example file by accident is one of the commonest ways
  * credentials leak. That case is now shown as a template finding instead of being dismissed.
  */
-export function looksPlanted(value: string, line: string, file: string, before = ''): string | null {
+/**
+ * A URL-shaped credential whose destination cannot be a real system, or whose user and password
+ * are the same word.
+ *
+ * A credential matters because it is a way in to something. `postgres://saleor:saleor@localhost`
+ * is a way in to the machine it is already running on, and `user:password@example.com` points at
+ * a domain reserved by RFC 2606 precisely so that it cannot be anybody's system.
+ *
+ * Measured on Saleor at its pinned commit: six findings were reported as needing someone now, at
+ * high severity, each telling the team to "revoke it at the issuer first". Three were the Django
+ * local-development default in settings.py, one of them on a commented-out line, and the evidence
+ * offered was that the value "has the randomness of a real credential" - about the word `saleor`.
+ *
+ * Nothing is dropped. The finding becomes a placeholder finding, shown as noise with its reason
+ * attached. Suppressing a real secret is far worse than reporting a false one, so the two tests
+ * are narrow: a destination that provably reaches nobody, and a password identical to its own
+ * username, which nobody chooses for a credential that guards anything.
+ */
+/** Domains that exist so they cannot be anybody's system (RFC 2606, RFC 6761). */
+const RESERVED = /^(?:[\w-]+\.)*example\.(?:com|org|net)$|\.(?:invalid|test|localhost|local)$/i;
+/** Addresses that only ever mean the machine the code is running on. */
+const THIS_MACHINE = /^(?:localhost|127\.0\.0\.1|\[?::1\]?|0\.0\.0\.0)$/i;
+const CREDENTIALLED_URL = /[a-z][a-z0-9+.-]*:\/\/([^:/\s'\"]+):([^@\s'\"]+)@([^/\s'\"?#]+)/gi;
+
+/**
+ * A credential whose destination is the machine it runs on.
+ *
+ * This is deliberately not treated as a placeholder. A hardcoded password in settings.py is a real
+ * string that a person should see - an earlier phase decided exactly that, about this exact case -
+ * and calling it noise would hide it. What was wrong was only the urgency: Saleor's Django default
+ * was reported as needing someone now, at high severity, told to "revoke it at the issuer first".
+ * There is no issuer. It belongs in "real, but not reachable", which is the bucket for something
+ * true of the repository and not of what it runs.
+ */
+export function credentialGoesNowhere(value: string, line: string): string | null {
+  for (const [, , password, hostport] of [...value.matchAll(CREDENTIALLED_URL), ...[...line.matchAll(CREDENTIALLED_URL)].filter((m) => m[2] === value)]) {
+    if (password !== value && !value.includes(password)) continue;
+    const host = hostport.replace(/:\d+$/, '');
+    if (THIS_MACHINE.test(host)) return `the URL points at ${host}, so it reaches only the machine it runs on`;
+  }
+  return null;
+}
+
+export function urlCredentialIsHarmless(value: string, line: string): string | null {
+  // The URL rules capture the whole URL as the value, not the password inside it - which is also
+  // why these pass the entropy gate at all, and why the report offered "the randomness of a real
+  // credential (3.82 bits per character)" as evidence about a string that is mostly the word
+  // `postgres` and a hostname. So the value is read as a URL first, and only then looked for inside
+  // the line, which is how the patterns that do capture a bare password arrive here.
+  const inValue = [...value.matchAll(CREDENTIALLED_URL)];
+  const inLine = [...line.matchAll(CREDENTIALLED_URL)].filter((m) => m[2] === value);
+  for (const [, user, password, hostport] of [...inValue, ...inLine]) {
+    const host = hostport.replace(/:\d+$/, '');
+    if (RESERVED.test(host)) return `the URL points at ${host}, a domain reserved so that it cannot be anybody's system`;
+    if (user.toLowerCase() === password.toLowerCase()) return 'the user and the password are the same word, which is a stand-in rather than a credential';
+  }
+  return null;
+}
+
+export function looksPlanted(value: string, line: string, file: string, before = '', whole = value): string | null {
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
-  if (PLACEHOLDER_WORDS.test(line)) return 'the line around it says it is an example';
+  // Only the words *around* the credential are commentary about it. A hostname or a database name
+  // inside the URL is part of the credential: a real password at db.acme-prod.example-corp.io was
+  // dismissed because "example" was in the line, and it was in the line because it was in the host.
+  const around = line.split(whole).join(' ');
+  if (PLACEHOLDER_WORDS.test(around)) return 'the line around it says it is an example';
   // JSON and YAML put the key on its own line when the value is long, and an OpenAPI schema is all
   // long values. nocodb declares `"example":` and then the token underneath it, so reading only the
   // token's line found nothing and the sample JWTs in its API documentation were reported as real.
   if (/"?(?:example|sample|placeholder|default|demo)"?\s*:\s*$/i.test(before.trim())) return 'the key above it says it is an example';
   if (/(.)\1{5,}/.test(value)) return 'the value repeats one character, so it is a stand-in';
+  const harmless = urlCredentialIsHarmless(value, line);
+  if (harmless) return harmless;
   return null;
 }
 
@@ -162,7 +229,16 @@ export function scanSecrets(root: string, files = sourceFiles(root)): SecretFind
     for (const { kind, what, re, minEntropy } of PATTERNS) {
       for (const match of text.matchAll(re)) {
         const value = match[1];
-        const entropy = entropyOf(value);
+        // Where a pattern captures the credential separately, that is what gets judged. The two
+        // URL rules capture the whole URL first and the password second, and judging the URL meant
+        // a hostname or a database name decided whether a password was real: a genuine credential
+        // at db.acme-prod.example-corp.io was dismissed because its host contains "example", and
+        // any connection string to a database called sample or demo would go the same way.
+        // Suppressing a real secret is the worst thing this scanner can do, and it was one word in
+        // an unrelated part of the string away. The whole match is still what gets redacted, so
+        // nothing of the URL is printed either way.
+        const secret = match[2] ?? value;
+        const entropy = entropyOf(secret);
         if (entropy < (minEntropy ?? 3)) continue;
         const index = match.index ?? 0;
         const line = text.slice(0, index).split('\n').length;
@@ -180,7 +256,8 @@ export function scanSecrets(root: string, files = sourceFiles(root)): SecretFind
           line,
           evidence: redact(lines[line - 1] ?? '', value),
           entropy: Number(entropy.toFixed(2)),
-          placeholder: looksPlanted(value, lines[line - 1] ?? '', rel, lines[line - 2] ?? ''),
+          placeholder: looksPlanted(secret, lines[line - 1] ?? '', rel, lines[line - 2] ?? '', value),
+          localOnly: credentialGoesNowhere(value, lines[line - 1] ?? ''),
           template: inATemplate(rel),
         });
       }

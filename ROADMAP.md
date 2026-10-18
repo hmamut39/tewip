@@ -4501,6 +4501,49 @@ and with the price put back, it is quiet about it again: 6 checks, 4 met, the tw
 
 1,166 tests.
 
+### Phase 81: It Told A `node --test` Project To Configure Jest
+
+`tewip watch` sits beside the editor: it runs the suite when a file changes and explains each failure
+as it happens, without CI. It is the only long-running command here, and `--once` makes it testable,
+so it was run on the real cart project - green first, then with a real off-by-one planted in
+`subtotal`.
+
+**The explaining half works.** Given a report, it diagnosed the planted bug correctly and quoted the
+real evidence back:
+
+> **adds up the line items** · Diagnosis: REAL_BUG, confidence 0.45 · Evidence: *"Error shows a
+> strict equality assertion failed: 26 !== 25"* · *"Failure occurred in test code at
+> 'tests/cart.test.js:7:12', not from a network or page interaction error"*
+>
+> Why this action: REAL_BUG at confidence **0.45 is below 0.5** - needs a human decision
+
+That is the Phase 55 confidence ceiling behaving exactly as designed: a model-only verdict is
+reported, with its evidence, and not acted on.
+
+**The step in between did not work.** The suite failed with a perfectly clear assertion, and the
+answer was:
+
+> The tests failed but wrote no report Tewip can read. Make the runner write JUnit XML (for example:
+> **pytest** --junitxml=report.xml, **jest** --reporters=jest-junit, **dotnet test** --logger trx).
+
+Three examples, and not one of them the runner that had just failed in front of it: `node --test`,
+Node's own built-in runner - the runner this very project uses. Telling somebody to configure jest
+when they are not using jest is the kind of advice that gets a tool closed, and `detectFrameworks`
+already knows what a project has.
+
+It now names the command that will work here, and the general examples stay underneath for a runner
+it does not recognise:
+
+> The tests failed but wrote no report Tewip can read. For the runner this project has, that is:
+>   `node --test --test-reporter=junit --test-reporter-destination=report.xml`
+
+That command was then run: it wrote a 2,180-byte report, and `watch --report report.xml` explained
+the failure. The whole loop, start to finish, on a real bug.
+
+`watch` had no test file of any kind before this; it has five now.
+
+1,171 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

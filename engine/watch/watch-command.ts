@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, watch } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { detectFrameworks } from '../quality/frameworks.ts';
 
 /** Where test runners in this project put their reports, in the order they are usually found. */
 export const REPORT_PLACES = [
@@ -110,6 +111,41 @@ const SKIP_DIR = /(?:^|[\\/])(?:node_modules|\.git|\.tewip|dist|build|target|cov
  * Watches the project and explains failures as they appear. Returns when `once` is set; otherwise
  * it runs until the person stops it, which is what a terminal beside your editor is for.
  */
+/**
+ * What to change so the next run can be explained - named for the runner this project actually uses.
+ *
+ * The advice was a fixed list of three examples: pytest, jest, dotnet. Field-tested on a project
+ * using **`node --test`**, Node's own built-in runner, the suite failed with a perfectly clear
+ * assertion - `26 !== 25`, the test named, the line numbered - and the answer was a list that did
+ * not mention the runner failing in front of it. Telling somebody to configure jest when they are
+ * not using jest is the kind of advice that gets a tool closed.
+ *
+ * The frameworks this project has are already detectable, so the first line is the one command that
+ * will work here, and the examples stay underneath for anyone whose runner was not found.
+ */
+export function howToWriteAReport(root: string): string {
+  const JUNIT: Record<string, string> = {
+    node: 'node --test --test-reporter=junit --test-reporter-destination=report.xml',
+    jest: 'npx jest --reporters=default --reporters=jest-junit',
+    vitest: 'npx vitest run --reporter=junit --outputFile=report.xml',
+    mocha: 'npx mocha --reporter mocha-junit-reporter',
+    pytest: 'pytest --junitxml=report.xml',
+    go: 'gotestsum --junitfile report.xml',
+    dotnet: 'dotnet test --logger trx',
+    maven: 'mvn test   (Surefire already writes XML to target/surefire-reports)',
+    gradle: './gradlew test   (already writes XML to build/test-results)',
+    playwright: 'npx playwright test --reporter=blob',
+  };
+  const here = detectFrameworks(root)
+    .map((f) => JUNIT[f.id])
+    .filter((line, i, all): line is string => Boolean(line) && all.indexOf(line) === i);
+  const head = 'The tests failed but wrote no report Tewip can read.';
+  if (here.length === 0) {
+    return `${head} Make the runner write JUnit XML (for example: pytest --junitxml=report.xml, jest --reporters=jest-junit, dotnet test --logger trx).`;
+  }
+  return [`${head} For the runner${here.length === 1 ? '' : 's'} this project has, that is:`, ...here.map((line) => `  ${line}`)].join(String.fromCharCode(10));
+}
+
 export async function runWatch(cmd: WatchCommand): Promise<void> {
   const root = resolve(cmd.root);
   const explain = cmd.explain ?? explainReport;
@@ -131,9 +167,7 @@ export async function runWatch(cmd: WatchCommand): Promise<void> {
       }
       const found = cmd.report ? { path: resolve(root, cmd.report), at: Date.now() } : newestReport(root);
       if (!found || !existsSync(found.path)) {
-        console.log(cmd.cmd
-          ? 'The tests failed but wrote no report Tewip can read. Make the runner write JUnit XML (for example: pytest --junitxml=report.xml, jest --reporters=jest-junit, dotnet test --logger trx).'
-          : 'No test report here yet. Run your tests, or use --cmd "npm test" to let Tewip run them.');
+        console.log(cmd.cmd ? howToWriteAReport(root) : 'No test report here yet. Run your tests, or use --cmd "npm test" to let Tewip run them.');
         return;
       }
       if (!cmd.cmd && found.at === seen) return;

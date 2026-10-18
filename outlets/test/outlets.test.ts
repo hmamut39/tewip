@@ -11,6 +11,8 @@ import { groupEnv, infraView } from '../views/infra.ts';
 import { releaseView } from '../views/release.ts';
 import { qualityView } from '../views/quality.ts';
 import { sdetBoardView } from '../views/sdet.ts';
+import { digestView } from '../views/digest.ts';
+import type { RunSummary } from '../../reporters/types.ts';
 
 function diagnosis(category: DiagnosisCategory, confidence = 0.8, extra: Partial<Diagnosis> = {}): Diagnosis {
   return { category, confidence, source: 'rules', engineVersion: 'rules-2', diagnosedAt: '2026-01-01T00:00:00Z', evidence: [{ source: 'x', message: `because ${category}` }], ...extra };
@@ -195,3 +197,38 @@ describe('PR comment numbering', () => {
   });
 });
 
+// Phase 82: the risk digest, which is the first thing in the weekly note a lead reads.
+//
+// Field-tested on a one-run history and it said: "Comparing 2026-09-16 to 2026-09-16 with 2026-09-16
+// to 2026-09-16, over all 1 runs. **No area got noticeably worse.**" A window compared against
+// itself, reported as reassurance.
+describe('the risk digest when there is nothing to compare', () => {
+  const run = (runId: string, at: string, tests: string[]): RunSummary =>
+    ({ schemaVersion: 1, runId, gitSha: '', branch: 'main', startedAt: at, finishedAt: at, status: 'failed', attempts: Object.fromEntries(tests.map((t) => [t, 1])) }) as RunSummary;
+  const failing = item('REAL_BUG');
+
+  it('refuses to call a single run a comparison', () => {
+    // The window is split at the median run time and `half()` puts anything not strictly before the
+    // median into the later half, so with one run the earlier half is empty by construction and no
+    // row can ever appear. "Nothing got worse" and "nothing could have been shown to get worse" are
+    // different statements, and a lead has no way to tell them apart.
+    const view = digestView([failing], [run('r1', '2026-09-16T10:00:00Z', [failing.testId])], 'test');
+    assert.match(view.markdown, /\*\*Nothing to compare yet\.\*\*/);
+    assert.match(view.markdown, /One run is kept here/);
+    assert.match(view.markdown, /this is not a report that nothing got worse/);
+    assert.doesNotMatch(view.markdown, /No area got noticeably worse/);
+  });
+
+  it('refuses when every run sits at the same moment', () => {
+    const at = '2026-09-16T10:00:00Z';
+    const view = digestView([failing], [run('r1', at, [failing.testId]), run('r2', at, [failing.testId])], 'test');
+    assert.match(view.markdown, /Nothing to compare yet/, 'two runs at one instant are still one period');
+  });
+
+  it('compares as before once there are two periods', () => {
+    const runs = [run('r1', '2026-09-10T10:00:00Z', [failing.testId]), run('r2', '2026-09-20T10:00:00Z', [failing.testId])];
+    const view = digestView([failing], runs, 'test');
+    assert.match(view.markdown, /Comparing 2026-09-10 to 2026-09-20/);
+    assert.doesNotMatch(view.markdown, /Nothing to compare yet/);
+  });
+});

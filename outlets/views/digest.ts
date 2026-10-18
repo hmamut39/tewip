@@ -52,10 +52,27 @@ export function digestView(allItems: TriageItem[], allSummaries: RunSummary[], d
     return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] as keyof typeof PLAIN_CATEGORY;
   };
 
+  // Was there an earlier half to compare the later one against?
+  //
+  // The window is split at the median run time, and `half()` puts anything not strictly before the
+  // median into the later half - so with a single run the **earlier half is empty by construction**,
+  // no row can ever appear, and the digest said:
+  //
+  //     Comparing 2026-09-16 to 2026-09-16 with 2026-09-16 to 2026-09-16, over all 1 runs.
+  //     No area got noticeably worse.
+  //
+  // A window compared against itself, reported as reassurance. "Nothing got worse" and "nothing
+  // could have been shown to get worse" are different statements, and a lead reading a weekly note
+  // has no way to tell them apart. Found by running `note` on a one-run history.
+  const earlier = summaries.filter((s) => half(s.startedAt) === 0).length;
+  const comparable = earlier > 0 && summaries.length - earlier > 0;
+
   const markdown = [
     '# Risk digest',
     '',
-    `Comparing ${period(0)} with ${period(1)}, over ${scope}. ${rows.length === 0 ? 'No area got noticeably worse.' : `${rows.length} area(s) got worse.`}`,
+    comparable
+      ? `Comparing ${period(0)} with ${period(1)}, over ${scope}. ${rows.length === 0 ? 'No area got noticeably worse.' : `${rows.length} area(s) got worse.`}`
+      : `**Nothing to compare yet.** ${summaries.length === 1 ? 'One run is kept here' : `${summaries.length} run(s) are kept here, all at the same moment`}, so there is no earlier period to measure a later one against - this is not a report that nothing got worse. Keep a few more runs and ask again.`,
     '',
     sourceNote(dataset),
     '',

@@ -4544,6 +4544,38 @@ the failure. The whole loop, start to finish, on a real bug.
 
 1,171 tests.
 
+### Phase 82: A Window Compared Against Itself, Reported As Reassurance
+
+`tewip note` is the weekly quality note written for a lead, and the risk digest is the first thing in
+it. Run on a real history with one run kept:
+
+> Comparing **2026-09-16 to 2026-09-16** with **2026-09-16 to 2026-09-16**, over all 1 runs.
+> **No area got noticeably worse.**
+
+The window is split at the median run time, and `half()` puts anything not strictly before the median
+into the later half - so with a single run the **earlier half is empty by construction**. No row can
+ever appear, whatever the data says, and the sentence a lead reads is reassurance.
+
+*"Nothing got worse"* and *"nothing could have been shown to get worse"* are different statements, and
+the note gave no way to tell them apart. This is the same shape as Phase 73's safety harness, which
+reported zero lost tests after measuring none, and Phase 59's recall, which searched an empty index
+and called it 1,305 failures. It keeps appearing wherever a count of zero is printed without the
+denominator that would make it mean something.
+
+The digest now checks that both halves have a run in them, and refuses when they do not:
+
+> **Nothing to compare yet.** One run is kept here, so there is no earlier period to measure a later
+> one against - **this is not a report that nothing got worse**. Keep a few more runs and ask again.
+
+Two runs recorded at the same instant get the same refusal, because that is still one period. The
+real gutenberg history - 650 runs, 100 of them on the default branch - still compares exactly as
+before and still finds its two degrading areas.
+
+That closes the last of the never-field-tested commands. Every verb Tewip offers has now been run
+against real input at least once.
+
+1,174 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

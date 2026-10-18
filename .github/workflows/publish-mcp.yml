@@ -5,13 +5,26 @@
 # package carries `mcpName: io.github.hmamut39/tewip`, which proves the package and the listing belong
 # to the same owner.
 #
-# It runs when a `v*` tag is pushed, after the npm release is already out - the registry validates the
-# package version it is told about, so the tag has to follow the publish, not race it.
+# It used to run only on a `v*` tag, waiting ten minutes for the version to appear on npm. That
+# worked while publishing was immediate. It stopped working the day npm publishing moved to staged
+# releases: the tag now fires while the version sits waiting for a human to approve it with a
+# passkey, which can take hours, so the wait timed out and the job failed. It failed that way for
+# 0.70.13 and again for 0.70.14, and because the registry still answered with a version number, the
+# listing looked current while being two releases behind. A stale channel looks exactly like a
+# current one.
+#
+# So the trigger is no longer the thing that decides. One rule decides, and it holds for every
+# trigger: publish when the version in server.json can be installed from npm and the registry does
+# not already list it. A tag that arrives before approval simply finds nothing to do and says so;
+# the nightly run picks it up once the release is approved. Nobody has to remember.
 name: Publish to the MCP registry
 
 on:
   push:
     tags: ['v*']
+  # Because approval happens on a person's schedule, not the tag's.
+  schedule:
+    - cron: '23 7 * * *'
   workflow_dispatch:
 
 jobs:
@@ -23,46 +36,60 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check server.json agrees with the release
-        run: |
-          tag="${GITHUB_REF#refs/tags/v}"
-          server="$(node -p "require('./server.json').version")"
-          package="$(node -p "require('./server.json').packages[0].version")"
-          named="$(node -p "require('./package.json').mcpName")"
-          echo "tag=$tag server.json=$server package entry=$package mcpName=$named"
-          # A listing that points at a version nobody can install is worse than no listing.
-          if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/v}" ] && { [ "$server" != "$tag" ] || [ "$package" != "$tag" ]; }; then
-            echo "server.json says $server / $package but the tag says $tag. Update server.json before tagging."
-            exit 1
-          fi
-          if [ "$named" != "$(node -p "require('./server.json').name")" ]; then
-            echo "package.json mcpName and server.json name must match, or the registry cannot tell they are the same owner."
-            exit 1
-          fi
-
-      - name: Wait for the version to be installable from npm
+      # The agreement between package.json and server.json is checked on every push by
+      # engine/test/release-metadata.test.ts, which is where a mismatch is cheap to fix. By the time
+      # a tag exists it is not, so it is not re-checked here.
+      - name: Is there a version to list?
+        id: decide
         run: |
           version="$(node -p "require('./server.json').packages[0].version")"
-          for attempt in $(seq 1 30); do
-            if npm view "tewip-ai@$version" version >/dev/null 2>&1; then
-              echo "tewip-ai@$version is on the registry"
-              exit 0
+          name="$(node -p "require('./server.json').name")"
+          # A listing that points at a version nobody can install is worse than no listing, so the
+          # question is only ever asked about npm, never about the tag.
+          if npm view "tewip-ai@$version" version >/dev/null 2>&1; then
+            installable=yes
+          else
+            installable=no
+          fi
+          listed="$(node -e "
+            fetch('https://registry.modelcontextprotocol.io/v0/servers?search=' + encodeURIComponent(process.argv[1]) + '&limit=100')
+              .then((r) => r.json())
+              .then((j) => {
+                const mine = (j.servers || []).map((x) => x.server || x).filter((x) => x.name === process.argv[1]);
+                console.log(mine.some((x) => x.version === process.argv[2]) ? 'yes' : 'no');
+              })
+              .catch(() => console.log('unknown'));
+          " "$name" "$version")"
+          echo "server.json=$version installable-from-npm=$installable already-listed=$listed"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$installable" = yes ] && [ "$listed" = no ]; then
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+            echo "Listing tewip-ai@$version." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "go=no" >> "$GITHUB_OUTPUT"
+            if [ "$installable" = no ]; then
+              echo "**Nothing listed.** tewip-ai@$version is not on npm yet - most likely the release is staged and waiting for approval. The nightly run will list it once it is published; nothing needs to be re-tagged." >> "$GITHUB_STEP_SUMMARY"
+            elif [ "$listed" = unknown ]; then
+              # Saying "already listed" here would be a claim about a registry that did not answer.
+              echo "**Nothing listed.** The MCP registry could not be read, so whether $version is listed is unknown. Nothing was published, because publishing on a guess is how a listing ends up pointing at the wrong version." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Nothing to do: the registry already lists $version." >> "$GITHUB_STEP_SUMMARY"
             fi
-            echo "waiting for tewip-ai@$version to appear (attempt $attempt)"
-            sleep 20
-          done
-          echo "tewip-ai@$version never appeared on npm; not listing a version nobody can install."
-          exit 1
+          fi
 
       - name: Install mcp-publisher
+        if: steps.decide.outputs.go == 'yes'
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Check server.json before sending it
+        if: steps.decide.outputs.go == 'yes'
         run: ./mcp-publisher validate
 
       - name: Authenticate as this repository
+        if: steps.decide.outputs.go == 'yes'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish
+        if: steps.decide.outputs.go == 'yes'
         run: ./mcp-publisher publish

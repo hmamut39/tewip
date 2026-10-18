@@ -55,8 +55,20 @@ async function main(): Promise<void> {
 
   const items = await buildItems(imported.records, index, { dataset: `local: ${name}`, llm: llmFromEnv(), corrections: loadCorrections(historyDir) });
   const tests = Object.keys(imported.summary.attempts).length;
-  if (items.length === 0) console.log(`All ${tests} test(s) passed. Nothing to explain.`);
-  else console.log(sdetBoardView(items, runId, `local: ${name}`).markdown);
+  // A report missing part of itself is not a report that nothing went wrong. This goes first,
+  // above any board and in place of any all-clear, because it changes what everything below means.
+  if (imported.incomplete.length > 0) {
+    console.log('**This run is incomplete.**');
+    for (const why of imported.incomplete) console.log(`- ${why}`);
+    console.log('');
+  }
+  if (items.length === 0) {
+    console.log(
+      imported.incomplete.length > 0
+        ? `The ${tests} test(s) that did arrive all passed. That is not the same as the run passing, and Tewip cannot say whether the missing part did.`
+        : `All ${tests} test(s) passed. Nothing to explain.`,
+    );
+  } else console.log(sdetBoardView(items, runId, `local: ${name}`).markdown);
 
   // Keep this run as history for the next one, with its diagnoses.
   const diagnosed = imported.records.map((r) => ({ ...r, diagnosis: items.find((i) => i.testId === r.testId)?.diagnosis }));

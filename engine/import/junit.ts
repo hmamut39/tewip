@@ -10,10 +10,11 @@
 // selector drift is not diagnosed from them. Every format below was checked against a report its
 // real runner wrote (fixtures/polyglot, run by .github/workflows/polyglot-fixtures.yml).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { SCHEMA_VERSION, type RunSummary, type TriageRecord } from '../../reporters/types.ts';
 import type { ImportMeta, ImportResult } from './blob.ts';
 import { descendants, parseXml, type XmlElement } from './xml.ts';
+import { shortfall } from './shortfall.ts';
 import { jmeterCases, jmeterCsvCases, k6Cases, looksLikeCsvJtl, looksLikeK6, robotCases, robotTime } from './other-formats.ts';
 import { nunitCases, trxCases } from './dotnet.ts';
 import { PASSED, failure, type Attempt, type Case } from './case.ts';
@@ -163,6 +164,7 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
   let startedAt = '';
   let anyFailed = false;
   const unread: string[] = [];
+  const incomplete: string[] = [];
   let parsedFiles = 0;
 
   for (const file of junitFiles(path)) {
@@ -199,6 +201,8 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
       if (start && (!startedAt || start < startedAt)) startedAt = start;
     } else if (root.name === 'testsuites' || root.name === 'testsuite' || root.name === 'testrun') {
       cases = junitCases(root, meta.workspace);
+      const missing = shortfall(root);
+      if (missing) incomplete.push(`${basename(file)}: ${missing}`);
       const stamp = root.attrs.timestamp ?? root.children.find((c) => c.name === 'testsuite')?.attrs.timestamp;
       if (stamp && (!startedAt || stamp < startedAt)) startedAt = stamp;
     } else if (root.name === 'test-run') {
@@ -268,5 +272,5 @@ export function importJunit(path: string, meta: ImportMeta): ImportResult {
     }
     console.error(`[tewip] ignored ${unread.length} file(s) that are not a test report: ${list}`);
   }
-  return { records, summary, skippedShards: [] };
+  return { records, summary, skippedShards: [], incomplete };
 }

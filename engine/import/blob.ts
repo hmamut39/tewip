@@ -39,6 +39,12 @@ export interface ImportResult {
   summary: RunSummary;
   /** Shards whose blob was corrupt; their tests are missing from this run. */
   skippedShards: string[];
+  /**
+   * Reasons this run is known to be partial, in the person's words. Anything in here has to reach
+   * the report: a run missing part of itself must never be rendered as a clean one, and that was
+   * exactly what `skippedShards` did for as long as it was only ever read by the eval harness.
+   */
+  incomplete: string[];
 }
 
 // Screenshots and videos are skipped: the diagnosis layers read traces and error-context only.
@@ -195,5 +201,5 @@ function importShards(shards: Array<[string, Buffer]>, meta: ImportMeta, filesDi
     status: runStatus,
     attempts,
   };
-  return { records, summary, skippedShards };
+  return { records, summary, skippedShards, incomplete: skippedShards.map((shard) => `shard ${shard} could not be read, so its tests are missing from this run`) };
 }

@@ -8,6 +8,12 @@ export interface XmlElement {
   children: XmlElement[];
   /** Concatenated text and CDATA directly inside this element. */
   text: string;
+  /**
+   * Set on the root when the document ended with elements still open: it was cut off while being
+   * written or uploaded. The parser has always known this - the tag stack is simply left standing -
+   * and threw it away, so a report holding half a run parsed without complaint.
+   */
+  truncated?: boolean;
 }
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
@@ -66,6 +72,9 @@ export function parseXml(source: string): XmlElement {
   }
   const first = root.children[0];
   if (!first) throw new Error('not an XML document: no root element');
+  // Anything still on the stack is an element nobody closed. Well-formed XML leaves only the
+  // document itself behind.
+  if (stack.length > 1) first.truncated = true;
   return first;
 }
 

@@ -133,7 +133,8 @@ describe('reading a real scanner\'s report', () => {
       }),
       'utf8',
     );
-    const findings = readZapReport(file);
+    const { findings, problem } = readZapReport(file);
+    assert.equal(problem, null);
     assert.equal(findings.length, 2);
     assert.equal(findings[0].severity, 'medium');
     assert.match(findings[0].what, /Content Security Policy/);
@@ -195,5 +196,56 @@ describe('whether consent is needed before touching a running site', () => {
 
   it('refuses something that is not a URL at all rather than guessing', () => {
     for (const bad of ['not a url', '', 'localhost:3000', '://x']) assert.equal(isLocal(bad), false);
+  });
+});
+
+describe('a ZAP report Tewip could not read', () => {
+  // Every path out of `readZapReport` used to be `return []`, and the caller then printed
+  // "Checked: an OWASP ZAP report (0 finding(s))" - a measurement of nothing. Reproduced three
+  // ways, all of which answered exactly like a clean scan: a path wrong by one character, a file
+  // that is not JSON, and another tool's JSON.
+  //
+  // The person named this file on the command line. Being unable to read it is news, not a default.
+  const write = (name: string, body: string) => {
+    const file = join(mkdtempSync(join(tmpdir(), 'tewip-zap-')), name);
+    writeFileSync(file, body, 'utf8');
+    return file;
+  };
+
+  it('says there is no such file, rather than finding nothing in it', () => {
+    const outcome = readZapReport(join(tmpdir(), 'tewip-zap-does-not-exist', 'zap.json'));
+    assert.deepEqual(outcome.findings, []);
+    assert.match(outcome.problem ?? '', /there is no file at/);
+  });
+
+  it('says a file that is not JSON is not a report', () => {
+    const outcome = readZapReport(write('zap.json', 'this is not json at all'));
+    assert.match(outcome.problem ?? '', /is not JSON/);
+  });
+
+  it('says JSON without ZAP\'s own shape is not a report', () => {
+    // ZAP always writes `site`, one entry per host it scanned, even having found nothing.
+    const outcome = readZapReport(write('zap.json', JSON.stringify({ vulnerabilities: [], tool: 'something-else' })));
+    assert.match(outcome.problem ?? '', /no "site" list/);
+    assert.deepEqual(outcome.findings, []);
+  });
+
+  it('takes a scan that found nothing as a clean scan, not a failure', () => {
+    // The distinction the problem field exists for: this one really did check, and really is 0.
+    const outcome = readZapReport(write('zap.json', JSON.stringify({ '@version': '2.14.0', site: [{ '@name': 'http://localhost:3000', alerts: [] }] })));
+    assert.deepEqual(outcome, { findings: [], problem: null });
+  });
+
+  it('reads a host that reported nothing alongside one that did', () => {
+    const outcome = readZapReport(write('zap.json', JSON.stringify({
+      site: [
+        { '@name': 'http://a', alerts: [] },
+        { '@name': 'http://b', alerts: [{ alert: 'Cookie No HttpOnly Flag', riskdesc: 'Low (Medium)', solution: '<p>Set HttpOnly.</p>', instances: [{ uri: 'http://b/login', evidence: 'session' }] }] },
+      ],
+    })));
+    assert.equal(outcome.problem, null);
+    assert.equal(outcome.findings.length, 1);
+    assert.equal(outcome.findings[0].severity, 'low');
+    assert.match(outcome.findings[0].next, /Set HttpOnly/);
   });
 });

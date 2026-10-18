@@ -21,18 +21,37 @@ interface ZapAlert {
   instances?: Array<{ uri?: string; evidence?: string }>;
 }
 
+/**
+ * What a ZAP report held, and why it held nothing when it held nothing.
+ *
+ * Every path out of here used to be `return []`, and the caller then printed "Checked: an OWASP ZAP
+ * report (0 finding(s))" - which reads as a measurement and was, for a missing or unparseable file,
+ * a statement about nothing. A path that is wrong by one character answered exactly like a clean
+ * scan. The person asked for this file to be triaged by naming it on the command line, so being
+ * unable to read it is news, not a default.
+ */
+export interface ZapOutcome {
+  findings: WebFinding[];
+  problem: string | null;
+}
+
 /** Findings from a ZAP JSON report, in Tewip's own shape. */
-export function readZapReport(path: string): WebFinding[] {
-  if (!existsSync(path)) return [];
+export function readZapReport(path: string): ZapOutcome {
+  if (!existsSync(path)) return { findings: [], problem: `there is no file at ${path}` };
   let report: any;
   try {
     report = JSON.parse(readFileSync(path, 'utf8'));
   } catch {
-    return [];
+    return { findings: [], problem: `${path} is not JSON, so it is not a ZAP report Tewip can read` };
+  }
+  // ZAP always writes `site`, one entry per host it scanned, even when it found nothing. Anything
+  // without it is some other tool's JSON, or ZAP's own error body.
+  if (!Array.isArray(report?.site)) {
+    return { findings: [], problem: `${path} is JSON but not a ZAP report: it has no "site" list` };
   }
   const alerts: ZapAlert[] = (report.site ?? []).flatMap((site: any) => site.alerts ?? []);
   const strip = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  return alerts.map((alert) => {
+  const findings = alerts.map((alert) => {
     const risk = (alert.riskdesc ?? '').split(' ')[0];
     const first = (alert.instances ?? [])[0] ?? {};
     return {
@@ -44,6 +63,7 @@ export function readZapReport(path: string): WebFinding[] {
       next: strip(alert.solution ?? '').slice(0, 300) || 'see the ZAP report for the recommended fix',
     };
   });
+  return { findings, problem: null };
 }
 
 /** Whether a ZAP baseline scan can be run from here at all. */

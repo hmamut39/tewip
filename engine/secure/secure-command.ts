@@ -111,8 +111,11 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
 
   if (cmd.zapReport) {
     const fromZap = readZapReport(resolve(cmd.zapReport));
-    checked.push(`an OWASP ZAP report (${fromZap.length} finding(s))`);
-    for (const finding of fromZap) items.push(triageWeb(finding, accepted));
+    // Named as checked only once it has been read. "(0 finding(s))" above a file Tewip could not
+    // open is a measurement of nothing, and a mistyped path answered exactly like a clean scan.
+    if (fromZap.problem) notChecked.push(`the ZAP report you asked for: ${fromZap.problem}`);
+    else checked.push(`an OWASP ZAP report (${fromZap.findings.length} finding(s))`);
+    for (const finding of fromZap.findings) items.push(triageWeb(finding, accepted));
   } else if (cmd.url) {
     notChecked.push(`a full web scan. Tewip's own check is passive; for the deep one: ${zapInstructions(cmd.url, zapAvailable(root))}`);
   }

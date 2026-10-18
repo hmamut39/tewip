@@ -65,6 +65,7 @@
     "prepack": "npm run build",
     "tewip": "node cli/tewip.ts",
     "version": "node scripts/sync-version.ts && git add server.json",
+    "channels": "node scripts/channels.ts",
     "corpus": "node scripts/corpus.ts"
   },
   "license": "Apache-2.0",

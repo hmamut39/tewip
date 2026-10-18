@@ -1,0 +1,49 @@
+# Is every place Tewip is published actually carrying this release?
+#
+# There is a standing rule on this project to check every distribution channel after every
+# improvement, because a stale channel looks exactly like a current one. It was done by hand until
+# it failed twice in one day - not by being skipped, but by asking the MCP registry a question that
+# returns a capped version history, which answered with a plausible number that was two releases
+# old. Remembering to check is not the hard part. Asking correctly is, and that belongs in a file.
+name: Where Tewip is published
+
+on:
+  schedule:
+    - cron: '41 8 * * *'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  channels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Ask every channel
+        run: |
+          set +e
+          node scripts/channels.ts | tee answer.txt
+          code=$?
+          set -e
+          {
+            echo '```'
+            cat answer.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 1: a channel is definitively behind - the release did not reach it, and that is a
+          #    failure somebody has to act on.
+          # 2: a channel could not be read at all. A registry being down is not a release problem,
+          #    so it does not fail the run - but it is not silence either, because an unverified
+          #    channel reported as fine is the exact mistake this workflow exists to stop.
+          if [ "$code" = 1 ]; then
+            echo "::error::a channel did not get this release"
+            exit 1
+          fi
+          if [ "$code" = 2 ]; then
+            echo "::warning::a channel could not be checked; whether it has this release is unknown"
+          fi
+          exit 0

@@ -1,0 +1,106 @@
+# Publishing tewip-ai to npm from CI, with no token anywhere.
+#
+# Why this exists at all: every release until now has been `npm publish` from the author's laptop,
+# authenticated by a granular token. That token expires **15 January 2027** and cannot be renewed
+# past it, because that is the day npm stops allowing a granular token to publish. This is the
+# replacement, and it is better than the thing it replaces - npm hands the workflow a short-lived
+# OIDC credential for one publish, so there is no long-lived secret to leak, rotate or forget.
+#
+# It also publishes **provenance** automatically: a signed statement of which commit and which
+# workflow produced the tarball, which a laptop publish cannot make. That needs the repository and
+# the package to be public, and both are.
+#
+# The suite runs here before anything is published. Today the author runs it by hand first; a
+# workflow that skipped it would be a step backwards, and `tests.yml` does not run on a tag.
+name: publish to npm
+
+on:
+  push:
+    tags: ['v*']
+  # Kept for a re-run after a failure, without having to move a tag.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # The whole mechanism. Without this npm has no OIDC token to exchange and the publish is refused.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      # Trusted publishing needs npm 11.5.1 or later. Node 24 ships a new enough npm today, and
+      # saying so out loud costs a second and turns a confusing auth error into a clear one.
+      - name: npm new enough to publish without a token
+        run: |
+          V="$(npm --version)"
+          echo "npm $V"
+          node -e "
+            const [maj, min, patch] = process.argv[1].split('.').map(Number);
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && patch >= 1)));
+            if (!ok) { console.error('npm ' + process.argv[1] + ' cannot use trusted publishing; 11.5.1 is the minimum'); process.exit(1); }
+            console.log('npm ' + process.argv[1] + ' can publish without a token');
+          " "$V"
+
+      - name: Install
+        run: npm ci
+
+      # A tag that does not match the version in package.json publishes the wrong thing under the
+      # right name, and nothing downstream would notice.
+      - name: The tag and package.json agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg="$(node -p "require('./package.json').version")"
+          echo "tag $tag, package.json $pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json $pkg - nothing was published"
+            exit 1
+          fi
+
+      # Nothing unverified goes out. This is what the author does by hand before every publish, and
+      # a tag push does not trigger tests.yml.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: The unit suite
+        run: npm run test:engine
+
+      # npm refuses a version it already has, with an error that reads like a failure rather than a
+      # no-op. A release that was already published is not a problem worth going red over.
+      - name: Is this version already on npm?
+        id: already
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/tewip-ai/$version")"
+          echo "tewip-ai@$version -> registry returned $code"
+          if [ "$code" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Already on npm. Nothing to do."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No NODE_AUTH_TOKEN, and that is the point: the credential is the OIDC token npm exchanges
+      # for this workflow's identity. Provenance is generated automatically here, so --provenance is
+      # not passed.
+      - name: Publish
+        if: steps.already.outputs.published == 'false'
+        run: npm publish
+
+      - name: What was published
+        if: steps.already.outputs.published == 'false'
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "### tewip-ai@$version published from CI, with provenance and no token" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://www.npmjs.com/package/tewip-ai/v/$version" >> "$GITHUB_STEP_SUMMARY"

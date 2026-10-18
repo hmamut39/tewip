@@ -34,6 +34,53 @@ export interface DepFinding {
 
 const NEWLINE = String.fromCharCode(10);
 
+/**
+ * A scanner's JSON, or `undefined` when it did not produce any.
+ *
+ * Empty output counts as no report rather than as an empty one. A scanner that printed nothing
+ * cannot be told apart from a scanner that crashed before it printed, and the two possible
+ * mistakes are not equally bad: calling a clean scan unreadable sends somebody to look, while
+ * calling an unreadable scan clean is the false all-clear this whole report exists to avoid.
+ */
+function readJson(out: string): any {
+  if (!out.trim()) return undefined;
+  try {
+    return JSON.parse(out);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Did this scanner produce a report, or only exit?
+ *
+ * `key` is the field its report always carries, so JSON that parses but is not a scan result - a
+ * usage message, a progress object, an error body - is caught too. The exit code is deliberately
+ * not consulted: pip-audit and npm audit both exit non-zero precisely when they have found
+ * something, so treating that as failure would discard the findings that matter most.
+ */
+export function scanOutcome(
+  tool: string,
+  out: string,
+  err: string,
+  shape: { key: string; orArray?: boolean },
+  read: (r: any) => DepFinding[],
+): ScanOutcome {
+  const report = readJson(out);
+  if (report === undefined) return { findings: [], problem: `${tool} did not return a report${firstLine(out, err)}` };
+  // Older pip-audit prints the dependency list unwrapped, so a bare array is a real report there
+  // and nowhere else. Accepting one everywhere would let a stray array pass for an empty scan.
+  const known = report?.[shape.key] !== undefined || (shape.orArray === true && Array.isArray(report));
+  if (!known) return { findings: [], problem: `${tool} returned JSON that is not a scan report` };
+  return { findings: read(report), problem: null };
+}
+
+/** The first line a failing tool said, for the report - whichever stream it used. */
+function firstLine(out: string, err: string): string {
+  const said = [err, out].map((x) => x.trim()).find(Boolean);
+  return said ? `: ${said.split(NEWLINE)[0].slice(0, 120)}` : '';
+}
+
 const run = (command: string, cwd: string, timeoutMs = 5 * 60_000) => {
   const r = spawnSync(command, { cwd, shell: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 40 * 1024 * 1024 });
   return { code: r.status ?? 1, out: `${r.stdout ?? ''}`, err: `${r.stderr ?? ''}` };
@@ -86,15 +133,13 @@ export function npmAudit(root: string): ScanOutcome {
   return { findings, problem: null };
 }
 
-/** `pip-audit`, when the project is Python and the tool is installed. */
-export function pipAudit(root: string): DepFinding[] {
-  const python = ['requirements.txt', 'pyproject.toml', 'setup.py'].some((f) => existsSync(join(root, f)));
-  if (!python || !has('pip-audit', root)) return [];
-  const { out } = run('pip-audit -f json --progress-spinner off', root);
-  try {
-    const report = JSON.parse(out);
-    const list = report.dependencies ?? report;
-    return (Array.isArray(list) ? list : []).flatMap((dep: any) =>
+/**
+ * What pip-audit found, given what it printed. Separated from running it so the shapes real
+ * pip-audit produces can be tested without the tool installed.
+ */
+export function pipFindings(report: any): DepFinding[] {
+  const list = report?.dependencies ?? report;
+  return (Array.isArray(list) ? list : []).flatMap((dep: any) =>
       (dep.vulns ?? []).map((v: any) => ({
         package: String(dep.name ?? ''),
         version: String(dep.version ?? ''),
@@ -106,19 +151,23 @@ export function pipAudit(root: string): DepFinding[] {
         dev: false,
       })),
     );
-  } catch {
-    return [];
-  }
 }
 
-/** OSV-Scanner, which covers Go, Rust, Java, Ruby, PHP and more, when it is installed. */
-export function osvScan(root: string): DepFinding[] {
-  if (!has('osv-scanner', root)) return [];
-  const { out } = run(`osv-scanner --format json --recursive "${root}"`, root);
-  try {
-    const report = JSON.parse(out);
+/** `pip-audit`, when the project is Python and the tool is installed. */
+export function pipAudit(root: string): ScanOutcome {
+  const python = ['requirements.txt', 'pyproject.toml', 'setup.py'].some((f) => existsSync(join(root, f)));
+  if (!python || !has('pip-audit', root)) return { findings: [], problem: null };
+  const { out, err } = run('pip-audit -f json --progress-spinner off', root);
+  return scanOutcome('pip-audit', out, err, { key: 'dependencies', orArray: true }, pipFindings);
+}
+
+/**
+ * What osv-scanner found, given what it printed. Separated from running it for the same reason as
+ * `pipFindings`: the parsing is what needs testing, and the tool is rarely installed.
+ */
+export function osvFindings(report: any): DepFinding[] {
     const findings: DepFinding[] = [];
-    for (const result of report.results ?? []) {
+    for (const result of report?.results ?? []) {
       for (const pkg of result.packages ?? []) {
         for (const v of pkg.vulnerabilities ?? []) {
           findings.push({
@@ -139,9 +188,13 @@ export function osvScan(root: string): DepFinding[] {
       }
     }
     return findings;
-  } catch {
-    return [];
-  }
+}
+
+/** OSV-Scanner, which covers Go, Rust, Java, Ruby, PHP and more, when it is installed. */
+export function osvScan(root: string): ScanOutcome {
+  if (!has('osv-scanner', root)) return { findings: [], problem: null };
+  const { out, err } = run(`osv-scanner --format json --recursive "${root}"`, root);
+  return scanOutcome('osv-scanner', out, err, { key: 'results' }, osvFindings);
 }
 
 export interface AuditResult {
@@ -169,26 +222,27 @@ export function auditDependencies(root: string): AuditResult {
   const ran: string[] = [];
   const missing: string[] = [];
   const findings: DepFinding[] = [];
+  // `ran` used to be pushed before the scanner was called, so a pip-audit that was installed and
+  // failed left "Checked: pip-audit" standing above zero findings. Measured on a project pinning
+  // requests==2.19.1 and flask==0.12.2 - both long known vulnerable - with a pip-audit that exited
+  // without JSON: the report read "Checked: secrets in the working tree, pip-audit. 0 need someone
+  // now." A scanner is named as having run only once it has returned something readable.
+  const record = (tool: string, outcome: ScanOutcome) => {
+    if (outcome.problem) missing.push(`${tool} could not run: ${outcome.problem}`);
+    else ran.push(tool);
+    findings.push(...outcome.findings);
+  };
 
   if (existsSync(join(root, 'package.json'))) {
-    const npm = npmAudit(root);
-    if (npm.problem) missing.push(`npm audit could not run: ${npm.problem}`);
-    else ran.push('npm audit');
-    findings.push(...npm.findings);
+    record('npm audit', npmAudit(root));
   }
   const python = ['requirements.txt', 'pyproject.toml', 'setup.py'].some((f) => existsSync(join(root, f)));
   if (python) {
-    if (has('pip-audit', root)) {
-      ran.push('pip-audit');
-      findings.push(...pipAudit(root));
-    } else {
-      missing.push('pip-audit (pip install pip-audit) for the Python dependencies');
-    }
+    if (has('pip-audit', root)) record('pip-audit', pipAudit(root));
+    else missing.push('pip-audit (pip install pip-audit) for the Python dependencies');
   }
-  if (has('osv-scanner', root)) {
-    ran.push('osv-scanner');
-    findings.push(...osvScan(root));
-  } else if (!existsSync(join(root, 'package.json')) && !python) {
+  if (has('osv-scanner', root)) record('osv-scanner', osvScan(root));
+  else if (!existsSync(join(root, 'package.json')) && !python) {
     missing.push('osv-scanner (https://osv.dev) for this project\'s ecosystem');
   }
   return { findings: findings.sort(bySeverity), ran, missing };

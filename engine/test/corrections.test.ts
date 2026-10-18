@@ -10,6 +10,7 @@ import type { GitHub } from '../../ci/github.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { applyCorrection, correctionFor, loadCorrections, parseCorrectionCommands, saveCorrections, type Correction } from '../corrections.ts';
 import { HistoryIndex } from '../history.ts';
+import { buildItems } from '../../outlets/items.ts';
 import { diagnosePipeline } from '../pipeline.ts';
 import { errorShape } from '../signature.ts';
 
@@ -215,3 +216,59 @@ ${renderBoardMap(items, records, '2026-01-01T09:00:00Z')}`), ...filler.slice(1)]
   });
 });
 
+// Phase 74: the hierarchy the whole product rests on - what the team decided beats what the tool
+// decided - tested end to end for the first time.
+//
+// Field-tested on eight real LOCATOR_DRIFT diagnoses that `explain` had written. Three were corrected
+// to TIMING by name, `tewip learn` reported the pattern perfectly ("3x said LOCATOR_DRIFT, you said
+// TIMING... Rules that decided them: locator-drift 3x"), and the weekly note a lead reads still said
+// **"Diagnosis: LOCATOR_DRIFT, confidence 0.95, source: rules"** about a test somebody had overruled -
+// directly against what `correct` prints in the same breath: "Tewip will answer with your decision
+// the next time that test fails the same way, and say it was yours."
+describe('a correction against a diagnosis already stored', () => {
+  const stored = (testId: string, category: string): TriageRecord =>
+    ({ ...record(testId, 'TimeoutError: locator.click: Timeout 1500ms exceeded'), diagnosis: { category, confidence: 0.95, source: 'rules rules-3', evidence: [], engineVersion: 'rules-3', diagnosedAt: '2026-01-01T00:00:00Z' } }) as unknown as TriageRecord;
+
+  const correction = (testId: string): Correction => ({
+    schemaVersion: 1,
+    testId,
+    errorShape: errorShape('TimeoutError: locator.click: Timeout 1500ms exceeded'),
+    category: 'TIMING',
+    wasCategory: 'LOCATOR_DRIFT',
+    by: 'sam',
+    at: '2026-01-02T00:00:00Z',
+    reason: 'the element is there, the page is just slow',
+  }) as unknown as Correction;
+
+  const build = async (corrections: Correction[]) => {
+    const records = [stored('shop > corrected', 'LOCATOR_DRIFT'), stored('shop > untouched', 'LOCATOR_DRIFT')];
+    const runs = [summary('r1', ['shop > corrected', 'shop > untouched'])];
+    return buildItems(records, new HistoryIndex(records, runs), { dataset: 'test', llm: null, reuseStoredDiagnoses: true, corrections });
+  };
+
+  it('answers with the decision a person made, not the stored one', async () => {
+    // `diagnosePipeline` applies corrections only to failures with no stored diagnosis, and `explain`
+    // stores one for every failure it diagnoses - so on any history a team actually keeps, a
+    // correction reached nothing at all.
+    const items = await build([correction('shop > corrected')]);
+    const corrected = items.find((i) => i.testId === 'shop > corrected');
+    assert.equal(corrected?.diagnosis.category, 'TIMING');
+    assert.match(corrected?.source ?? '', /person/, 'and it says a person decided it');
+  });
+
+  it('leaves a failure nobody corrected exactly as it was', async () => {
+    const items = await build([correction('shop > corrected')]);
+    assert.equal(items.find((i) => i.testId === 'shop > untouched')?.diagnosis.category, 'LOCATOR_DRIFT');
+  });
+
+  it('changes nothing when there are no corrections', async () => {
+    const items = await build([]);
+    assert.deepEqual(items.map((i) => i.diagnosis.category), ['LOCATOR_DRIFT', 'LOCATOR_DRIFT']);
+  });
+
+  it('does not apply a correction written for a different error', async () => {
+    const elsewhere = { ...correction('shop > corrected'), errorShape: errorShape('Error: something else entirely') } as Correction;
+    const items = await build([elsewhere]);
+    assert.equal(items.find((i) => i.testId === 'shop > corrected')?.diagnosis.category, 'LOCATOR_DRIFT', 'the same test failing another way is another failure');
+  });
+});

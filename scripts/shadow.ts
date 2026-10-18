@@ -40,6 +40,10 @@ async function main(): Promise<void> {
   const data = loadDataset(`data/real/${dataset}`);
   const metas = new Map(readJsonl<RunMeta>(metaFile(dataset)).filter((m) => m.imported).map((m) => [m.runId, m]));
   const index = new HistoryIndex(data.records, data.summaries);
+  // No corrections, on purpose. This measures what Tewip concludes on its own, against labels a
+  // person established separately; feeding a person's correction back in would be marking its own
+  // homework. Every report a team reads applies them - see `buildItems` - and every measurement does
+  // not.
   const items = await buildItems(data.records, index, { dataset: `${config.repo} CI (shadow run)`, llm: llmFromEnv() });
 
   const failedRuns = data.summaries

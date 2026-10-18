@@ -66,6 +66,7 @@ async function main(): Promise<void> {
   const dataset = loadDataset(collect);
   const index = new HistoryIndex(dataset.records, dataset.summaries);
   const llm = process.argv.includes('--no-llm') ? null : llmFromEnv();
+  // No corrections, on purpose: this measures the engine against known answers. See scripts/shadow.ts.
   const items = await buildItems(dataset.records, index, { dataset: 'drift lab (synthetic)', llm });
   const records = lastFailedAttempts(dataset.records);
 

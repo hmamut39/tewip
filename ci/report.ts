@@ -4,6 +4,7 @@
 // keeps them in one GitHub issue that each report updates.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadCorrections } from '../engine/corrections.ts';
 import { HistoryIndex } from '../engine/history.ts';
 import { llmFromEnv } from '../engine/llm/client.ts';
 import { buildItems } from '../outlets/items.ts';
@@ -27,7 +28,9 @@ async function main(): Promise<void> {
   console.log(`[tewip] report over ${summaries.length} run(s) and ${records.length} failed attempt(s) from the cache`);
 
   const index = new HistoryIndex(records, summaries);
-  const items = await buildItems(records, index, { dataset: label, llm: llmFromEnv(), reuseStoredDiagnoses: true });
+  // The team's own corrections, which this report never loaded: the one a whole team reads every
+  // run was reporting verdicts a person on that team had already overruled.
+  const items = await buildItems(records, index, { dataset: label, llm: llmFromEnv(), reuseStoredDiagnoses: true, corrections: loadCorrections(ctx.historyDir) });
   const views = [qualityView(items, label), architectureView(items, label), digestView(items, summaries, label)];
   for (const v of views) writeFileSync(join(ctx.outDir, `${v.id}.md`), v.markdown, 'utf8');
 

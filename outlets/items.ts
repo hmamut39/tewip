@@ -6,7 +6,7 @@ import { lastFailedAttempts } from '../engine/dataset.ts';
 import type { HistoryIndex, TestHistory } from '../engine/history.ts';
 import type { LlmClient } from '../engine/llm/client.ts';
 import { failingCodeOf } from '../engine/llm/context.ts';
-import type { Correction } from '../engine/corrections.ts';
+import { applyCorrection, correctionFor, type Correction } from '../engine/corrections.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
 import { truncate } from '../engine/signature.ts';
 import type { Diagnosis, TriageRecord } from '../reporters/types.ts';
@@ -94,7 +94,24 @@ export async function buildItems(records: TriageRecord[], index: HistoryIndex, {
   const stored = reuseStoredDiagnoses ? cases.map((c) => c.diagnosis) : cases.map(() => undefined);
   const missing = cases.filter((_, i) => !stored[i]);
   const fresh = await diagnosePipeline(missing, index, llm, { corrections });
-  const diagnoses = stored.map((d) => d ?? fresh.shift()!);
+  // A correction outranks a stored diagnosis, which it did not.
+  //
+  // `diagnosePipeline` applies corrections, but only to the failures in `missing` - the ones with no
+  // stored diagnosis. `explain` stores one for every failure it diagnoses, so on any history a team
+  // actually keeps, **every** failure has one and a correction reached none of them. Field-tested:
+  // three real corrections of real diagnoses, `learn` reported the pattern perfectly, and the weekly
+  // note still said "Diagnosis: LOCATOR_DRIFT, confidence 0.95, source: rules" about a test a person
+  // had overruled to TIMING - directly against what `correct` had just promised in print, "Tewip will
+  // answer with your decision the next time that test fails the same way, and say it was yours."
+  //
+  // This is the whole hierarchy of the product: what the team decided beats what the tool decided.
+  // Fixing it here fixes every caller at once, which matters because three of them reuse stored
+  // diagnoses and two of those did not even pass the corrections along.
+  const diagnoses = cases.map((record, i) => {
+    const own = stored[i] ?? fresh.shift()!;
+    const correction = corrections.length > 0 ? correctionFor(record, corrections) : null;
+    return correction ? applyCorrection(own, correction) : own;
+  });
   const failedAttempts = new Map<string, TriageRecord[]>();
   for (const r of records) failedAttempts.set(`${r.runId} ${r.testId}`, [...(failedAttempts.get(`${r.runId} ${r.testId}`) ?? []), r]);
 

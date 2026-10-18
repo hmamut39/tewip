@@ -55,6 +55,7 @@ async function main(): Promise<void> {
   const llm = process.argv.includes('--no-llm') ? null : llmFromEnv();
   console.log(`Dataset ${dataset.label}: ${dataset.records.length} failure records, ${dataset.summaries.length} runs. LLM layer: ${llm?.model ?? 'off'}`);
 
+  // No corrections, on purpose: this measures the engine against known answers. See scripts/shadow.ts.
   const items = await buildItems(dataset.records, index, { dataset: dataset.label, llm });
   const failedRuns = dataset.summaries.filter((s) => s.status !== 'passed' && items.some((i) => i.runId === s.runId)).map((s) => s.runId);
   const runs = arg('run') ? [arg('run')!] : failedRuns;

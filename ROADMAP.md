@@ -4200,6 +4200,56 @@ the same way `eval/mismatch-precision.ts` was written in Phase 65, and the refus
 
 1,136 tests.
 
+### Phase 74: `learn` Read The Corrections Perfectly, And Every Report Ignored Them
+
+The hierarchy this product rests on is one sentence: **what the team decided beats what the tool
+decided.** `tewip correct` records a person's decision and prints a promise -
+
+> Tewip will answer with your decision the next time that test fails the same way, and say it was
+> yours.
+
+Neither `correct` nor `learn` had ever been run on real data, so the loop was run end to end on eight
+real `LOCATOR_DRIFT` diagnoses that `explain` itself had written. Three were corrected to `TIMING`, by
+name, with reasons. `tewip learn` is excellent:
+
+> \#\#\# 3x said LOCATOR_DRIFT, you said TIMING
+> - From 3 different tests · Decided by: rules 3 · **Rules that decided them: `locator-drift` 3x**
+> - Those failures all mention: timeouterror, locator, exceeded, call, click
+> - **What to do:** read `locator-drift` against those failures - it decided 3 of 3. If it is matching
+>   something it should not, narrow it; if a rule for TIMING should have matched first, order that one
+>   first.
+
+Then the weekly note a lead reads, over the same history:
+
+> - **adds a product to the cart** · Diagnosis: **LOCATOR_DRIFT, confidence 0.95, source: rules
+>   rules-3**
+
+The promise was not kept. Two reasons, and the second is the real one.
+
+**`note` and the CI team report never loaded the corrections at all.** Of the nine places that build
+triage items, those two - the report a lead reads weekly and the report a whole team reads every run -
+passed none.
+
+**And passing them would not have been enough.** `diagnosePipeline` applies a correction only to
+failures in `missing` - the ones with **no stored diagnosis** - and `explain` stores one for every
+failure it diagnoses. So on any history a team actually keeps, every failure has a stored diagnosis
+and a correction reached **none of them**. Three callers reuse stored diagnoses, and one of those,
+`recall`, had been passing corrections since Phase 59 to no effect whatsoever.
+
+A correction now outranks a stored diagnosis inside `buildItems`, which fixes every caller at once,
+and the same note reads:
+
+> Diagnosis: **TIMING, confidence 1.00, source: corrected by a person**
+
+with the test nobody corrected still `LOCATOR_DRIFT`, as it should be.
+
+The three measurement scripts - `shadow`, `lab`, `triage` - deliberately still abstain, and now say
+why in their own comments: they measure what Tewip concludes **on its own** against labels a person
+established separately, and feeding a person's correction back in would be marking its own homework.
+Every report a team reads applies corrections; every measurement does not.
+
+1,140 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

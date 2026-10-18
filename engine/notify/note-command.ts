@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { HistoryIndex } from '../history.ts';
+import { loadCorrections } from '../corrections.ts';
 import { buildItems, type TriageItem } from '../../outlets/items.ts';
 import { digestView } from '../../outlets/views/digest.ts';
 import { qualityView } from '../../outlets/views/quality.ts';
@@ -51,9 +52,13 @@ export async function runNote(cmd: NoteCommand): Promise<string> {
     totalRuns += runs.length;
     totalFailures += records.length;
 
-    // The diagnoses were made when each failure happened; nothing is judged again here.
+    // The diagnoses were made when each failure happened; nothing is judged again here - except
+    // where a person overruled one. This note is the report a lead reads, and it was printing
+    // "Diagnosis: LOCATOR_DRIFT, confidence 0.95, source: rules" about a test somebody had corrected
+    // to TIMING, because the corrections were never loaded here at all.
     const index = new HistoryIndex(records, runs);
-    const items: TriageItem[] = await buildItems(records, index, { dataset: `history: ${name}`, llm: null, reuseStoredDiagnoses: true });
+    const where = join(cmd.root, '.tewip', 'history', name);
+    const items: TriageItem[] = await buildItems(records, index, { dataset: `history: ${name}`, llm: null, reuseStoredDiagnoses: true, corrections: loadCorrections(where) });
     parts.push(`## ${name}`, '', `${runs.length} run(s), ${records.length} failure(s).`, '');
     if (items.length > 0) {
       parts.push(digestView(items, runs, `history: ${name}`).markdown, '', qualityView(items, `history: ${name}`).markdown, '');

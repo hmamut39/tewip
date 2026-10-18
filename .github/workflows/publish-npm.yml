@@ -10,6 +10,14 @@
 # workflow produced the tarball, which a laptop publish cannot make. That needs the repository and
 # the package to be public, and both are.
 #
+# It **stages** rather than publishes, and that is deliberate. Today there is an air gap: someone
+# with write access to this repository cannot push to npm, because the credential lives on a laptop.
+# A trusted publisher allowed to run `npm publish` removes that gap - repo write would become the
+# right to ship to everyone who installs this. Staging keeps it: `npm stage approve` needs
+# interactive two-factor authentication and explicitly cannot use the OIDC token, so a release still
+# takes a person, exactly as it does now. npm labels direct publishing "not recommended" for this
+# reason, and the one property worth keeping is the one it would cost.
+#
 # The suite runs here before anything is published. Today the author runs it by hand first; a
 # workflow that skipped it would be a step backwards, and `tests.yml` does not run on a tag.
 name: publish to npm
@@ -93,14 +101,28 @@ jobs:
       # No NODE_AUTH_TOKEN, and that is the point: the credential is the OIDC token npm exchanges
       # for this workflow's identity. Provenance is generated automatically here, so --provenance is
       # not passed.
-      - name: Publish
+      #
+      # `stage`, not `publish`: this leaves the version waiting for a person to approve it. The
+      # trusted publisher is deliberately not allowed to publish directly.
+      - name: Stage the release for approval
         if: steps.already.outputs.published == 'false'
-        run: npm publish
+        run: npm stage publish
 
-      - name: What was published
+      # A staged version that nobody approves is not released, and a workflow that ends green
+      # without saying so would let a release sit unnoticed.
+      - name: What is waiting for you
         if: steps.already.outputs.published == 'false'
         run: |
           version="$(node -p "require('./package.json').version")"
-          echo "### tewip-ai@$version published from CI, with provenance and no token" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://www.npmjs.com/package/tewip-ai/v/$version" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### tewip-ai@$version is staged, not yet released"
+            echo ""
+            echo "Built and tested here, with provenance, and no token was used. **Nobody can install it until you approve it.**"
+            echo ""
+            echo '```'
+            echo "npm stage list tewip-ai"
+            echo "npm stage approve tewip-ai@$version"
+            echo '```'
+            echo ""
+            echo "Or approve it at https://www.npmjs.com/package/tewip-ai"
+          } >> "$GITHUB_STEP_SUMMARY"

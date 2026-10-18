@@ -76,7 +76,8 @@ export interface Renamed {
 
 const git = (root: string, args: string[]): string => {
   try {
-    return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60_000 });
+    // Captured, not inherited: see the note in grounding.ts.
+    return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch {
     return '';
   }

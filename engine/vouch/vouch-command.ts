@@ -75,6 +75,30 @@ export function vouchAll(root: string, paths: string[]): FileVouch[] {
 const count = (all: Judgement[], verdict: Verdict): number => all.filter((j) => j.verdict === verdict).length;
 
 export function renderVouch(files: FileVouch[]): string {
+  // No test file was read, so there is nothing to say about tests.
+  //
+  // This printed the ordinary summary - "0 test(s) read in 0 file(s). **0 cannot fail at all.**" -
+  // followed by the heading **"Nothing here is unable to fail"** and the line "Every test read can
+  // be broken by a change to the code". All true of nothing, and all of it reads as a pass, in the
+  // command whose entire job is to find tests that cannot fail.
+  //
+  // The comment in `testFilesUnder` above already diagnosed this in Phase 36, when three languages
+  // were missing from the extension list and a file named outright came back as "0 test(s) read in
+  // 0 file(s) - which reads like a clean answer and is not one". The cause was fixed; the report
+  // was not, so every other way of reading nothing still produced a pass: the wrong folder, a
+  // framework Tewip does not recognise, or a project that genuinely has no tests yet.
+  if (files.length === 0) {
+    return [
+      '# Which of these tests could fail?',
+      '',
+      '**No test file was read, so nothing here has been checked.** This is not a report that your tests are sound - it is a report that Tewip found none to look at.',
+      '',
+      'Three things usually explain it: the path given holds no tests, the tests are somewhere Tewip was not pointed at (`tewip vouch <path>`), or they are written in a language it cannot read yet.',
+      '',
+      'It reads JavaScript, TypeScript, Python, Java, Kotlin, Scala, Groovy, Go, C#, F#, Ruby, PHP and Rust.',
+      '',
+    ].join(String.fromCharCode(10));
+  }
   const all = files.flatMap((f) => f.judgements);
   const cannotFail = all.filter((j) => CANNOT_FAIL.includes(j.verdict));
   const crashOnly = count(all, 'crash-only');

@@ -110,7 +110,9 @@ function classify(file: string, before: string, after: string): Agreement | null
 
 function sourceDiff(root: string, range: string): string {
   try {
-    return execFileSync('git', ['diff', '--unified=0', range, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    // Captured, not inherited: see the note in grounding.ts - an unknown range printed git's own
+    // error before Tewip's.
+    return execFileSync('git', ['diff', '--unified=0', range, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch {
     return '';
   }

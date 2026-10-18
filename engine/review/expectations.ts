@@ -38,7 +38,8 @@ const title = (line: string): string =>
 /** The diff of test files only, which is all this looks at. */
 function testDiff(root: string, range: string): string {
   try {
-    return execFileSync('git', ['diff', '--unified=0', range, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    // Captured, not inherited: see the note in grounding.ts.
+    return execFileSync('git', ['diff', '--unified=0', range, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch {
     return '';
   }

@@ -118,7 +118,11 @@ export interface ChangeSummary {
 /** What a git range changed (e.g. "main...HEAD"); null outside a git checkout. */
 export function changeSummary(root: string, range: string, maxPatch = 12_000): ChangeSummary | null {
   try {
-    const git = (args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    // `stdio` so git's own stderr is captured rather than inherited. `execFileSync` sends a child's
+    // stderr straight to the parent unless told not to, so a range that does not exist printed three
+    // lines of `fatal: ambiguous argument 'main...HEAD'` and a git usage hint **before** Tewip's own
+    // explanation of the same thing. The failure was always handled; it just looked like a crash.
+    const git = (args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
     const files = git(['diff', '--name-only', range]).split('\n').filter(Boolean);
     const patch = git(['diff', '--unified=2', range]);
     return { range, files, patch: patch.length > maxPatch ? `${patch.slice(0, maxPatch)}\n... (diff cut at ${maxPatch} characters)` : patch };

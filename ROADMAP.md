@@ -4576,6 +4576,58 @@ against real input at least once.
 
 1,174 tests.
 
+### Phase 83: The Audit Stops Being Something Somebody Remembers To Do
+
+Four phases have now found the same bug one instance at a time. `recall` searched an empty index and
+reported *"Searched 1305 kept failure(s)"* (59). The safety harness measured nothing and reported
+zero catching tests lost (73). `design` could not see a number and reported no change (80). The risk
+digest compared a window against itself and reported that nothing got worse (82). Every one was a
+clean answer produced by having looked at nothing, and every one was found by stumbling into it
+later.
+
+Phase 59 did that audit by hand, once. This makes it permanent: **every command that reads project
+state is run against an empty directory, and the answer has to name the emptiness.** A count of zero
+is not a finding; "I found nothing to look at" is.
+
+The sweep found two things immediately.
+
+**`vouch` reported a pass on a project with no tests.** Its whole job is finding tests that cannot
+fail, and handed a directory containing none it said:
+
+> 0 test(s) read in 0 file(s). **0 cannot fail at all.**
+>
+> \#\# Nothing here is unable to fail
+> Every test read can be broken by a change to the code, or by the code throwing.
+
+All true of nothing, and all of it reads as good news - the heading most of all. The denominator was
+right there in the first line and the headline overrode it, which is the Phase 68 lesson exactly.
+
+The comment directly above the file-walking code had already diagnosed this, in Phase 36:
+
+> even a file named outright came back "0 test(s) read in 0 file(s)" - **which reads like a clean
+> answer and is not one**
+
+That phase fixed one *cause* - three languages missing from the extension list - and left the report
+alone, so every other way of reading nothing still produced a pass: the wrong folder, an unsupported
+framework, a project with no tests yet. It now refuses, and says which three things usually explain
+it.
+
+**Three commands leaked git's error ahead of their own.** `pick`, `review` and `done` printed
+
+    fatal: ambiguous argument 'main...HEAD': unknown revision or path not in the working tree.
+    Use '--' to separate paths from revisions, like this: ...
+
+and *then* said, clearly and in their own words, that this may not be a git checkout. `execFileSync`
+sends a child's stderr straight to the parent unless told otherwise. The failure was always handled;
+it simply looked like a crash. Four call sites now capture it.
+
+The test was checked the way everything here is checked: the `vouch` guard was removed, the test went
+red, and it was put back. A conformance test that cannot fail is the thing it was written to prevent.
+
+What it cannot check is whether an explanation is *good* - only that one is given. It is a floor.
+
+1,187 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

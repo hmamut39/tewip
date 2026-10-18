@@ -12,6 +12,7 @@ import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { alreadyTried, cannotAct, planFor, type ActionRecord } from './act.ts';
 import { decide, type Decision, type Observed } from './policy.ts';
 import { CANNOT_FAIL } from '../vouch/vouch.ts';
+import { applyCorrection, correctionFor, loadCorrections, type Correction } from '../corrections.ts';
 import { vouchAll } from '../vouch/vouch-command.ts';
 
 export interface PursueCommand {
@@ -37,23 +38,42 @@ export function observe(root: string, goal: string, only?: string): Observed {
   const dir = join(root, '.tewip', 'history');
   const runs: RunSummary[] = [];
   const records: TriageRecord[] = [];
+  const corrections: Correction[] = [];
   if (existsSync(dir)) {
     for (const project of only ? [only] : readdirSync(dir)) {
       const where = join(dir, project);
       if (!existsSync(where)) continue;
       runs.push(...readJsonl<RunSummary>(datasetFiles(where).runs));
       records.push(...readTriageRecords(datasetFiles(where).triage));
+      corrections.push(...loadCorrections(where));
     }
   }
   runs.sort((a, b) => (a.finishedAt > b.finishedAt ? 1 : -1));
   const newest = runs.at(-1);
   const wanted = words(goal);
 
+  // A person's correction decides the category, as it does everywhere else.
+  //
+  // This read `r.diagnosis` straight off the record, so a correction never reached the decision.
+  // Field-tested: a person marked a failure REAL_BUG, and `pursue` went on calling it LOCATOR_DRIFT
+  // and concluding "the goal is failing and Tewip cannot say why". That matters more here than in a
+  // report, because this is the command that **acts** - and its own documented order is "a real bug
+  // first... it will not touch a real bug", a safety rule that depends on recognising one. The
+  // strongest possible signal that something is a real bug is a person saying so.
+  //
+  // Phase 74 fixed this inside `buildItems` for every command that goes through it. This one does
+  // not, so it applies them itself.
   const failing = records
     .filter((r) => r.runId === newest?.runId && about(wanted, r.testId))
     .map((r) => {
-      const d = r.diagnosis as { category?: string; confidence?: number } | undefined;
-      return { testId: r.testId, category: String(d?.category ?? 'UNKNOWN'), confidence: Number(d?.confidence ?? 0) };
+      const correction = corrections.length > 0 ? correctionFor(r, corrections) : null;
+      const own = r.diagnosis as { category?: string; confidence?: number } | undefined;
+      const d = correction && own ? applyCorrection(own as never, correction) : own;
+      return {
+        testId: r.testId,
+        category: String((correction?.category ?? d?.category) ?? 'UNKNOWN'),
+        confidence: Number(d?.confidence ?? (correction ? 1 : 0)),
+      };
     });
 
   // A test that failed in more than one earlier run and is not failing now has come and gone.

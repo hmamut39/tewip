@@ -13,7 +13,10 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { alreadyTried, cannotAct, planFor, type ActionRecord } from '../pursue/act.ts';
 import type { Act, Decision } from '../pursue/policy.ts';
-import { actionsTaken, cliEntry, runPursue } from '../pursue/pursue-command.ts';
+import { actionsTaken, cliEntry, observe, runPursue } from '../pursue/pursue-command.ts';
+import { decide } from '../pursue/policy.ts';
+import { saveCorrections, type Correction } from '../corrections.ts';
+import { errorShape } from '../signature.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -142,5 +145,55 @@ describe('the audit trail of what it did', () => {
     assert.ok(entry, 'a checkout or an installed build always has a command line beside it');
     assert.match(entry.replace(/\\/g, '/'), /\/cli\/tewip\.(ts|js)$/, 'the only thing worth re-entering is the Tewip command line');
     assert.doesNotMatch(entry, /test/, 'a test runner is never the entry point');
+  });
+});
+
+// Phase 79: field-tested against a real diagnosed history. The decision order holds, --act refuses a
+// goal it cannot explain, and every refusal is recorded. One thing did not hold.
+describe('a person telling pursue that something is a real bug', () => {
+  const NL2 = String.fromCharCode(10);
+  const record = (testId: string, category: string, confidence: number) => ({
+    schemaVersion: 1, testId, file: 'shop.spec.ts', status: 'failed',
+    errorMessage: 'TimeoutError: locator.click: Timeout 1500ms exceeded', errorStack: '',
+    duration: 1, retry: 0, attachments: [], runId: 'r1', gitSha: '', timestamp: '2026-01-01T00:00:00Z',
+    diagnosis: { category, confidence, source: 'rules rules-3', evidence: [], engineVersion: 'rules-3', diagnosedAt: '2026-01-01T00:00:00Z' },
+  });
+  const project = (withCorrection: boolean) => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-pursue-'));
+    const where = join(root, '.tewip', 'history', 'shop');
+    mkdirSync(where, { recursive: true });
+    writeFileSync(join(where, 'triage.jsonl'), [record('shop.spec.ts > starts checkout', 'LOCATOR_DRIFT', 0.95), record('shop.spec.ts > opens the cart', 'LOCATOR_DRIFT', 0.9)].map((r) => JSON.stringify(r)).join(NL2) + NL2, 'utf8');
+    writeFileSync(join(where, 'runs.jsonl'), JSON.stringify({ schemaVersion: 1, runId: 'r1', gitSha: '', branch: 'main', startedAt: '2026-01-01T00:00:00Z', finishedAt: '2026-01-01T00:00:00Z', status: 'failed', attempts: { 'shop.spec.ts > starts checkout': 1, 'shop.spec.ts > opens the cart': 1 } }) + NL2, 'utf8');
+    if (withCorrection) {
+      saveCorrections(where, [{ schemaVersion: 1, testId: 'shop.spec.ts > starts checkout', errorShape: errorShape('TimeoutError: locator.click: Timeout 1500ms exceeded'), category: 'REAL_BUG', wasCategory: 'LOCATOR_DRIFT', by: 'sam', at: '2026-01-02T00:00:00Z', reason: 'the button is gone' } as unknown as Correction]);
+    }
+    return root;
+  };
+
+  it('reaches the decision, so a real bug is treated as a real bug', () => {
+    // This read `r.diagnosis` straight off the record, so a correction never arrived. It matters more
+    // here than in a report, because this is the command that acts - and its own documented order is
+    // "a real bug first... it will not touch a real bug", a rule that depends on recognising one.
+    const seen = observe(project(true), 'keep the shop checkout green');
+    const corrected = seen.failing.find((f) => f.testId === 'shop.spec.ts > starts checkout');
+    assert.equal(corrected?.category, 'REAL_BUG');
+    assert.equal(decide('keep the shop checkout green', seen).act, 'triage-real-bug');
+  });
+
+  it('leaves a failure nobody corrected as it was', () => {
+    const seen = observe(project(true), 'keep the shop checkout green');
+    assert.equal(seen.failing.find((f) => f.testId === 'shop.spec.ts > opens the cart')?.category, 'LOCATOR_DRIFT');
+  });
+
+  it('decides differently without the correction, which is the bug this pins', () => {
+    const seen = observe(project(false), 'keep the shop checkout green');
+    assert.equal(seen.failing.every((f) => f.category === 'LOCATOR_DRIFT'), true);
+    assert.notEqual(decide('keep the shop checkout green', seen).act, 'triage-real-bug', 'nothing has been called a real bug here');
+  });
+
+  it('will not act on a real bug, whoever decided it was one', () => {
+    const seen = observe(project(true), 'keep the shop checkout green');
+    const decision = decide('keep the shop checkout green', seen);
+    assert.match(cannotAct[decision.act] ?? '', /a real bug is for a person to see/);
   });
 });

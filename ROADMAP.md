@@ -4430,6 +4430,40 @@ now fail, and a failing claim becomes an open question, which is where it belong
 
 1,158 tests.
 
+### Phase 79: The Command That Acts Was The One Not Listening
+
+`tewip pursue` takes a goal instead of a verb, decides what to do about it in a fixed written order -
+a real bug first, then the environment, then flakiness, then a test that cannot fail, then a coverage
+gap - and with `--act` carries out the two it considers safe. A command that acts on its own judgement
+is worth testing hard, so it was run against the real diagnosed history from `data/ci-smoke`.
+
+**The restraint holds.** Asked to pursue a goal whose tests are red for reasons it cannot explain,
+`--act` did nothing and said why - *"Not carried out: Tewip cannot say why these failed, so it has
+nothing it could safely do about them"* - and wrote the refusal to `.tewip/actions.jsonl`. Told to act
+on a real bug, it refused again: *"a real bug is for a person to see, and Tewip will not work around
+one on its own."* Both refusals are in the record, which is what that file is for.
+
+**One thing did not hold, and it is the one that matters most here.** A person marked a failure
+`REAL_BUG` with a reason and their name. `pursue` went on reporting it as **LOCATOR_DRIFT at 0.95**
+and reached the weaker conclusion *"the goal is failing and Tewip cannot say why."*
+
+Phase 74 fixed this inside `buildItems`, which every report goes through. `pursue` does not: it reads
+`r.diagnosis` straight off the record. So the one command that **acts** was the one command still
+deaf to the team, and its own safety rule - *"a real bug first... it will not touch a real bug"* -
+depends entirely on recognising a real bug. The strongest signal that something is one is a person
+saying so, and that signal reached nothing.
+
+With corrections applied where the decision is made:
+
+> **put 1 failing test(s) in front of a person: shop.spec.ts > starts checkout**
+> the goal is **already broken**: Tewip calls this failure a real bug, which is the one kind it will
+> not work around.
+> - shop.spec.ts > starts checkout: **REAL_BUG at 1.00**
+
+and `--act` refuses it, as it must. The failure nobody corrected stays `LOCATOR_DRIFT`.
+
+1,162 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

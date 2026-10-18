@@ -4299,6 +4299,43 @@ for a peer to call. It does - `supportedInterfaces[0].url` - and I had been look
 
 1,146 tests.
 
+### Phase 76: The Dry Run Needed An Account To Tell You What It Would Do
+
+`tewip jira` turns a plan's scenarios into test-case issues. Its file header states the rule plainly -
+*"It shows what it would create and creates nothing until asked (--create)"* - and so does the help
+text. Field-tested on a real plan that `tewip plan` wrote for the Phase 75 change:
+
+> tewip: **Jira is not set up.** One setting to read a public tracker: TEWIP_JIRA_URL=...
+
+Without `--create`, asked only to *show* what it would file, it refused and sent the person off to get
+a Jira account. Its sibling `bugs`, which does the same job for failures, has always answered this
+case - *"No tracker was contacted: this is what would be filed"* - and `jira` never did.
+
+The dry run now works with nothing configured, and is careful about the one thing it genuinely cannot
+know offline:
+
+> No tracker was contacted: this is what would be filed.
+>   A2A-REC-001  would create: A2A-REC-001 Oversized or otherwise rejected request body is recorded...
+>   *(seven in total)*
+>
+> 7 item(s). **Tewip could not check which of these you have already filed** - that answer is in the
+> tracker, not in the plan - so read the list as everything, not as new work.
+
+Filing still refuses without a tracker, because filing needs one.
+
+**The export half was already sound**, and was checked rather than assumed: both `--export xray` and
+`--export zephyr` were written for the real plan and parsed with a strict CSV parser that honours
+quoted commas and newlines - 25 rows for 7 cases, consistent at 9 and 10 columns, every multi-line
+step field correctly quoted.
+
+**And the plan Tewip wrote caught something in Phase 75's own code.** One of its seven scenarios was
+*"Oversized or otherwise rejected request body is recorded without body content"* - which is a real
+question, because the 413 path records `why: error.message`. It turns out `readBody` rejects with the
+fixed string `'request too large'`, so no peer content reaches the log and the promise holds. Checked
+because a plan written by the tool asked the question, which is the first time that has happened here.
+
+1,150 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

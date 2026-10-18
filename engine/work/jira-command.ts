@@ -82,6 +82,36 @@ export async function runJira(cmd: JiraCommand): Promise<void> {
     return;
   }
   const config = jiraFromEnv();
+  // Without a tracker, show what would be filed anyway.
+  //
+  // This file's own comment says "It shows what it would create and creates nothing until asked",
+  // and the help text says "Shows what it would create; --create actually files them" - but the
+  // refusal below ran whatever was asked, so a person who only wanted to see the list had to go and
+  // get a Jira account first. `bugs`, which does the same job for failures, has always answered this
+  // case: "No tracker was contacted: this is what would be filed."
+  //
+  // What a dry run genuinely cannot do without a server is say which scenarios are **already**
+  // filed, because that answer lives in the tracker. So it says so rather than implying the whole
+  // list is new work.
+  if (!config?.token && !cmd.create) {
+    const planned = JSON.parse(readFileSync(cmd.planFile, 'utf8')) as SavedPlan;
+    const wanted = chosen(planned.plan, cmd.only);
+    if (wanted.length === 0) throw new Error(cmd.only.length ? `none of ${cmd.only.join(', ')} is in ${cmd.planFile}` : 'every scenario in the plan is already covered by a test');
+    console.log(
+      [
+        `Plan: ${planned.plan.title}`,
+        `Project: ${cmd.projectKey || '(none given)'}`,
+        '',
+        'No tracker was contacted: this is what would be filed.',
+        ...wanted.map((scenario) => `  ${scenario.id}  would create: ${scenario.id} ${scenario.title}`),
+        '',
+        `${wanted.length} item(s). Tewip could not check which of these you have already filed - that answer is in the tracker, not in the plan - so read the list as everything, not as new work.`,
+        'To file them, set a tracker up and add --create:',
+        jiraHelp(),
+      ].join(String.fromCharCode(10)),
+    );
+    return;
+  }
   if (!config) throw new Error(jiraHelp());
   if (!config.token) throw new Error(`filing test cases needs a token: reading a public tracker is free, writing to one is not.\n${jiraHelp()}`);
   const jira = new Jira(config);

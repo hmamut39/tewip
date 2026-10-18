@@ -127,3 +127,71 @@ describe('reading a ticket', () => {
     assert.equal(jiraFromEnv(), null);
   });
 });
+
+// Phase 76: field-tested on a real plan `tewip plan` wrote for a real change.
+//
+// The export half works: both CSVs parse under a strict parser, with consistent columns and
+// multi-line step fields correctly quoted. The dry run did not work at all.
+describe('showing what would be filed, with no tracker set up', () => {
+  const noJira = () => {
+    for (const k of Object.keys(ENV)) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  };
+  const captured = () => {
+    const lines: string[] = [];
+    const original = console.log;
+    console.log = (...args: unknown[]) => void lines.push(args.map(String).join(' '));
+    return { lines, restore: () => void (console.log = original) };
+  };
+
+  it('lists the scenarios instead of demanding an account', async () => {
+    // This file's own header says "It shows what it would create and creates nothing until asked",
+    // and the help text says "Shows what it would create" - but the refusal ran whatever was asked,
+    // so somebody who only wanted the list had to go and get a Jira account first. `bugs`, which
+    // does this job for failures, has always answered the case.
+    noJira();
+    const out = captured();
+    try {
+      await runJira({ planFile: planFile(), projectKey: 'PROJ', create: false, only: [] } as never);
+    } finally {
+      out.restore();
+    }
+    const text = out.lines.join(String.fromCharCode(10));
+    assert.match(text, /No tracker was contacted: this is what would be filed/);
+    assert.match(text, /LS-001 {2}would create/);
+    assert.match(text, /LS-002 {2}would create/);
+  });
+
+  it('says it could not check what was already filed, rather than implying the list is new work', async () => {
+    noJira();
+    const out = captured();
+    try {
+      await runJira({ planFile: planFile(), projectKey: 'PROJ', create: false, only: [] } as never);
+    } finally {
+      out.restore();
+    }
+    const text = out.lines.join(String.fromCharCode(10));
+    assert.match(text, /could not check which of these you have already filed/);
+    assert.match(text, /that answer is in the tracker, not in the plan/);
+  });
+
+  it('still refuses to file anything without a tracker', async () => {
+    noJira();
+    await assert.rejects(() => runJira({ planFile: planFile(), projectKey: 'PROJ', create: true, only: [] } as never), /Jira is not set up/);
+  });
+
+  it('honours --only in the dry run too', async () => {
+    noJira();
+    const out = captured();
+    try {
+      await runJira({ planFile: planFile(), projectKey: 'PROJ', create: false, only: ['LS-002'] } as never);
+    } finally {
+      out.restore();
+    }
+    const text = out.lines.join(String.fromCharCode(10));
+    assert.match(text, /LS-002 {2}would create/);
+    assert.doesNotMatch(text, /LS-001 {2}would create/);
+  });
+});

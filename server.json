@@ -6,13 +6,13 @@
     "url": "https://github.com/hmamut39/tewip",
     "source": "github"
   },
-  "version": "0.70.14",
+  "version": "0.70.15",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "tewip-ai",
-      "version": "0.70.14",
+      "version": "0.70.15",
       "transport": {
         "type": "stdio"
       },

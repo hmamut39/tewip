@@ -89,11 +89,24 @@ export function impliedLandmark(layerName: string): string | null {
 
 const PLACEHOLDER = /^(?:lorem ipsum|placeholder|label|text|body|paragraph|xxx+|\.\.\.|…)$/i;
 
-/** Text worth checking for: real words a person would notice missing. */
+/**
+ * Text worth checking for: real words a person would notice missing - **or a number**.
+ *
+ * This required two consecutive letters, which filters the noise it was written for (a lone glyph,
+ * an ellipsis, "Label") and also silently discarded every number in the design. Field-tested: a
+ * checkout frame specifying **£54.99** against a page serving **£59.99** produced a byte-identical
+ * report - "5 check(s) from the design, 3 met, 2 different" - because the price was never one of the
+ * five. A wrong price on a checkout screen is the drift a design review exists to catch, and it was
+ * the one kind that could not be seen.
+ *
+ * A run of two or more digits now counts, so a price, a total, a quantity or a rate becomes a check.
+ * A single character still does not, nor does punctuation on its own: `3`, `—` and `...` are noise,
+ * `£54.99` and `20%` are the design speaking.
+ */
 function meaningful(text: string): boolean {
   const t = text.trim();
   if (t.length < 2 || t.length > 120) return false;
-  if (!/[A-Za-z]{2}/.test(t)) return false;
+  if (!/[A-Za-z]{2}/.test(t) && !/\d{2}/.test(t)) return false;
   return !PLACEHOLDER.test(t);
 }
 

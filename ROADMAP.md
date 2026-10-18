@@ -4464,6 +4464,43 @@ and `--act` refuses it, as it must. The failure nobody corrected stays `LOCATOR_
 
 1,162 tests.
 
+### Phase 80: The Design Said £54.99, The Page Said £59.99, And The Report Did Not Change
+
+`tewip design` compares a Figma frame against the running page and says *"the design says X, the page
+says Y"*. Field-tested properly: a real Figma frame export - a checkout screen with a title, a total,
+a promo input, a pay button and a save-my-card checkbox - and a real page served on this machine,
+drifted from it on purpose.
+
+**It found both drifts, with no false positives:**
+
+> different words · design says: button "Pay now" · page says: button "Pay"
+> not on the page · design says: checkbox "Save my card for next time" · page says: nothing like it
+
+Then one character was changed on the page: the price, from the £54.99 the design specifies to
+£59.99. The report came back **byte-identical** - *"5 check(s) from the design, 3 met, 2 different"*.
+The price was never one of the five.
+
+`meaningful()`, which decides what text is worth checking for, required **two consecutive letters**:
+
+    if (!/[A-Za-z]{2}/.test(t)) return false;
+
+It was written to filter real noise - a lone glyph, an ellipsis, a layer called "Label" - and it also
+discarded **every number in the design**. A wrong price on a checkout screen is the drift a design
+review exists to catch, and it was the one kind that could not be seen. Phase 78 found the same shape
+in `spec`, where a two-digit number could not be compared; here a number could not be looked at.
+
+A run of two or more digits now counts, so a price, a total, a quantity or a rate becomes a check,
+while a single character and bare punctuation stay filtered - `3`, `—` and `...` are noise, `£54.99`
+and `20%` are the design speaking. Same page, same frame:
+
+> 6 check(s) from the design, 3 met, 3 different.
+> different words · design says: text "£54.99" · page says: £59.99 · in the design: Checkout / Total
+> value
+
+and with the price put back, it is quiet about it again: 6 checks, 4 met, the two real drifts.
+
+1,166 tests.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

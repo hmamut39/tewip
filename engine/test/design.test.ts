@@ -161,3 +161,40 @@ describe('the design command', () => {
     await assert.rejects(() => runDesign({ design: file, root: process.cwd() }), /no checkable words or controls/);
   });
 });
+
+// Phase 80: field-tested against a real Figma frame export and a real page served on this machine.
+//
+// It found both drifts planted in the page - a button reading "Pay" where the design says "Pay now",
+// and a missing "Save my card" checkbox - with no false positives. Then the price was changed from
+// £54.99 to £59.99 and the report came back **byte-identical**: 5 checks, 3 met, 2 different. The
+// price was never one of the five.
+describe('a number in the design', () => {
+  const text = (id: string, name: string, characters: string) => ({ id, type: 'TEXT', name, characters, absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 20 } });
+  const frame = (...children: unknown[]) => ({ id: '1:1', type: 'FRAME', name: 'Checkout', absoluteBoundingBox: { x: 0, y: 0, width: 480, height: 640 }, children }) as unknown as FigmaNode;
+
+  it('becomes a check, because a price is the design speaking', () => {
+    // `meaningful()` required two consecutive letters, so every number in a design was discarded.
+    // A wrong price on a checkout screen is the drift a design review exists to catch, and it was
+    // the one kind that could not be seen.
+    const checks = frameChecks(frame(text('1:2', 'Total value', '£54.99')));
+    assert.equal(checks.length, 1);
+    assert.equal(checks[0].name, '£54.99');
+  });
+
+  it('covers the shapes a number really takes in a design', () => {
+    for (const value of ['£54.99', '20%', '1,299', '2026', '14 days', '99p off 20']) {
+      assert.equal(frameChecks(frame(text('1:2', 'Value', value))).length, 1, `${value} is worth checking`);
+    }
+  });
+
+  it('still leaves the noise it was written to filter', () => {
+    for (const noise of ['3', '—', '...', 'Label', 'Lorem ipsum', 'x']) {
+      assert.deepEqual(frameChecks(frame(text('1:2', 'Thing', noise))), [], `${noise} is not a claim about the product`);
+    }
+  });
+
+  it('keeps the words it always checked', () => {
+    const checks = frameChecks(frame(text('1:2', 'Title', 'Checkout'), text('1:3', 'Label', 'Order total')));
+    assert.deepEqual(checks.map((c) => c.name).sort(), ['Checkout', 'Order total']);
+  });
+});

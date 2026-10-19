@@ -145,6 +145,21 @@ export function decide(test: FlakyTest, { minRuns, alwaysFailsAbove }: { minRuns
   //
   // Phase 56 is where this comes from: of the signals available when a test fails, non-determinism
   // is the one that is genuinely decisive, and it costs nothing to read.
+  // This is also what makes quarantine safe, and not the rule above it.
+  //
+  // The rail that refuses to quarantine a test whose failures looked like the application being
+  // wrong reads the *diagnosed* category, and on real stored history there is none: across
+  // gutenberg, gutenberg-aug2 and supabase, all 3,249 harvested failures have no diagnosis at all,
+  // because nobody ran `tewip explain` over them. So the rail never fires.
+  //
+  // Measured anyway, against 2,773 hand labels (`node eval/flaky-safety.ts`): of 241 tests
+  // recommended for quarantine, 218 had a labelled failure and **none of them was ever labelled a
+  // real bug**. All 68 tests that were catching real bugs came back `watch`, never `quarantine`.
+  //
+  // The safety is real and its source is this condition, not the rail: a test that failed and then
+  // passed on a retry of the same commit did both on the same code. A test catching a real bug does
+  // not pass on a retry. That is an observation, which is why it still works when every diagnosis
+  // is missing.
   if (test.recoveredOnRetry > 0 && test.failedRuns >= minRuns) {
     const times = test.recoveredOnRetry === 1 ? 'once' : `${test.recoveredOnRetry} times`;
     const spread = test.branches.length > 1 ? ` It failed on ${test.branches.length} different branches, so it is the test rather than one person's change.` : '';

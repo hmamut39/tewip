@@ -80,8 +80,30 @@ describe('is this work done?', () => {
     // an approval assembled out of shrugs. An unanswered essential question is not a pass.
     const decision = decide(seen({ noHistory: true }));
     assert.equal(decision.verdict, 'cannot-say');
-    assert.match(decision.headline, /"Is anything failing\?" - so this is not an approval/);
+    assert.match(decision.headline, /"Is everything passing\?" - so this is not an approval/);
     assert.match(decision.headline, /not an approval/);
+  });
+
+  it('never says a word that reads like reassurance while a test is failing', () => {
+    // The table renders each check's standing as yes or no, so the questions have to be phrased so
+    // that a yes is good news. "Is anything failing?" was not: with a test genuinely failing, the
+    // standing was not-met and the row read "Is anything failing? **no**" - true of the standing,
+    // backwards as an answer, and the table is what a reviewer scans first. The headline said Not
+    // ready and named the test; the row beside it still read like reassurance.
+    const failing = seen({ failingNow: [{ testId: 'refunds > partial refund', category: 'REAL_BUG' }] });
+    const row = renderDecision('main...HEAD', decide(failing))
+      .split(String.fromCharCode(10))
+      .find((l) => l.includes('|') && /passing|failing/.test(l));
+    assert.ok(row, 'the run-state question has a row');
+    assert.match(row, /\*\*no\*\*/, 'a failing test must read as a no');
+    assert.doesNotMatch(row, /\|\s*yes\s*\|/, 'and must never read as a yes');
+  });
+
+  it('reads as a yes when nothing is failing', () => {
+    const row = renderDecision('main...HEAD', decide(seen()))
+      .split(String.fromCharCode(10))
+      .find((l) => l.includes('|') && /passing|failing/.test(l));
+    assert.match(row ?? '', /\|\s*yes\s*\|/);
   });
 
   it('is not troubled by the expensive check being skipped, but says so', () => {
@@ -109,7 +131,7 @@ describe('is this work done?', () => {
     assert.deepEqual(
       decide(sound).checks.map((c) => c.question),
       [
-        'Is anything failing?',
+        'Is everything passing?',
         'Is the changed code tested?',
         'Can the tests in this change fail?',
         'Would the tests catch a bug in this code?',
@@ -177,6 +199,6 @@ describe('the lines a sampled proof run never reached', () => {
     const table = report.slice(0, report.indexOf('### '));
     assert.match(table, /Can the tests in this change fail\?/, 'the table lists it as n/a');
     assert.doesNotMatch(report, /### Can the tests in this change fail\?/, 'but it gets no section of its own');
-    assert.match(report, /### Is anything failing/, 'and the questions that do apply still get theirs');
+    assert.match(report, /### Is everything passing/, 'and the questions that do apply still get theirs');
   });
 });

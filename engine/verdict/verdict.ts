@@ -17,7 +17,7 @@
 export type Standing = 'met' | 'not-met' | 'not-applicable' | 'not-checked';
 
 /** The questions that cannot be skipped on the way to "ready". */
-const ESSENTIAL = ['Is anything failing?', 'Is the changed code tested?'];
+const ESSENTIAL = ['Is everything passing?', 'Is the changed code tested?'];
 
 export interface Check {
   /** What was asked, in a reviewer's words. */
@@ -77,17 +77,23 @@ export function decide(evidence: Evidence): Decision {
   const checks: Check[] = [];
 
   // 1. Is anything failing right now? Nothing else matters while it is.
+  //
+  // Asked as "Is everything passing?" so that a yes is good news, like every other row. Phrased
+  // the other way round, the table said **no** to "Is anything failing?" when a test really was
+  // failing - true of the standing, backwards as an answer, and the table is the part a reviewer
+  // scans before anything else. The headline said Not ready and named the test either way; the
+  // row beside it still read like reassurance.
   if (evidence.noHistory) {
-    checks.push({ question: 'Is anything failing?', standing: 'not-checked', answer: 'no run has been kept for this project, so Tewip has not seen a test result here. Run `tewip explain <report>` in CI and it will know.', decidedBy: 'kept history' });
+    checks.push({ question: 'Is everything passing?', standing: 'not-checked', answer: 'no run has been kept for this project, so Tewip has not seen a test result here. Run `tewip explain <report>` in CI and it will know.', decidedBy: 'kept history' });
   } else if (evidence.failingNow.length > 0) {
     checks.push({
-      question: 'Is anything failing?',
+      question: 'Is everything passing?',
       standing: 'not-met',
       answer: `${evidence.failingNow.length} test(s) touching this change failed in the last run: ${evidence.failingNow.slice(0, 3).map((f) => `${f.testId} (${f.category})`).join(', ')}`,
       decidedBy: 'the triage rules and model, measured on real CI data',
     });
   } else {
-    checks.push({ question: 'Is anything failing?', standing: 'met', answer: 'nothing touching this change failed in the last kept run', decidedBy: 'kept history' });
+    checks.push({ question: 'Is everything passing?', standing: 'met', answer: 'nothing touching this change failed in the last kept run', decidedBy: 'kept history' });
   }
 
   // 2. Does anything test the change at all?

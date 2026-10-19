@@ -57,7 +57,7 @@ export function traceReport(cmd: TraceCommand): { traced: TracedRequirement[]; r
   const found = plans(cmd.root, cmd.only);
   const { runs, records } = history(cmd.root, cmd.name);
   const traced = found.map((plan) => tracePlan(plan, runs, records));
-  return { traced, report: renderTrace(traced), plans: found.length, runs: runs.length };
+  return { traced, report: renderTrace(traced, runs.length), plans: found.length, runs: runs.length };
 }
 
 export function runTrace(cmd: TraceCommand): TracedRequirement[] {

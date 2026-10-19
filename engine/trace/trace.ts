@@ -132,7 +132,16 @@ export function tracePlan(plan: PlanFile, runs: RunSummary[], records: TriageRec
 const MARK: Record<Standing, string> = { passing: 'passing', failing: 'FAILING', 'never-run': 'never run', 'not-covered': 'NOT COVERED' };
 
 /** The answer to "is this covered, and is it passing", written so it can be disagreed with. */
-export function renderTrace(traced: TracedRequirement[]): string {
+/**
+ * The report.
+ *
+ * `runsKept` is passed separately because the scenarios cannot carry it. With no run history at
+ * all, every scenario comes back `never run` - true of each one and misleading as a whole: it reads
+ * as a measurement of a suite nobody has exercised, when the truth is that nothing has been
+ * recorded here to measure. The footer made it worse, claiming the lines came from "a run it
+ * recorded" when there was no run.
+ */
+export function renderTrace(traced: TracedRequirement[], runsKept = 1): string {
   const all = traced.flatMap((t) => t.scenarios);
   const count = (s: Standing) => all.filter((x) => x.standing === s).length;
   const lines = ['# From what was asked for, to what is passing', ''];
@@ -147,10 +156,22 @@ export function renderTrace(traced: TracedRequirement[]): string {
   lines.push(
     `${all.length} scenario(s) across ${traced.length} requirement(s): ${count('passing')} passing, ${count('failing')} failing, ${count('never-run')} never run, ${count('not-covered')} not covered.`,
     '',
-    'A scenario counts as covered only when a real test can be named, and as passing only when a real',
-    'run attempted it. Everything else says what is missing instead.',
-    '',
   );
+  if (runsKept === 0) {
+    lines.push(
+      '**No run has been kept here, so nothing below says whether anything passes.** Every scenario',
+      'reads "never run" because there is no run to have attempted it - not because the tests were',
+      'written and then left alone. Run `tewip explain <report>` on a real run first, and this becomes',
+      'an answer rather than a list.',
+      '',
+    );
+  } else {
+    lines.push(
+      'A scenario counts as covered only when a real test can be named, and as passing only when a real',
+      'run attempted it. Everything else says what is missing instead.',
+      '',
+    );
+  }
   for (const requirement of traced) {
     lines.push(`## ${requirement.requirement}${requirement.ticket ? ` (${requirement.ticket})` : ''}`, '');
     for (const s of requirement.scenarios) {
@@ -169,6 +190,10 @@ export function renderTrace(traced: TracedRequirement[]): string {
     for (const s of worst.slice(0, 5)) lines.push(`- ${s.standing === 'failing' ? `fix or triage ${s.test}` : `write a test for ${s.id}: ${s.title}`}`);
     lines.push('');
   }
-  lines.push('Every line above comes from a plan Tewip wrote and a run it recorded. Nothing is inferred.');
+  lines.push(
+    runsKept === 0
+      ? 'Every line above comes from a plan Tewip wrote. No run was recorded here, so nothing above was checked against one.'
+      : 'Every line above comes from a plan Tewip wrote and a run it recorded. Nothing is inferred.',
+  );
   return lines.join('\n');
 }

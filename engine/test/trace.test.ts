@@ -113,3 +113,40 @@ describe('what trace can see, and what it says when it cannot see', () => {
     assert.match(traced.scenarios[0].why, /nothing Tewip can see is checking it/, 'what it can see, not what exists');
   });
 });
+
+describe('a trace with no run behind it', () => {
+  // Every scenario comes back "never run", which is true of each one and misleading as a whole: it
+  // reads as a measurement of a suite nobody has exercised, when nothing has been recorded here to
+  // measure. The footer made it worse - "every line above comes from a plan Tewip wrote and a run it
+  // recorded" - when there was no run. Same shape as `vouch` reporting "0 cannot fail at all" on a
+  // project with no tests.
+  const twoScenarios = plan([
+    { id: 'SHOP-1', title: 'adds an item', priority: 'high', covered_by: 'cart > adds' },
+    { id: 'SHOP-2', title: 'removes an item', priority: 'high', covered_by: 'cart > removes' },
+  ]);
+
+  it('says plainly that nothing was checked', () => {
+    const report = renderTrace([tracePlan(twoScenarios, [], [])], 0);
+    assert.match(report, /No run has been kept here, so nothing below says whether anything passes/);
+    assert.match(report, /not because the tests were/);
+  });
+
+  it('does not claim a run it never had', () => {
+    const report = renderTrace([tracePlan(twoScenarios, [], [])], 0);
+    assert.match(report, /No run was recorded here, so nothing above was checked against one/);
+    assert.doesNotMatch(report, /and a run it recorded/);
+  });
+
+  it('still claims the run when there is one', () => {
+    const runs = [run('r1', ['cart > adds', 'cart > removes'])];
+    const report = renderTrace([tracePlan(twoScenarios, runs, [])], runs.length);
+    assert.match(report, /and a run it recorded\. Nothing is inferred/);
+    assert.doesNotMatch(report, /No run has been kept here/);
+  });
+
+  it('never calls a scenario passing when no run attempted it', () => {
+    // The direction that matters: telling somebody a requirement is met when nothing checked it.
+    const traced = tracePlan(twoScenarios, [], []);
+    assert.equal(traced.scenarios.every((s) => s.standing !== 'passing'), true);
+  });
+});

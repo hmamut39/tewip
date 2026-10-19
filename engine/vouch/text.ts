@@ -3,14 +3,76 @@
 // Split out in Phase 44 so that `swallowed.ts` could use them without importing the module that
 // imports it. Nothing here knows what a test is; they are string surgery and nothing more.
 
-/** Comments cannot assert, and a commented-out check is the classic way a test stops checking. */
+// Comments cannot assert, and a commented-out check is the classic way a test stops checking.
+//
+// Written with line comments rather than a block, because the example below contains the exact
+// character sequence that ends one - which is the whole point of the bug.
+//
+// This used to be a regex that replaced everything from a slash-star to the next star-slash, and a
+// regex cannot tell a comment from a string that happens to contain one. gin's TestParseAccept
+// parses an HTTP Accept header, and the media type `*/*` contains both sequences:
+//
+//     parts := parseAccept("text/html , application/xml;q=0.9,  */* ;q=0.8")
+//     assert.Len(t, parts, 4)
+//     assert.Equal(t, "text/html", parts[0])
+//     ...
+//     assert.Equal(t, "*/*", parts[3])
+//
+// A comment was opened inside the first string and closed in the last assertion. Everything
+// between - all five assertions - became a single space, and a thoroughly checked test was
+// reported as one that compares no value and only a crash could fail. Found on gin-gonic/gin, the
+// first real Go project this was ever pointed at.
+//
+// So the text is walked instead, and a quoted string is skipped whole - which is what the rules
+// above already assumed: "Strings are blanked as well as comments".
 export function withoutComments(body: string): string {
-  return body
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .split(String.fromCharCode(10))
-    .map((line) => line.replace(/(^|\s)\/\/.*$/, '').replace(/(^|\s)#(?!\{).*$/, ''))
-    .join(String.fromCharCode(10));
+  let out = '';
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+    const next = body[i + 1] ?? '';
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const end = endOfString(body, i);
+      out += body.slice(i, end + 1);
+      i = end;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      const close = body.indexOf('*/', i + 2);
+      // An unclosed block comment runs to the end, which is what a compiler would do too.
+      out += ' ';
+      i = close === -1 ? body.length : close + 1;
+      continue;
+    }
+    const atLineStart = i === 0 || /\s/.test(body[i - 1] ?? '');
+    // `http://x` is not a comment, which is why the start of the line or a space is required.
+    if (ch === '/' && next === '/' && atLineStart) {
+      i = indexOrEnd(body, i) - 1;
+      continue;
+    }
+    if (ch === '#' && next !== '{' && atLineStart) {
+      i = indexOrEnd(body, i) - 1;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
+
+/** Where the string opening at `from` ends, honouring backslash escapes. */
+function endOfString(text: string, from: number): number {
+  const quote = text[from];
+  for (let i = from + 1; i < text.length; i += 1) {
+    if (text[i] === '\\') { i += 1; continue; }
+    if (text[i] === quote) return i;
+  }
+  return text.length - 1;
+}
+
+/** The newline at or after `from`, or the end of the text. */
+const indexOrEnd = (text: string, from: number): number => {
+  const at = text.indexOf(String.fromCharCode(10), from);
+  return at === -1 ? text.length : at;
+};
 
 export const stripLines = (body: string, lines: string[]): string =>
   body

@@ -193,3 +193,34 @@ function closingQuote(text: string, from: number): number {
   }
   return text.length;
 }
+
+/**
+ * Where a test's body actually starts.
+ *
+ * Taking the first `{` after the title is right until the callback destructures its argument:
+ *
+ *     it.each(components)('transforms $name', ({ name, className }) => {
+ *       expect(componentNameToClassName(name)).toBe(className)
+ *     })
+ *
+ * The first `{` there belongs to the parameter list, so the body read back was `{ name, className }`
+ * - which contains no assertion, and the test was reported as one only a crash could fail.
+ *
+ * Measured on alphagov/govuk-frontend, the UK government's design system and the first real
+ * JavaScript project this was ever pointed at: 21 accusations across 1,817 tests, and 19 of them
+ * were this. Nineteen correct tests told they check nothing.
+ *
+ * A brace is a parameter list when what follows its match is `)` and then an arrow or the body's
+ * own brace. Anything else is the body.
+ */
+export function bodyBrace(text: string, from: number): number {
+  let open = text.indexOf('{', from);
+  for (let guard = 0; open !== -1 && guard < 4; guard += 1) {
+    const inside = braced(text, open);
+    if (inside === null) return -1;
+    const after = text.slice(open + inside.length + 2, open + inside.length + 24);
+    if (!/^\s*\)\s*(=>|\{)/.test(after)) return open;
+    open = text.indexOf('{', open + inside.length + 2);
+  }
+  return open;
+}

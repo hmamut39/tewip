@@ -4,7 +4,7 @@
 // added. tests-in.ts keeps the questions every language shares - which language is this, does it
 // look like tests at all, which parts of it are text rather than code - and this file holds the
 // four readers: callbacks (JavaScript), indentation (Python), `end` (Ruby), and braces (the rest).
-import { braced, isText, lineAt, textRanges, type FoundTest, type Language } from './tests-in.ts';
+import { bodyBrace, braced, isText, lineAt, textRanges, type FoundTest, type Language } from './tests-in.ts';
 
 /**
  * `it('...', async () => { ... })` and its many spellings, including `test.each`, `it.skip` and a
@@ -17,7 +17,7 @@ function jsTests(text: string): FoundTest[] {
   for (const hit of text.matchAll(declaration)) {
     const at = hit.index ?? 0;
     if (isText(ranges, at)) continue;
-    const open = text.indexOf('{', at + hit[0].length);
+    const open = bodyBrace(text, at + hit[0].length);
     if (open === -1) continue;
     const body = braced(text, open);
     if (body === null) continue;

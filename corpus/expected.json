@@ -166,6 +166,17 @@
       "why": "The UK government's design system, built by accessibility specialists under a legal obligation. The harshest test available for `access`, and the one place a false barrier is most embarrassing.",
       "checks": [
         {
+          "command": "vouch",
+          "expect": {
+            "files": 169,
+            "tests": 1817,
+            "checks": 1815,
+            "crash-only": 1,
+            "unfinished-expectation": 1
+          },
+          "verified": "read by hand on 2026-10-19, every accusation opened in the file. Both are real: colours.unit.test.js:200 ends `await expect(compileSassString(sass)).resolves` with no matcher, so the contrast check it exists to make never runs; components.unit.test.js:40 drives a postcss plugin that throws and has no expect, which is what crash-only means. Before this phase the same checkout produced 21 accusations: 19 were it.each tests whose destructured parameter brace was read as the test body."
+        },
+        {
           "command": "access",
           "expect": {
             "filesRead": 175,
@@ -345,6 +356,24 @@
             "ask-a-person": 86
           },
           "verified": "2026-10-17. 25 barriers across 425 SvelteKit files, the lowest rate of the three frontends. Svelte needed no fix at all: both its spellings, on:click and Svelte 5's onclick, were already read, which is why this gap only appeared when a third framework was pointed at."
+        }
+      ]
+    },
+    {
+      "name": "gin",
+      "url": "https://github.com/gin-gonic/gin.git",
+      "commit": "75ccf94d605a05fe24817fc2f166f6f2959d5cea",
+      "why": "Go, and the first Go project vouch was ever measured against. `go` was one of the eight languages vouch claims and one of the two it had never been checked on.",
+      "checks": [
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 35,
+            "tests": 456,
+            "checks": 453,
+            "crash-only": 3
+          },
+          "verified": "read by hand on 2026-10-19, all three opened in the file and all three real: gin_test.go:437 TestRebuild404Handlers has an empty body; tree_test.go:528 and tree_test.go:896 add a route and call getValue with no assertion - the second says so itself, 'try to trigger slice bounds out of range'. A fourth, utils_test.go:63 TestParseAccept, was a false accusation: its Accept header contains the media type star-slash-star, which opened a comment inside a string and swallowed all five of its assertions."
         }
       ]
     }

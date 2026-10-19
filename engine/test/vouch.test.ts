@@ -576,3 +576,58 @@ describe('a skipped test in .NET', () => {
     assert.equal(verdictOf('a_test.go', go), 'never-runs');
   });
 });
+
+describe('shapes real projects use that a naive reading condemns', () => {
+  // Both of these were found by pointing vouch at the two languages it claimed and had never been
+  // measured on: JavaScript, on alphagov/govuk-frontend, and Go, on gin-gonic/gin.
+
+  it('reads the body of an it.each, not its destructured parameter', () => {
+    // govuk-frontend: 19 of 21 accusations across 1,817 tests were this one shape. The first brace
+    // after the title belongs to `({ name, className })`, so the body read back was the parameter
+    // list - which contains no assertion - and nineteen correct tests were told they check nothing.
+    const source = [
+      `it.each(components)(`,
+      `  'transforms component $name to class $className',`,
+      `  ({ name, className }) => {`,
+      `    expect(componentNameToClassName(name)).toBe(className);`,
+      `  }`,
+      `);`,
+    ].join(String.fromCharCode(10));
+    assert.equal(verdictOf('names.unit.test.mjs', source), 'checks');
+  });
+
+  it('reads the body of a plain destructuring callback too', () => {
+    const source = `it('handles it', ({ page }) => {${String.fromCharCode(10)}  expect(page.title()).toBe('x');${String.fromCharCode(10)}});`;
+    assert.equal(verdictOf('a.test.js', source), 'checks');
+  });
+
+  it('does not open a comment inside a string', () => {
+    // gin's TestParseAccept parses an HTTP Accept header. The media type for 'anything' contains
+    // both a slash-star and a star-slash, so a comment was opened inside the first string and
+    // closed in the last assertion, and all five assertions in between became a single space.
+    const anything = `*${'/'}*`;
+    const source = [
+      `func TestParseAccept(t *testing.T) {`,
+      `	parts := parseAccept("text/html , application/xml;q=0.9,  ${anything} ;q=0.8")`,
+      `	assert.Len(t, parts, 4)`,
+      `	assert.Equal(t, "text/html", parts[0])`,
+      `	assert.Equal(t, "${anything}", parts[3])`,
+      `}`,
+    ].join(String.fromCharCode(10));
+    assert.equal(verdictOf('utils_test.go', source), 'checks');
+  });
+
+  it('still removes a real block comment', () => {
+    const source = [
+      `func TestThing(t *testing.T) {`,
+      `	/* assert.Equal(t, 1, 2) is commented out`,
+      `	   and so is everything here */`,
+      `	doSomething()`,
+      `}`,
+    ].join(String.fromCharCode(10));
+    // Not `checks`: the only assertion in the file is inside the comment, and a commented-out
+    // assertion is the classic way a test stops checking. What is left is one call to a helper,
+    // which vouch declines to judge rather than condemn.
+    assert.equal(verdictOf('thing_test.go', source), 'cannot-tell');
+  });
+});

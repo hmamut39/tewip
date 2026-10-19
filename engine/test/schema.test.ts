@@ -845,3 +845,78 @@ describe('Kysely, which immich moved to from TypeORM', () => {
     assert.notEqual(dialectOf('server/src/queries/asset.repository.ts', query), 'kysely');
   });
 });
+
+describe('a table name written as a template expression', () => {
+  // n8n puts every table behind ${tablePrefix}, and the name pattern did not allow a `$` or a
+  // brace. Three things came of that, all of them on real migrations.
+  const BT = String.fromCharCode(96);
+
+  it('does not read IF as the table name', () => {
+    // `DROP TABLE IF EXISTS ${tablePrefix}x` backtracked past the optional IF EXISTS, because the
+    // name after it would not match, and reported "drops the table IF and everything in it".
+    const found = readSql('DROP TABLE IF EXISTS ${tablePrefix}test_definition;');
+    assert.equal(found.length, 1);
+    assert.equal(found[0].table, 'test_definition');
+    assert.match(found[0].what ?? '', /drops the table test_definition/);
+  });
+
+  it('does not leave a hole where the name belongs', () => {
+    // `DROP TABLE "${tablePrefix}x"` matched the opening quote alone, which stripped to nothing:
+    // "drops the table  and everything in it". A finding nobody can check is worse than none.
+    const found = readSql('DROP TABLE "${tablePrefix}credentials_entity";');
+    assert.equal(found[0]?.table, 'credentials_entity');
+  });
+
+  it('keeps the expression when the whole name is one', () => {
+    // immich writes ALTER TABLE ${tempInsightsRawTable} RENAME TO ${insightsRawTable}. There is no
+    // literal part to report, so the expression is the name.
+    const found = readSql('ALTER TABLE ${tempTable} RENAME TO ${realTable};');
+    assert.match(found[0]?.what ?? '', /\$\{tempTable\}/);
+    assert.doesNotMatch(found[0]?.what ?? '', /renames the table {2}/);
+  });
+
+  it('stops at the end of the template literal', () => {
+    // NAME accepts a backtick because MySQL quotes with one, so in
+    // sql`truncate ${sql.table('ocr_search')}`.execute(db) it ran past the closing backtick and
+    // reported "empties the table execute".
+    const found = readSql(`truncate \${sql.table('ocr_search')}${BT}.execute(db)`);
+    assert.equal(found[0]?.table, 'ocr_search', 'the builder names the table plainly');
+  });
+
+  it('still reads an ordinary quoted name', () => {
+    // The schema qualifier is kept: callers that want the bare table strip it themselves, which is
+    // what droppingWhatIsNew does.
+    assert.equal(readSql('DROP TABLE "public"."users";')[0]?.table, 'public.users');
+    assert.equal(readSql(`DROP TABLE ${BT}users${BT};`)[0]?.table, 'users');
+  });
+});
+
+describe('the SQLite rebuild is not a loss', () => {
+  // SQLite cannot alter a column, so TypeORM generates this for every column change: build a copy,
+  // move every row into it, drop the original, rename the copy into its place. 22 of n8n's 33
+  // findings were this, each one reported as destroying a table that is handed straight back.
+  const NL = String.fromCharCode(10);
+  const rebuild = [
+    'CREATE TABLE "temporary_credentials_entity" ("id" integer PRIMARY KEY);',
+    'INSERT INTO "temporary_credentials_entity"("id") SELECT "id" FROM "credentials_entity";',
+    'DROP TABLE "credentials_entity";',
+    'ALTER TABLE "temporary_credentials_entity" RENAME TO "credentials_entity";',
+  ].join(NL);
+
+  it('does not call a rebuilt table destroyed', () => {
+    const raw = readSql(rebuild);
+    assert.equal(raw.some((f) => f.risk === 'destroys-data'), true, 'the drop is there in the raw reading');
+    const judged = droppingWhatIsNew(raw, rebuild);
+    assert.equal(judged.some((f) => f.risk === 'destroys-data' && f.table === 'credentials_entity'), false);
+  });
+
+  it('still reports a drop with no rename behind it', () => {
+    const plain = 'DROP TABLE "credential_usage";';
+    assert.equal(droppingWhatIsNew(readSql(plain), plain).some((f) => f.risk === 'destroys-data'), true);
+  });
+
+  it('does not excuse a drop because some other table was renamed', () => {
+    const other = ['DROP TABLE "audit";', 'ALTER TABLE "temp_x" RENAME TO "x";'].join(NL);
+    assert.equal(droppingWhatIsNew(readSql(other), other).some((f) => f.table === 'audit'), true);
+  });
+});

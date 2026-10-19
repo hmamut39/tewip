@@ -370,13 +370,13 @@
           "command": "schema",
           "expect": {
             "filesRead": 134,
-            "findings": 115,
-            "breaks-old-code": 29,
-            "destroys-data": 8,
+            "findings": 117,
+            "breaks-old-code": 30,
+            "destroys-data": 9,
             "locks-writes": 51,
             "slow": 27
           },
-          "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations."
+          "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations. | 2026-10-19, two more: OCRBigramsForCJK.ts runs truncate ${sql.table('ocr_search')}, now read as \"empties the table ocr_search\" rather than \"empties the table execute\" - the name pattern used to run past the end of the template literal into .execute. StandardizeNames.ts renames tables from a list, and the loop variable is reported as written because Tewip cannot resolve it. Both read by hand."
         }
       ]
     },
@@ -415,6 +415,26 @@
             "slow": 2
           },
           "verified": "read by hand on 2026-10-19 against the migrations themselves. op.drop_table(\"document_terms\") and five siblings in 2021-06-15_8a558baeef05.py are the destroys-data findings; op.alter_column(..., nullable=False) twice in 2021-06-15_0ab4f8f54bfa.py is locks-writes; op.drop_column is breaks-old-code; an index built without postgresql_concurrently is locks-writes. 74 of the destroys-data findings come from multi-tenant-migration.sql, which really does drop that many tables. search/fulltext/expressions.sql is read and yields 0, which is right - it drops a type, not a table. Before this phase Tewip found 2 migration files in this repository and read none of its 138 Alembic revisions."
+        }
+      ]
+    },
+    {
+      "name": "n8n",
+      "url": "https://github.com/n8n-io/n8n.git",
+      "commit": "51e53ad9b77cc95c0fd8e683be4204ea9c7c85f7",
+      "why": "TypeORM, the last dialect `schema` named that no real project had been measured on - immich had moved to Kysely. Every table goes through ${tablePrefix}, and its SQLite migrations use the rebuild pattern TypeORM generates for any column change.",
+      "checks": [
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 106,
+            "findings": 196,
+            "breaks-old-code": 58,
+            "destroys-data": 6,
+            "locks-writes": 112,
+            "slow": 20
+          },
+          "verified": "read by hand on 2026-10-19. The six destroys-data: CleanEvaluations drops test_definition twice, two RemoveCredentialUsageTable migrations drop credential_usage, and two drop a leftover temporary_execution_entity with IF EXISTS before rebuilding it - that last pair is scaffolding rather than loss, reported because it is true and a reader recognises it on sight. Before this phase the same checkout gave 33 findings: one said \"drops the table IF\", several said \"drops the table \" with nothing where the name goes, and 22 were SQLite table rebuilds - create a copy, move every row into it, drop the original, rename the copy back - reported as destroying data."
         }
       ]
     }

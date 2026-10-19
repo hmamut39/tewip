@@ -13,10 +13,12 @@ import { normalise } from '../quality/source-text.ts';
 import { dirname, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { dialectOf, forwardOnly, irreversible, readFramework, type Dialect } from './frameworks.ts';
+import { droppingWhatIsNew } from './kept.ts';
 import { readSql, type Finding, type Risk } from './statements.ts';
 import { MIGRATION, NAMED_MIGRATION, SCHEMA_FILE, migrationsUnder } from './migration-files.ts';
 
 export { migrationsUnder };
+export { droppingWhatIsNew };
 
 export interface SchemaCommand {
   root: string;
@@ -56,61 +58,6 @@ export function schemaFiles(cmd: SchemaCommand): string[] {
     // a diff of a hundred files, not to argue with somebody who pointed at one. A TypeORM migration
     // sitting outside a migrations/ directory was being answered with "no migration in this change".
     .filter((f) => (named || SCHEMA_FILE.test(f) || MIGRATION.test(f) || NAMED_MIGRATION.test(f)) && existsSync(resolve(cmd.root, f)));
-}
-
-/**
- * Tables this migration creates itself.
- *
- * A lock is only expensive because of the rows it holds up, and a table created three statements
- * earlier has none. This matters enormously on the tools that generate their SQL: a Prisma project
- * emits `CREATE TABLE` followed by an `ADD CONSTRAINT ... FOREIGN KEY` for every relation, so
- * documenso's 165 real migrations produced 275 "blocks writes while it runs" findings - 1.7 per
- * migration, nearly all of them about tables that did not exist a moment before. That is the volume
- * at which a team stops reading the report, which costs more than the warnings are worth.
- */
-function createdHere(text: string): Set<string> {
-  const names = new Set<string>();
-  // The frameworks say "create this table" in their own words, and the suppression is worth nothing
-  // in a dialect it cannot read. Only SQL was read, so bitwarden/server's 456 EF Core migrations -
-  // which do exactly what Prisma does, a CreateTable followed by a CreateIndex for every relation -
-  // produced 647 "blocks writes" findings about tables that had not existed a statement earlier.
-  // EF Core puts the name on the line after the call, so these have to reach across a newline.
-  const FRAMEWORK_CREATES = [
-    /migrationBuilder\s*\.\s*CreateTable\s*\([\s\S]{0,80}?name\s*:\s*["']([\w$.]+)["']/gi,
-    // Django names the model rather than the table, and so does its AddIndex, so the two match each
-    // other. Saleor never exercises this - Django convention puts CreateModel and AddIndex in
-    // separate migrations - but every other dialect here has its create form registered and this
-    // one did not, which is the kind of gap that waits for a project with different habits.
-    /migrations\s*\.\s*CreateModel\s*\([\s\S]{0,60}?name\s*=\s*["']([\w]+)["']/gi,
-    /queryInterface\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
-    /knex\s*\.\s*schema\s*\.\s*createTable\s*\(\s*["']([\w$.]+)["']/gi,
-    /Schema\s*::\s*create\s*\(\s*["']([\w$.]+)["']/gi,
-    /\bcreate_table\s+[:'"]([\w$.]+)/gi,
-    /\bop\s*\.\s*create_table\s*\(\s*["']([\w$.]+)["']/gi,
-    /<createTable[^>]*tableName\s*=\s*["']([\w$.]+)["']/gi,
-  ];
-  for (const pattern of FRAMEWORK_CREATES)
-    for (const m of text.matchAll(pattern)) names.add(m[1].toLowerCase().replace(/^.*\./, ''));
-  // Every dialect's way of quoting a name, because the suppression is useless in the one that does
-  // not match. This read PostgreSQL's "quoted" form and plain names, and not SQL Server's
-  // [dbo].[Grant] - which is standard T-SQL and what bitwarden/server is written in throughout. No
-  // table was ever recognised as freshly created there, so every index built on a table created two
-  // statements earlier was reported as blocking writes: 714 findings, nearly all of them free.
-  for (const m of text.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w$.\"\[\]`]+)/gi)) {
-    // `[dbo].[Grant]` and `"public"."grant"` and `grant` all have to arrive here as the same word,
-    // because that is the form the findings report a table in.
-    names.add(m[1].replace(/[\"\[\]`]/g, '').toLowerCase().replace(/^.*\./, ''));
-  }
-  return names;
-}
-
-/** Risks that are only risks because rows already exist. */
-const ONLY_HURTS_EXISTING_ROWS = new Set<Risk>(['locks-writes', 'slow']);
-
-export function droppingWhatIsNew(findings: Finding[], text: string): Finding[] {
-  const fresh = createdHere(text);
-  if (fresh.size === 0) return findings;
-  return findings.filter((f) => !(ONLY_HURTS_EXISTING_ROWS.has(f.risk) && fresh.has(f.table.toLowerCase().replace(/^.*\./, ''))));
 }
 
 export function readMigration(root: string, file: string): Migration {

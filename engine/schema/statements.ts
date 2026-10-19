@@ -27,7 +27,15 @@ export interface Finding {
 }
 
 const CLEAN = (s: string) => s.replace(/\s+/g, ' ').trim();
-const NAME = String.raw`[\w."\[\]` + "`" + String.raw`]+`;
+// A table name as it is written, including a JavaScript template interpolation.
+//
+// n8n prefixes every table through `${tablePrefix}`, and without the interpolation in here two
+// things went wrong on its 106 TypeORM migrations. `DROP TABLE IF EXISTS ${tablePrefix}x`
+// backtracked past the optional IF EXISTS and matched `IF`, so Tewip reported "drops the table IF".
+// `DROP TABLE "${tablePrefix}x"` matched the opening quote alone, which `bare` then stripped to
+// nothing, so Tewip reported "drops the table  and everything in it" with a hole where the name
+// should be. Both are worse than saying nothing: a reader cannot check either of them.
+const NAME = String.raw`(?:\$\{[^}]*\}|[\w."\[\]` + "`" + String.raw`])+`;
 
 interface Rule {
   find: RegExp;
@@ -156,7 +164,39 @@ const RULES: Rule[] = [
 ];
 
 /** `"users"` and `` `users` `` and `[users]` are all the table users. */
-const bare = (name: string): string => name.replace(/["`[\]]/g, '').trim();
+/**
+ * The name without its quoting, and without the prefix expression a project may wrap it in.
+ *
+ * `${tablePrefix}credentials_entity` is reported as `credentials_entity`, the name a reader will
+ * recognise and search for: the prefix is configuration, identical for every table in the
+ * migration, and carrying it through only makes every finding harder to read.
+ *
+ * Three things real projects do that this has to survive, all found on n8n and immich:
+ *
+ * A name that is nothing but the expression. `ALTER TABLE ${tempInsightsRawTable} RENAME TO
+ * ${insightsRawTable}` leaves nothing once the interpolation is stripped, which read as "renames
+ * the table  to ". A finding with a hole where the name belongs cannot be checked by the person
+ * reading it, so when nothing survives, the expression is the name.
+ *
+ * A name that ends the template. NAME accepts a backtick because MySQL quotes with one, so in
+ * sql`truncate ${sql.table('ocr_search')}`.execute(db) it ran straight past the closing backtick
+ * and reported "empties the table execute". The template ends where its backtick is.
+ *
+ * And a builder call that names the table inside the expression. `sql.table('ocr_search')` says
+ * which table plainly, and quoting the whole expression back at the reader when the answer is
+ * right there would be needlessly unhelpful.
+ */
+const bare = (name: string): string => {
+  const inTemplate = name.includes('${') ? name.split('`')[0] : name;
+  const named = /\$\{[^}]*\(\s*['"]([\w.$]+)['"]/.exec(inTemplate);
+  if (named) return named[1];
+  const unquoted = inTemplate.replace(/["`[\]]/g, '').trim();
+  const withoutPrefix = unquoted
+    .replace(/\$\{[^}]*\}/g, '')
+    .replace(/^\.+|\.+$/g, '')
+    .trim();
+  return withoutPrefix || unquoted;
+};
 
 /** The statements of a SQL file, with the line each one starts on and comments removed. */
 export function statementsOf(sql: string): Array<{ text: string; line: number }> {

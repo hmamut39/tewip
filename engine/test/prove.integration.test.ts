@@ -259,3 +259,70 @@ describe('quoting the change on a long line', () => {
     assert.ok(!left.startsWith('...'), 'nothing was cut from the front, so nothing should claim it was');
   });
 });
+
+describe('the verdict on a change a machine wrote', () => {
+  // The shape that matters now: a model writes the code and the tests, and the tests assert
+  // something plausible about the wrong thing. `vouch` passes them, correctly - they do compare a
+  // value - and only breaking the code on purpose shows that what they compare does not depend on
+  // it. This is the whole chain, not `prove` alone, because the gate is what a team would read.
+  //
+  //     assert.equal(typeof result, 'number');
+  //     assert.doesNotThrow(() => refundAmount({ status: 'pending', ... }));
+  //
+  // Both pass whatever `refundAmount` returns.
+  const SUBJECT = [
+    'export function refundAmount(order) {',
+    "  if (order.status !== 'paid') return 0;",
+    '  return order.total - order.fees;',
+    '}',
+    '',
+  ].join(NL);
+
+  const plausible = [
+    "import { test } from 'node:test';",
+    "import assert from 'node:assert/strict';",
+    "import { refundAmount } from '../src/shop.js';",
+    '',
+    "test('returns a number for a paid order', () => {",
+    "  assert.equal(typeof refundAmount({ status: 'paid', total: 100, fees: 5 }), 'number');",
+    '});',
+    '',
+    "test('does not throw on an unpaid order', () => {",
+    "  assert.doesNotThrow(() => refundAmount({ status: 'pending', total: 100, fees: 5 }));",
+    '});',
+    '',
+  ].join(NL);
+
+  const real = [
+    "import { test } from 'node:test';",
+    "import assert from 'node:assert/strict';",
+    "import { refundAmount } from '../src/shop.js';",
+    '',
+    "test('pays out the total less fees', () => {",
+    "  assert.equal(refundAmount({ status: 'paid', total: 100, fees: 5 }), 95);",
+    '});',
+    '',
+    "test('refunds nothing for an unpaid order', () => {",
+    "  assert.equal(refundAmount({ status: 'pending', total: 100, fees: 5 }), 0);",
+    '});',
+    '',
+  ].join(NL);
+
+  it('finds the hole in tests that assert the wrong thing', () => {
+    const root = project(SUBJECT, plausible);
+    const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), { limit: 6, runSeconds: 60, budgetSeconds: 300 });
+    assert.equal(proof.blocked, '', proof.blocked);
+    const unnoticed = proof.tried.filter((t) => t.fate === 'unnoticed');
+    assert.ok(unnoticed.length > 0, 'a change to the arithmetic must slip past tests that only check the type');
+  });
+
+  it('says the tests are sound when they really check the behaviour', () => {
+    // The control. Without it, a prover that called everything unnoticed would pass the test above.
+    const root = project(SUBJECT, real);
+    const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), { limit: 6, runSeconds: 60, budgetSeconds: 300 });
+    assert.equal(proof.blocked, '', proof.blocked);
+    const noticed = proof.tried.filter((t) => t.fate === 'noticed');
+    assert.ok(noticed.length > 0, 'the arithmetic is asserted, so breaking it must be caught');
+    assert.equal(proof.tried.filter((t) => t.fate === 'unnoticed').length, 0, 'and nothing should slip past');
+  });
+});

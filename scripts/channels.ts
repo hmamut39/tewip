@@ -7,9 +7,30 @@
 // twice by hand was a wrong question that returned a plausible number, and a question nobody can
 // see is a question nobody can correct.
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { renderChannels, type ChannelReading } from '../engine/release/channels.ts';
 
 const read = (file: string) => JSON.parse(readFileSync(file, 'utf8'));
+
+/**
+ * How many hours ago this version was cut, from the tag that carries it.
+ *
+ * The tag is the honest marker: it is the moment the release was asked for, and everything
+ * downstream - the build, the staged npm publish, a person approving it, the MCP registry reading
+ * npm - happens after it. Without a tag the version has not been released at all, so there is
+ * nothing to be late for and nothing is claimed.
+ */
+function hoursSinceTag(version: string): number | null {
+  try {
+    const when = execFileSync('git', ['log', '-1', '--format=%cI', `v${version}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!when) return null;
+    const at = new Date(when).getTime();
+    return Number.isFinite(at) ? (Date.now() - at) / 3_600_000 : null;
+  } catch {
+    // No such tag: this version was never released, so no channel is behind on it.
+    return null;
+  }
+}
 const pkg = read('package.json');
 const server = read('server.json');
 const extension = read('extensions/vscode/package.json');
@@ -43,7 +64,7 @@ async function npmChannel(): Promise<ChannelReading> {
   const asked = `GET registry.npmjs.org/${pkg.name} -> dist-tags.latest`;
   const { body, problem } = await ask<{ 'dist-tags'?: Record<string, string> }>(`https://registry.npmjs.org/${pkg.name}`);
   const latest = body?.['dist-tags']?.latest;
-  return { name: 'npm', expected: pkg.version, actual: latest ?? null, problem: latest ? undefined : problem ?? 'no dist-tags.latest in the answer', asked };
+  return { name: 'npm', expected: pkg.version, ageHours: hoursSinceTag(pkg.version), actual: latest ?? null, problem: latest ? undefined : problem ?? 'no dist-tags.latest in the answer', asked };
 }
 
 async function mcpChannel(): Promise<ChannelReading> {
@@ -53,16 +74,16 @@ async function mcpChannel(): Promise<ChannelReading> {
   const asked = 'GET registry.modelcontextprotocol.io/v0/servers?search=<name>&version=latest';
   const { body, problem } = await ask<{ servers?: unknown[] }>(url);
   if (!body || !Array.isArray(body.servers)) {
-    return { name: 'MCP registry', expected: server.version, actual: null, problem: problem ?? 'the answer had no servers list', asked };
+    return { name: 'MCP registry', expected: server.version, ageHours: hoursSinceTag(server.version), actual: null, problem: problem ?? 'the answer had no servers list', asked };
   }
   const mine = body.servers.map((x: any) => x.server ?? x).filter((x: any) => x?.name === server.name);
-  return { name: 'MCP registry', expected: server.version, actual: mine[0]?.version ?? null, problem: mine.length === 0 ? 'the registry lists no server by this name' : undefined, asked };
+  return { name: 'MCP registry', expected: server.version, ageHours: hoursSinceTag(server.version), actual: mine[0]?.version ?? null, problem: mine.length === 0 ? 'the registry lists no server by this name' : undefined, asked };
 }
 
 async function openVsxChannel(): Promise<ChannelReading> {
   const asked = `GET open-vsx.org/api/${extension.publisher}/${extension.name} -> version`;
   const { body, problem } = await ask<{ version?: string; error?: string }>(`https://open-vsx.org/api/${extension.publisher}/${extension.name}`);
-  return { name: 'Open VSX', expected: extension.version, actual: body?.version ?? null, problem: body?.version ? undefined : body?.error ?? problem, asked };
+  return { name: 'Open VSX', expected: extension.version, ageHours: hoursSinceTag(pkg.version), actual: body?.version ?? null, problem: body?.version ? undefined : body?.error ?? problem, asked };
 }
 
 async function marketplaceChannel(): Promise<ChannelReading> {
@@ -73,7 +94,7 @@ async function marketplaceChannel(): Promise<ChannelReading> {
     body: JSON.stringify({ filters: [{ criteria: [{ filterType: 7, value: `${extension.publisher}.${extension.name}` }] }], flags: 914 }),
   });
   const version = body?.results?.[0]?.extensions?.[0]?.versions?.[0]?.version ?? null;
-  return { name: 'VS Code Marketplace', expected: extension.version, actual: version, problem: version ? undefined : problem ?? 'the gallery returned no version for this extension', asked };
+  return { name: 'VS Code Marketplace', expected: extension.version, ageHours: hoursSinceTag(pkg.version), actual: version, problem: version ? undefined : problem ?? 'the gallery returned no version for this extension', asked };
 }
 
 const readings = await Promise.all([npmChannel(), mcpChannel(), openVsxChannel(), marketplaceChannel()]);

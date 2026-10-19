@@ -20,9 +20,18 @@
 name: Publish to the MCP registry
 
 on:
+  # Three triggers, because the one that mattered could not be relied on. The tag fires before the
+  # release exists - npm publishing is staged and waits for a person - so the catching-up was left
+  # to the nightly run, and on the first morning the nightly run did not happen: GitHub's scheduler
+  # was hours behind for this repository, with a Monday 06:00 cron firing at 11:34. The listing sat
+  # a release behind until somebody noticed, which is the thing this workflow exists to prevent.
+  #
+  # A push to main is an event that actually happens here, many times a day, and the job is already
+  # a no-op when there is nothing to list: one npm lookup and one registry query. So the schedule
+  # stays as a backstop for quiet days rather than as the mechanism.
   push:
+    branches: [main]
     tags: ['v*']
-  # Because approval happens on a person's schedule, not the tag's.
   schedule:
     - cron: '23 7 * * *'
   workflow_dispatch:

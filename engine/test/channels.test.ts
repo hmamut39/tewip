@@ -112,3 +112,60 @@ describe('the report a person reads', () => {
     assert.doesNotMatch(row, /^\s+ok\s/);
   });
 });
+
+describe('a release in flight is not a release that failed', () => {
+  // Found on the first morning this check ran for real. npm publishing here is staged: the tag is
+  // pushed, CI builds, and the version then waits for a person to approve it with a passkey. The
+  // MCP registry lists only what npm already carries, and its own read view caught up about five
+  // minutes after a publish that had already reported success.
+  //
+  // channels.yml runs on tag push. At that moment npm does not have the release and neither does
+  // anything downstream, so every channel would have been called BEHIND on every release - a false
+  // alarm at exactly the moment somebody is watching. A check that cries wolf on every release is
+  // one people stop reading, which would have cost more than the silence it replaced.
+  const gap = (over: Partial<ChannelReading> = {}): ChannelReading =>
+    ({ name: 'MCP registry', expected: '0.70.15', actual: '0.70.14', asked: 'GET /x', ...over });
+
+  it('calls a fresh gap waiting, and says how fresh', () => {
+    const v = judge(gap({ ageHours: 0.1 }));
+    assert.equal(v.verdict, 'waiting');
+    assert.match(v.says, /6 minute\(s\) ago/);
+    assert.match(v.says, /a problem if it is still true tomorrow/);
+  });
+
+  it('reports hours once it is hours', () => {
+    assert.match(judge(gap({ ageHours: 3.5 })).says, /3\.5 hour\(s\) ago/);
+  });
+
+  it('calls an old gap behind, and says how old', () => {
+    // This morning's real case: the release was 15.8 hours old and the registry had never got it.
+    const v = judge(gap({ ageHours: 15.8 }));
+    assert.equal(v.verdict, 'behind');
+    assert.match(v.says, /The release did not reach it/);
+    assert.match(v.says, /It has been 16 hour\(s\)/);
+  });
+
+  it('treats an unknown age as old, not as fresh', () => {
+    // Not knowing how long a channel has been behind is not a reason to assume it just happened.
+    assert.equal(judge(gap({ ageHours: null })).verdict, 'behind');
+    assert.equal(judge(gap()).verdict, 'behind');
+  });
+
+  it('counts waiting apart from behind, and does not call it a failure', () => {
+    const out = renderChannels([
+      { name: 'npm', expected: '0.70.15', actual: '0.70.15', asked: 'x' },
+      gap({ ageHours: 0.2 }),
+    ]);
+    assert.equal(out.waiting, 1);
+    assert.equal(out.behind, 0);
+    assert.match(out.text, /have not caught up with this release yet: MCP registry/);
+    assert.doesNotMatch(out.text, /did not get this release/);
+    assert.doesNotMatch(out.text, /Every channel answered/);
+  });
+
+  it('still fails on a gap that has had long enough', () => {
+    const out = renderChannels([gap({ ageHours: 48 })]);
+    assert.equal(out.behind, 1);
+    assert.equal(out.waiting, 0);
+  });
+});

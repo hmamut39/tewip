@@ -1035,20 +1035,32 @@ import does not show.
 notice it, then run the **whole** suite to find out which tests really catch it. A failure is dropping a
 catching test.
 
-Re-derived on 2026-10-17 against a suite that had grown to 1,136 tests: **9 judged changes, 0 catching
-tests lost, 5.7% of the suite selected.** The harness refuses to report at all when it could not read
-which tests caught anything, because a selection cannot be shown safe by changes nothing was observed
-to catch.
+Re-derived on 2026-10-19 over ten modules against a suite of 1,288 tests, and redone from scratch
+because Phase 92 found the mutation engine could write something other than what it reported: **28
+real changes, 19 of them caught by the full suite and so able to judge a selection, 0 catching tests
+lost.** The other 9 were caught by nothing at all and are excluded rather than counted as successes -
+a selection cannot be shown safe by a change no test noticed.
 
-| Project | Judged cases | Catching test lost | Suite selected |
-| --- | --- | --- | --- |
-| This repository (node --test, 76 test files) | 8 | **0** | 7–9% |
-| expressjs/express (Mocha, 88 test files) | 2 | **0** | refused to narrow — every test reaches the change |
+**The saving is not one number, and the 5.7% published before was not representative.** It depends on
+how central the changed file is, which is the truth about what your tests can reach rather than a
+weakness in the selection:
 
-Those two rows are the point. On a layered codebase it runs under a tenth of the suite and keeps every
-test that would have caught the bug; on a monolith where every test imports the package front door it says
-there is nothing to skip, rather than inventing a saving. It is also an MCP tool, so an agent can ask what
-to run before running anything.
+| changed file | test files selected (of 101) | share |
+| --- | --- | --- |
+| `engine/release/channels.ts` | 4 | 4% |
+| `engine/flaky/flaky.ts`, `engine/perf/compare.ts` | 5 | 5% |
+| `engine/secure/secrets.ts` | 12 | 12% |
+| `engine/prove/mutants.ts` | 31 | 31% |
+| `engine/vouch/vouch.ts` | 44 | 44% |
+| `engine/schema/statements.ts` | 47 | 47% |
+| `engine/rules.ts`, `engine/import/junit.ts` | 52 | 52% |
+
+Average across the nineteen judged changes: **27.9%**. Change a leaf module and the run narrows to a
+twentieth of the suite; change the rule engine and half of it legitimately reaches the change. The
+earlier figure was measured on peripheral files and sat at the bottom of that range, which is the
+wrong number to plan a CI budget against. On a monolith where every test imports the package front
+door it says there is nothing to skip, rather than inventing a saving. It is also an MCP tool, so an
+agent can ask what to run before running anything.
 
 **In CI**, `mode: pick` runs before your tests and hands the workflow the files to run:
 

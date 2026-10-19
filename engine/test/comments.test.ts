@@ -70,14 +70,15 @@ describe('a comment marker inside a string is not a comment', () => {
   });
 
   it('keeps a Java assertion below an XPath containing a double slash', () => {
-    // openmrs's SchemaOnlyTunerTest. Unlike the two above, this one is not a case that was ever
-    // broken - checked against the old stripper and it read it correctly too. It is here because a
-    // double slash inside a Java string is the shape those two were, and a guard for a shape that
-    // has not failed yet is cheaper than finding out it can.
+    // openmrs's SchemaOnlyTunerTest. The XPath selects two things and joins them with a pipe, so
+    // the second `//` has a space in front of it - which is what `(^|\\s)//` was looking for. The old
+    // stripper cut from there to the end of the line, taking the closing quote with it, and the
+    // unterminated string swallowed both assertions. The same mechanism as the C# case above, and
+    // the reason a one-slash fixture proves nothing: the leading // is preceded by a quote.
     const source = [
       '@Test',
       'public void shouldRemoveEmptyOrNullDefaultValues() {',
-      '    XPath xPath = DocumentHelper.createXPath("//dbchangelog:column[@defaultValue]");',
+      '    XPath xPath = DocumentHelper.createXPath("//dbchangelog:column[@defaultValue] | //dbchangelog:column[@defaultValueComputed]");',
       '    List<Node> nodes = xPath.selectNodes(document);',
       '    assertFalse(nodes.isEmpty());',
       '}',

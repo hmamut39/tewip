@@ -702,3 +702,44 @@ describe('Django: naming the model an index is built on', () => {
     assert.equal(droppingWhatIsNew(find(existing), existing).length, 1);
   });
 });
+
+describe('where Alembic actually keeps its revisions', () => {
+  // `schema` named alembic as one of the dialects it reads, and alembic was the one dialect no real
+  // project had ever been measured on. Netflix/dispatch keeps 138 revisions under
+  // `src/dispatch/database/revisions/core/versions/`, and the path filter looked for `migrations`,
+  // `alembic`, `db/migrate` and the rest - none of which appears there. Tewip found two files in
+  // that repository, both .sql, one of them a search-expressions file that is not a migration.
+  //
+  // `versions` is the revision directory in every Alembic configuration there is: `alembic/versions`
+  // by default, `migrations/versions` after `alembic init migrations`, or whatever `script_location`
+  // points at - the leaf is always `versions`.
+  it('reads a revision under a custom script_location', () => {
+    assert.equal(MIGRATION.test('src/dispatch/database/revisions/core/versions/2021-06-15_8a558baeef05.py'), true);
+  });
+
+  it('reads the two layouts alembic init produces', () => {
+    assert.equal(MIGRATION.test('alembic/versions/abc123_add_user.py'), true);
+    assert.equal(MIGRATION.test('migrations/versions/abc123_add_user.py'), true);
+  });
+
+  it('still refuses a file that could not hold DDL', () => {
+    // The directory says where to look; the extension says whether it could hold a migration at all.
+    assert.equal(MIGRATION.test('alembic/versions/README.md'), false);
+    assert.equal(MIGRATION.test('src/app/versions/logo.png'), false);
+  });
+
+  it('does not take a versions directory as proof on its own', () => {
+    // A `versions` folder of Java source is not a set of migrations. Keycloak's MigrateTo12_0_0.java
+    // is the case that taught this filter to require more than a directory name.
+    assert.equal(MIGRATION.test('core/src/main/java/org/keycloak/versions/MigrateTo12_0_0.java'), false);
+  });
+
+  it('leaves it to dialectOf to decide whether a candidate is really a migration', () => {
+    // Letting the directory through costs little, because nothing is read as a migration until the
+    // dialect is recognised. A Python file under versions/ that does no schema work is not alembic.
+    const notAMigration = ['def helper():', '    return 1'].join(String.fromCharCode(10));
+    assert.notEqual(dialectOf('alembic/versions/helpers.py', notAMigration), 'alembic');
+    const real = ['def upgrade():', '    op.drop_table("document_terms")'].join(String.fromCharCode(10));
+    assert.equal(dialectOf('alembic/versions/0001_drop.py', real), 'alembic');
+  });
+});

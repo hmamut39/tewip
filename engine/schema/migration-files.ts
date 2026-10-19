@@ -16,7 +16,17 @@ import { join, relative } from 'node:path';
 // is mostly documentation teaches the reader to skip the list.
 //
 // So the directory decides *where*, and the extension decides *whether it could hold DDL at all*.
-const MIGRATION_DIR = /(^|\/)(migrations?|migration|db\/migrate|prisma\/migrations|alembic|flyway|changelogs?|sql)\//i;
+// `versions` is Alembic's revision directory in every configuration it has - `alembic/versions`,
+// `migrations/versions`, or whatever `script_location` points at. Netflix/dispatch keeps 162 of them
+// under `src/dispatch/database/revisions/<name>/versions/`, where neither `alembic` nor `migrations`
+// appears in the path, and Tewip found two files in that repository - both `.sql`, one of them a
+// search-expressions file that is not a migration at all. A project with 162 migrations was read as
+// a project with none of them.
+//
+// Letting the directory through costs little, because `dialectOf` still has to find `op.drop_column`
+// or its siblings before anything is read as a migration - the same argument that lets a
+// release-notes CHANGELOG.xml through below.
+const MIGRATION_DIR = /(^|\/)(migrations?|migration|db\/migrate|prisma\/migrations|alembic|versions|flyway|changelogs?|sql)\//i;
 const COULD_HOLD_DDL = /\.(sql|py|rb|js|mjs|cjs|ts|php|cs|xml|ya?ml|json|go|exs?)$/i;
 // Flyway's Java migrations are real, and they are named the way Flyway requires: `V2__add_index.java`
 // or `R__rebuild_views.java`. Keycloak's `MigrateTo12_0_0.java` is not one. Taking `.java` on the
@@ -37,7 +47,7 @@ export const MIGRATION = {
 // project has more than one database. Letting a release-notes `CHANGELOG.xml` through costs nothing,
 // because `dialectOf` still has to find `<databaseChangeLog` in it before it is read as a migration.
 export const NAMED_MIGRATION = /(^|\/)[\w.-]*(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i;
-export const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate)\/.*\.(py|rb|js|ts|php|cs)$/i;
+export const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate|versions)\/.*\.(py|rb|js|ts|php|cs)$/i;
 
 /**
  * Every migration in a whole repository, by the same filters a diff is read through.

@@ -376,6 +376,26 @@
           "verified": "read by hand on 2026-10-19, all three opened in the file and all three real: gin_test.go:437 TestRebuild404Handlers has an empty body; tree_test.go:528 and tree_test.go:896 add a route and call getValue with no assertion - the second says so itself, 'try to trigger slice bounds out of range'. A fourth, utils_test.go:63 TestParseAccept, was a false accusation: its Accept header contains the media type star-slash-star, which opened a comment inside a string and swallowed all five of its assertions."
         }
       ]
+    },
+    {
+      "name": "dispatch",
+      "url": "https://github.com/Netflix/dispatch.git",
+      "commit": "dd2837e82a0bf5565b1b4b4b91ea30b7262d4061",
+      "why": "Alembic, which `schema` claimed and had never been measured on. Netflix's incident management tool keeps its revisions under database/revisions/<name>/versions, where neither 'alembic' nor 'migrations' appears in the path - which is how the gap stayed hidden.",
+      "checks": [
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 138,
+            "findings": 183,
+            "destroys-data": 106,
+            "locks-writes": 43,
+            "breaks-old-code": 32,
+            "slow": 2
+          },
+          "verified": "read by hand on 2026-10-19 against the migrations themselves. op.drop_table(\"document_terms\") and five siblings in 2021-06-15_8a558baeef05.py are the destroys-data findings; op.alter_column(..., nullable=False) twice in 2021-06-15_0ab4f8f54bfa.py is locks-writes; op.drop_column is breaks-old-code; an index built without postgresql_concurrently is locks-writes. 74 of the destroys-data findings come from multi-tenant-migration.sql, which really does drop that many tables. search/fulltext/expressions.sql is read and yields 0, which is right - it drops a type, not a table. Before this phase Tewip found 2 migration files in this repository and read none of its 138 Alembic revisions."
+        }
+      ]
     }
   ]
 }

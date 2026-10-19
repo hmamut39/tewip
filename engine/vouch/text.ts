@@ -38,9 +38,22 @@ export function withoutComments(body: string): string {
     }
     if (ch === '/' && next === '*') {
       const close = body.indexOf('*/', i + 2);
-      // An unclosed block comment runs to the end, which is what a compiler would do too.
+      // Only when it closes. An unclosed one was treated as running to the end of the body, on the
+      // reasoning that a compiler would do the same - but a compiler is reading a language that has
+      // block comments, and this is handed every language. Ruby has none, and discourse writes
+      //
+      //     %r{https://matrix.org/_matrix/client/r0/rooms/!blah/send/m.room.message/*}
+      //
+      // where the `/*` is the end of a regex literal. Running to the end of the body deleted the
+      // three assertions below it and reported two thoroughly checked tests as crash-only. A file
+      // that really ends inside a block comment does not compile; a regex containing `/*` is
+      // ordinary. The old regex required the closing `*/` and was right to.
+      if (close === -1) {
+        out += ch;
+        continue;
+      }
       out += ' ';
-      i = close === -1 ? body.length : close + 1;
+      i = close + 1;
       continue;
     }
     const atLineStart = i === 0 || /\s/.test(body[i - 1] ?? '');

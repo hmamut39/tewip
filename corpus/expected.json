@@ -12,26 +12,26 @@
           "expect": {
             "files": 1580,
             "tests": 11858,
-            "checks": 9567,
-            "cannot-tell": 1213,
-            "crash-only": 1000,
+            "checks": 9760,
+            "cannot-tell": 1511,
+            "crash-only": 509,
             "never-runs": 77,
             "swallows-failure": 1,
             "unfinished-expectation": 0,
             "tautology": 0
           },
-          "verified": "2026-10-12. All 77 never-runs read by hand - 31 @Ignore, 21 @Disabled, 19 .skip, 6 confirmed with grep. The single swallows-failure is genuine and is a real defect in Red Hat's admin client: authenticationManagement.spec.ts `try { await getConfig(id); fail('should not find deleted config'); } catch {}` - a bare catch in TypeScript catches everything, including what fail() throws, so the test passes whether or not the config was deleted. It must stay 1 and it must stay that test. Phase 43 shipped 166 here, all the Java expected-exception idiom, which cannot swallow an AssertionError; two more were found and removed in Phase 44, where the empty catch guarded setup and the assertions came after it. unfinished-expectation and tautology are 0 and that is the guard, not an absence."
+          "verified": "2026-10-12. All 77 never-runs read by hand - 31 @Ignore, 21 @Disabled, 19 .skip, 6 confirmed with grep. The single swallows-failure is genuine and is a real defect in Red Hat's admin client: authenticationManagement.spec.ts `try { await getConfig(id); fail('should not find deleted config'); } catch {}` - a bare catch in TypeScript catches everything, including what fail() throws, so the test passes whether or not the config was deleted. It must stay 1 and it must stay that test. Phase 43 shipped 166 here, all the Java expected-exception idiom, which cannot swallow an AssertionError; two more were found and removed in Phase 44, where the empty catch guarded setup and the assertions came after it. unfinished-expectation and tautology are 0 and that is the guard, not an absence. | 2026-10-19: 491 verdicts moved, all in js/apps/admin-ui and all one shape - Playwright's `test(\"...\", async ({ page }) => {` puts a brace in the parameter list, and the body was read from there, so 193 tests that assert were called crash-only and 298 more were condemned instead of left undecided. Read the source. Every Playwright project is written this way."
         },
         {
           "command": "schema",
           "expect": {
-            "filesRead": 89,
+            "filesRead": 83,
             "findings": 293,
             "breaks-old-code": 106,
             "destroys-data": 25,
             "locks-writes": 162
           },
-          "verified": "2026-10-12. 293 findings. The destructive ones were counted independently with grep across the 83 changelogs and match exactly: 67 dropColumn + 39 renameColumn = 106 breaks-old-code, 25 dropTable = destroys-data. filesRead is 89 rather than the 83 changelogs because six real .sql init scripts are read too, correctly reporting nothing. locks-writes was 196 and is 162: the 34 that went were indexes built on tables created in the same changeSet, which hold no rows, and a script confirmed none of the 162 that remain is on a table created in its own file. That suppression existed from Phase 33 and had never worked for Liquibase, because it knew only SQL's CREATE TABLE and not <createTable tableName=\"...\">."
+          "verified": "2026-10-12. 293 findings. The destructive ones were counted independently with grep across the 83 changelogs and match exactly: 67 dropColumn + 39 renameColumn = 106 breaks-old-code, 25 dropTable = destroys-data. filesRead is 89 rather than the 83 changelogs because six real .sql init scripts are read too, correctly reporting nothing. locks-writes was 196 and is 162: the 34 that went were indexes built on tables created in the same changeSet, which hold no rows, and a script confirmed none of the 162 that remain is on a table created in its own file. That suppression existed from Phase 33 and had never worked for Liquibase, because it knew only SQL's CREATE TABLE and not <createTable tableName=\"...\">. | 2026-10-19: 6 files fewer, all test fixtures - a db-compatibility verifier's own src/test/resources/META-INF/jpa-changelog-*.xml and quarkus/tests/integration/.../init-mysql.sql bootstrap scripts. Nobody deploys them."
         },
         {
           "command": "access",
@@ -56,15 +56,15 @@
           "expect": {
             "files": 404,
             "tests": 5806,
-            "checks": 5558,
+            "checks": 5559,
             "cannot-tell": 148,
             "tautology": 1,
-            "crash-only": 60,
+            "crash-only": 59,
             "never-runs": 39,
             "swallows-failure": 0,
             "unfinished-expectation": 0
           },
-          "verified": "2026-10-12. 39 never-runs and 1 tautology checked against the source: 37 carry @Disabled or @Ignore directly, VisitValidatorTest has @Disabled after a three-line comment, CreateConceptDictionaryDataSet is disabled at class level, and the tautology is StartModuleAnnotationReuseTest.shouldPass, which is assertTrue(true) and nothing else. swallows-failure is 0, correcting Phase 42, which recorded 2 here as genuine: both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly on the JVM. tautology was 2 until RefByUuidTest was re-read - its assertTrue(true) sits beside a fail() in the catch, so the test can fail. These counts are from after line endings were normalised on read; before that they differed between Windows and Linux. files and tests each dropped by one file on 2026-10-15: OpenMRS ships minified jQuery under webapp/, and one of those files was being judged as a test because minified JavaScript is full of `test(`."
+          "verified": "2026-10-12. 39 never-runs and 1 tautology checked against the source: 37 carry @Disabled or @Ignore directly, VisitValidatorTest has @Disabled after a three-line comment, CreateConceptDictionaryDataSet is disabled at class level, and the tautology is StartModuleAnnotationReuseTest.shouldPass, which is assertTrue(true) and nothing else. swallows-failure is 0, correcting Phase 42, which recorded 2 here as genuine: both are `try { ...; fail(); } catch (Exception e) {}`, which fails properly on the JVM. tautology was 2 until RefByUuidTest was re-read - its assertTrue(true) sits beside a fail() in the catch, so the test can fail. These counts are from after line endings were normalised on read; before that they differed between Windows and Linux. files and tests each dropped by one file on 2026-10-15: OpenMRS ships minified jQuery under webapp/, and one of those files was being judged as a test because minified JavaScript is full of `test(`. | 2026-10-19: 1 verdict moved, SchemaOnlyTunerTest.shouldRemoveEmptyOrNullDefaultValues, which asserts assertFalse(nodes.isEmpty()) under an XPath string containing //. Read the file."
         }
       ]
     },
@@ -79,27 +79,27 @@
           "expect": {
             "files": 1129,
             "tests": 10875,
-            "checks": 9295,
-            "crash-only": 1275,
+            "checks": 9299,
+            "crash-only": 1271,
             "cannot-tell": 262,
             "never-runs": 43,
             "swallows-failure": 0,
             "unfinished-expectation": 0,
             "tautology": 0
           },
-          "verified": "2026-10-12. 43 never-runs, matching an independent grep for [Fact(Skip= and [Theory(Skip= exactly. swallows-failure is 0 and that is correct rather than missed: bitwarden's test suite contains no empty catch block at all, checked with grep. That is the measurement Phase 43 shipped as an assumption - C# was deliberately excluded from the JVM rule because NUnit, xUnit and MSTest all throw assertion failures deriving from Exception, so catch (Exception) really does swallow them there. If swallows-failure stops being 0, read the new ones. never-runs was 1 before this trial: xUnit's skip attribute was unknown, and the one finding it did have was `collections.Skip(1).ToList()`, which is LINQ."
+          "verified": "2026-10-12. 43 never-runs, matching an independent grep for [Fact(Skip= and [Theory(Skip= exactly. swallows-failure is 0 and that is correct rather than missed: bitwarden's test suite contains no empty catch block at all, checked with grep. That is the measurement Phase 43 shipped as an assumption - C# was deliberately excluded from the JVM rule because NUnit, xUnit and MSTest all throw assertion failures deriving from Exception, so catch (Exception) really does swallow them there. If swallows-failure stops being 0, read the new ones. never-runs was 1 before this trial: xUnit's skip attribute was unknown, and the one finding it did have was `collections.Skip(1).ToList()`, which is LINQ. | 2026-10-19: 4 verdicts moved. IntegrationTemplateProcessorTests writes `var template = \"Event #Type# occurred.\";` - a # inside a C# string, preceded by a space - and the old comment stripper deleted the rest of the body including Assert.Equal. C# has no # comments."
         },
         {
           "command": "schema",
           "expect": {
             "filesRead": 1720,
-            "findings": 558,
+            "findings": 556,
             "slow": 38,
-            "destroys-data": 20,
+            "destroys-data": 18,
             "breaks-old-code": 147,
             "locks-writes": 353
           },
-          "verified": "2026-10-12. 558 findings, down from 919, with 361 false positives removed and every survivor checked. locks-writes was 714: no table was recognised as freshly created, because the pattern read PostgreSQL's \"quoted\" form but not SQL Server's [dbo].[Grant], and knew no framework's way of saying it - so EF Core's CreateTable followed by CreateIndex, which is what Prisma does, counted every index as blocking writes. All 339 EF Core locks-writes that remain were confirmed by script to be on tables not created in the same migration, and the src/Sql/dbo/Tables definitions now report none at all."
+          "verified": "2026-10-12. 558 findings, down from 919, with 361 false positives removed and every survivor checked. locks-writes was 714: no table was recognised as freshly created, because the pattern read PostgreSQL's \"quoted\" form but not SQL Server's [dbo].[Grant], and knew no framework's way of saying it - so EF Core's CreateTable followed by CreateIndex, which is what Prisma does, counted every index as blocking writes. All 339 EF Core locks-writes that remain were confirmed by script to be on tables not created in the same migration, and the src/Sql/dbo/Tables definitions now report none at all. | 2026-10-19: 2 fewer destroys-data, both `DROP TABLE \"Old_Grant\"` in the SQLite rebuild helper scripts. That file renames Grant to Old_Grant, builds a new Grant, copies every row across (INSERT INTO ... SELECT, lines 19 and 33) and drops the husk at line 46. Nothing is lost. Checked the file, not just the pattern."
         },
         {
           "command": "access",
@@ -249,27 +249,27 @@
           "expect": {
             "files": 4770,
             "tests": 54846,
-            "cannot-tell": 1056,
-            "crash-only": 670,
-            "checks": 53113,
+            "cannot-tell": 1050,
+            "crash-only": 584,
+            "checks": 53205,
             "never-runs": 7,
             "swallows-failure": 0,
             "unfinished-expectation": 0,
             "tautology": 0
           },
-          "verified": "2026-10-15. 7 never-runs, every one read against its source: 5 `xit` and 2 unconditional `skip`. It was 38 before Phase 48. Thirty were `skip \"...\" if condition` - a Ruby modifier guard, where the test runs every time the condition is false - and one was an expectation held in a variable and finished on the next line, which RSpec allows and discourse writes. The Go side had refused conditional skips since it was written; Ruby's was added in Phase 36 without it."
+          "verified": "2026-10-15. 7 never-runs, every one read against its source: 5 `xit` and 2 unconditional `skip`. It was 38 before Phase 48. Thirty were `skip \"...\" if condition` - a Ruby modifier guard, where the test runs every time the condition is false - and one was an expectation held in a variable and finished on the next line, which RSpec allows and discourse writes. The Go side had refused conditional skips since it was written; Ruby's was added in Phase 36 without it. | 2026-10-19: 92 verdicts moved to checks, and 2 more moved the wrong way and were a regression I had introduced - the new comment stripper treated an unclosed /* as running to the end of the body, and discourse writes a regex literal ending in /*, which deleted three assertions below it. Found here because this repository is too large to check by hand. Fixed, and the guard is in vouch.test.ts."
         },
         {
           "command": "schema",
           "expect": {
-            "filesRead": 2545,
-            "findings": 1243,
+            "filesRead": 2501,
+            "findings": 1238,
             "locks-writes": 1005,
-            "breaks-old-code": 188,
-            "destroys-data": 49,
+            "breaks-old-code": 184,
+            "destroys-data": 48,
             "slow": 1
           },
-          "verified": "2026-10-15. 2,545 Rails migrations, every one read. 1,005 locks-writes confirmed by script to be on tables not created in the same migration; the 61 migrations that use `algorithm: :concurrently` correctly report nothing, which is Tewip recommending the thing discourse already did and then not complaining about it. 550 files were previously reported as migrations Tewip could not read and were library modules, a class, and a locale YAML file sitting under a directory called migrations/."
+          "verified": "2026-10-15. 2,545 Rails migrations, every one read. 1,005 locks-writes confirmed by script to be on tables not created in the same migration; the 61 migrations that use `algorithm: :concurrently` correctly report nothing, which is Tewip recommending the thing discourse already did and then not complaining about it. 550 files were previously reported as migrations Tewip could not read and were library modules, a class, and a locale YAML file sitting under a directory called migrations/. | 2026-10-19: 44 files fewer, all db/fixtures/*.rb - Rails seed data for groups, flags and badge types. Seed data is not a migration."
         }
       ]
     },

@@ -631,3 +631,36 @@ describe('shapes real projects use that a naive reading condemns', () => {
     assert.equal(verdictOf('thing_test.go', source), 'cannot-tell');
   });
 });
+
+describe('a slash-star that is not a comment', () => {
+  // A regression I put in. The character-walking stripper treated an unclosed block comment as
+  // running to the end of the body, reasoning that a compiler would do the same - but a compiler is
+  // reading one language, and this is handed every language. Ruby has no block comments at all.
+  //
+  // discourse writes a regex literal ending in `/*`:
+  //
+  //     %r{https://matrix.org/_matrix/client/r0/rooms/!blah/send/m.room.message/*}
+  //
+  // and everything after it was deleted, which turned two thoroughly checked tests into crash-only.
+  // Found by the corpus on a repository too large to have been checked by hand.
+  it('keeps the assertions after a regex ending in slash-star', () => {
+    const source = [
+      'it "sends the message" do',
+      '  stub1 = stub_request(:put, %r{https://matrix.org/rooms/!x/send/m.room.message/*}).to_return(status: 200)',
+      '  described_class.trigger_notification(post, chan1, nil)',
+      '  expect(stub1).to have_been_requested.once',
+      'end',
+    ].join(String.fromCharCode(10));
+    assert.equal(verdictOf('matrix_provider_spec.rb', source), 'checks');
+  });
+
+  it('still removes a block comment that closes', () => {
+    const source = [
+      'func TestThing(t *testing.T) {',
+      '\t/* assert.Equal(t, 1, 2) is commented out */',
+      '\tdoSomething()',
+      '}',
+    ].join(String.fromCharCode(10));
+    assert.notEqual(verdictOf('thing_test.go', source), 'checks', 'a commented-out assertion is not an assertion');
+  });
+});

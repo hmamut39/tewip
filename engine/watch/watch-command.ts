@@ -136,12 +136,24 @@ export function howToWriteAReport(root: string): string {
     gradle: './gradlew test   (already writes XML to build/test-results)',
     playwright: 'npx playwright test --reporter=blob',
   };
-  const here = detectFrameworks(root)
-    .map((f) => JUNIT[f.id])
-    .filter((line, i, all): line is string => Boolean(line) && all.indexOf(line) === i);
+  // Languages Tewip reads reports for but cannot run a suite in, so `detectFrameworks` - which
+  // exists to *run* tests - never names them. Without this, a Rust project was told to configure
+  // pytest, jest or dotnet, which is the exact advice the comment above calls the kind that gets a
+  // tool closed. Found by running `tewip watch` in BurntSushi/ripgrep.
+  const BY_MARKER: Array<{ file: string; line: string }> = [
+    { file: 'Cargo.toml', line: 'cargo nextest run --profile ci   (with [profile.ci.junit] path = "report.xml" in .config/nextest.toml)' },
+    { file: 'composer.json', line: './vendor/bin/phpunit --log-junit report.xml' },
+    { file: 'Gemfile', line: 'bundle exec rspec --format RspecJunitFormatter --out report.xml   (needs the rspec_junit_formatter gem)' },
+  ];
+  const here = [
+    ...detectFrameworks(root).map((f) => JUNIT[f.id]),
+    ...BY_MARKER.filter((m) => existsSync(join(root, m.file))).map((m) => m.line),
+  ].filter((line, i, all): line is string => Boolean(line) && all.indexOf(line) === i);
   const head = 'The tests failed but wrote no report Tewip can read.';
   if (here.length === 0) {
-    return `${head} Make the runner write JUnit XML (for example: pytest --junitxml=report.xml, jest --reporters=jest-junit, dotnet test --logger trx).`;
+    // Nothing here was recognised, so this is a list of examples and says so. Naming three runners
+    // as though they were this project's is how the advice went wrong in the first place.
+    return `${head} Tewip did not recognise the runner here, so it cannot name the command. Whatever you use, make it write JUnit XML - for example pytest --junitxml=report.xml, jest --reporters=jest-junit, or dotnet test --logger trx.`;
   }
   return [`${head} For the runner${here.length === 1 ? '' : 's'} this project has, that is:`, ...here.map((line) => `  ${line}`)].join(String.fromCharCode(10));
 }

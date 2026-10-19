@@ -57,8 +57,10 @@ describe('what to change so the next run can be explained', () => {
 
   it('falls back to examples only when it recognises nothing', () => {
     // An empty folder has no runner to name, and silence would be worse than a general example.
+    // The examples stay; what changed is that they are now labelled as examples rather than read
+    // as this project's commands, which is how a Rust project came to be told to configure pytest.
     const said = howToWriteAReport(project({ 'README.md': 'nothing here' }));
-    assert.match(said, /Make the runner write JUnit XML/);
+    assert.match(said, /did not recognise the runner here/);
     assert.match(said, /pytest --junitxml=report\.xml/);
   });
 
@@ -66,5 +68,54 @@ describe('what to change so the next run can be explained', () => {
     for (const root of [project({ 'README.md': 'x' }), project({ 'pytest.ini': '[pytest]\n', 'tests/test_a.py': 'def test_a():\n    pass\n' })]) {
       assert.match(howToWriteAReport(root), /The tests failed but wrote no report Tewip can read/);
     }
+  });
+});
+
+describe('runners Tewip reads but cannot run', () => {
+  // `detectFrameworks` exists to *run* a suite, so it names only runners Tewip can drive. The advice
+  // above read from it alone, so a language Tewip reads reports for but cannot run fell through to
+  // a generic list - which is how BurntSushi/ripgrep, a Rust project, was told to configure pytest,
+  // jest or dotnet. That is the exact advice the comment on this function calls the kind that gets
+  // a tool closed, and Phase 81 only fixed it for the runners that were detectable.
+  it('names cargo-nextest for a Rust project', () => {
+    const root = project({ 'Cargo.toml': '[package]\nname = "x"\n', 'src/lib.rs': 'pub fn x() {}\n' });
+    const said = howToWriteAReport(root);
+    assert.match(said, /cargo nextest run/);
+    assert.doesNotMatch(said, /pytest|jest|dotnet/, 'a Rust project must not be told to configure pytest');
+  });
+
+  it('names PHPUnit for a Composer project', () => {
+    const root = project({ 'composer.json': '{"name":"x/y"}', 'src/X.php': '<?php class X {}\n' });
+    const said = howToWriteAReport(root);
+    assert.match(said, /phpunit --log-junit/);
+    assert.doesNotMatch(said, /pytest|jest/);
+  });
+
+  it('names RSpec for a Bundler project, and says what it needs', () => {
+    const root = project({ Gemfile: "source 'https://rubygems.org'\n", 'lib/x.rb': 'class X; end\n' });
+    const said = howToWriteAReport(root);
+    assert.match(said, /bundle exec rspec/);
+    assert.match(said, /rspec_junit_formatter/, 'the gem it needs is part of the instruction');
+  });
+
+  it('says it did not recognise the runner, rather than naming three it guessed', () => {
+    // The old fallback read as advice for this project. It was a list of examples, and now says so.
+    const root = project({ 'main.c': 'int main(void) { return 0; }\n' });
+    const said = howToWriteAReport(root);
+    assert.match(said, /did not recognise the runner here/);
+    assert.match(said, /for example/, 'the examples stay, labelled as examples');
+  });
+
+  it('still prefers the runner it can actually drive', () => {
+    // A project with both a package.json suite and a Cargo.toml gets the one Tewip can run first.
+    const root = project({
+      'package.json': '{"name":"x","devDependencies":{"jest":"29.0.0"}}',
+      'Cargo.toml': '[package]\nname = "x"\n',
+      'tests/x.test.js': 'test("x", () => {});\n',
+    });
+    const said = howToWriteAReport(root);
+    assert.match(said, /jest/);
+    assert.match(said, /cargo nextest/, 'both are named, because the project has both');
+    assert.ok(said.indexOf('jest') < said.indexOf('cargo nextest'), 'the runner Tewip can drive comes first');
   });
 });

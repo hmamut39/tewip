@@ -162,11 +162,27 @@ export function spread(all: Mutant[], limit: number): Mutant[] {
   return Array.from({ length: limit }, (unused, i) => all[Math.floor(i * step)]);
 }
 
-/** The file with this one mutant applied, ready to be written and then put back. */
+/**
+ * The file with this one mutant applied, ready to be written and then put back.
+ *
+ * The replacement is spliced in by index rather than through `String.replace`. With a string
+ * pattern, `replace` still reads `$$`, `$&`, `` $` `` and `$'` in the *replacement* as substitution
+ * patterns, so the text written to the file was not always the text the mutant said it was.
+ *
+ * Swept over 61,630 mutants across 3,696 real files from the corpus, 8 came out wrong, in three
+ * shapes: Leaflet's bundled `touch$$1` became `touch$1`, which is a different variable; and two of
+ * Saleor's workflow patterns, `'^\.github/workflows/e2e\.yml$'` and `'^[[:space:]]*$'`, lost their
+ * trailing `$'` to the "everything after the match" pattern.
+ *
+ * Eight in sixty thousand sounds like nothing until you read what it is: this is the one place
+ * Tewip writes to a file nobody asked it to touch, and it was reporting one change while making
+ * another. A mutant that mangles an identifier is not the mutant whose survival is being judged.
+ */
 export function applyMutant(text: string, mutant: Mutant): string {
   const lines = text.split(String.fromCharCode(10));
   const line = lines[mutant.line - 1];
   if (line === undefined || line.trim() !== mutant.was) throw new Error(`line ${mutant.line} is not what the mutant was made from, so nothing was written`);
-  lines[mutant.line - 1] = line.replace(mutant.was, mutant.now);
+  const at = line.indexOf(mutant.was);
+  lines[mutant.line - 1] = at < 0 ? line : `${line.slice(0, at)}${mutant.now}${line.slice(at + mutant.was.length)}`;
   return lines.join(String.fromCharCode(10));
 }

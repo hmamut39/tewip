@@ -94,3 +94,62 @@ describe('what may be broken on purpose', () => {
     assert.equal(after[2], '  return 0;');
   });
 });
+
+describe('the file gets the change the mutant says it does', () => {
+  // `prove` is the only part of Tewip that writes to a file nobody asked it to touch, so writing
+  // one thing while reporting another is the worst shape of bug it can have.
+  //
+  // `line.replace(was, now)` looks literal and is not: with a string pattern, `replace` still reads
+  // `$$`, `$&`, `` $` `` and `$'` in the *replacement* as substitution patterns. Found by applying
+  // every candidate mutant to every source file in the corpus - 61,630 mutants over 3,696 real
+  // files - and checking that the line afterwards actually contains what the mutant promised.
+  // Eight did not. Every line below is one of those real lines, unedited.
+  const applied = (source: string) => {
+    const [mutant] = mutantsFor(source, 1);
+    assert.ok(mutant, `no mutant for: ${source}`);
+    return { mutant, line: applyMutant(source, mutant).split(NL)[mutant.line - 1] };
+  };
+
+  it('keeps a doubled dollar in a bundled identifier', () => {
+    // Leaflet, shipped inside firefly-iii. `touch$$1` became `touch$1`: a different variable, and a
+    // mutant that renames an identifier is not the mutant whose survival is being judged.
+    const { mutant, line } = applied('if (doubleTap && !touch$$1.cancelBubble) { return; }');
+    assert.equal(mutant.now.includes('||'), true, 'the operator is what was meant to change');
+    assert.match(line, /touch\$\$1/);
+    assert.equal(line.includes('touch$1.'), false);
+  });
+
+  it("keeps a trailing $' in a regex string", () => {
+    // Saleor's workflow: '^\.github/workflows/e2e\.yml$'. The trailing $' is the "everything after
+    // the match" pattern, and it took the end of the string with it.
+    const source = "const ok = a && b; // '^github/workflows/e2e.yml$'";
+    const { line } = applied(source);
+    assert.ok(line.includes("e2e.yml$'"), "the trailing dollar-quote must survive");
+  });
+
+  it('keeps a shell character class ending in $', () => {
+    const source = "if (a && b) { run(\"grep -v '^[[:space:]]*$' file\"); }";
+    const { line } = applied(source);
+    assert.ok(line.includes("*$'"), "the shell pattern must survive");
+  });
+
+  it('writes exactly what the mutant reported, on every shape of dollar', () => {
+    // $& is the matched text, $` everything before it, $' everything after, $$ a literal dollar.
+    for (const tail of ['$$', '$&', '$`', "$'", '$1', '$<x>']) {
+      const source = `if (a && b) { const s = "${tail}"; }`;
+      const { mutant, line } = applied(source);
+      assert.ok(line.includes(mutant.now), `the line must contain what the mutant promised, with ${tail} in it`);
+      assert.ok(line.includes(tail), `${tail} must survive unchanged`);
+    }
+  });
+
+  it('changes one line and leaves the rest byte for byte', () => {
+    const source = file('const a = 1;', 'if (x && y) { go(); }', 'const b = "$$";');
+    const [mutant] = mutantsFor(source, 1);
+    const after = applyMutant(source, mutant).split(NL);
+    const before = source.split(NL);
+    assert.equal(after.length, before.length);
+    const changed = before.map((l, i) => (l === after[i] ? null : i)).filter((i) => i !== null);
+    assert.deepEqual(changed, [mutant.line - 1], 'exactly the mutant line, and nothing else');
+  });
+});

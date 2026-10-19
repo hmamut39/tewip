@@ -14,78 +14,12 @@
 // 3. **"Cannot say" is a real answer**, and it is not "ready". A gate that only ever says yes or no has
 //    to guess when it does not know, and a guess that says "ready" is how this whole category of tool
 //    loses its reputation.
-export type Standing = 'met' | 'not-met' | 'not-applicable' | 'not-checked';
+export type { Check, Decision, Evidence, Standing, Verdict } from './evidence.ts';
+import type { Check, Decision, Evidence, Verdict } from './evidence.ts';
 
 /** The questions that cannot be skipped on the way to "ready". */
 const ESSENTIAL = ['Is everything passing?', 'Is the changed code tested?'];
 
-export interface Check {
-  /** What was asked, in a reviewer's words. */
-  question: string;
-  standing: Standing;
-  /** The answer, with the evidence that supports it. */
-  answer: string;
-  /** Which layer decided, so the claim can be traced to something with a measured accuracy. */
-  decidedBy: string;
-}
-
-export type Verdict = 'ready' | 'not-ready' | 'cannot-say';
-
-export interface Decision {
-  verdict: Verdict;
-  /** One sentence a person can act on. */
-  headline: string;
-  checks: Check[];
-  /** What this verdict says nothing about. Always non-empty. */
-  notChecked: string[];
-}
-
-export interface Evidence {
-  /** Source files the change touched (not tests). */
-  changedSource: string[];
-  /** Test files the change touched. */
-  changedTests: string[];
-  /** Test files that reach the changed source, and how. */
-  covering: Array<{ testFile: string; how: string }>;
-  /**
-   * What a coverage report the project already produces says about the changed files, when there is
-   * one. Imports cannot see a test that posts a GraphQL query or hits an HTTP route; a coverage
-   * report can, because it records what actually ran.
-   */
-  coverage?: { from: string; executed: string[]; notExecuted: string[] };
-  /** Tests in the change that could never fail. */
-  cannotFail: Array<{ name: string; file: string; line: number; why: string }>;
-  /** Tests in the change that compare no value. */
-  crashOnly: number;
-  /** Tests in the change vouch would not call either way. */
-  couldNotJudge: number;
-  /**
-   * How many deliberate changes were actually made and run, and why none were when none were.
-   *
-   * `unnoticed` being empty means one of two opposite things: every change was caught, or nothing
-   * was ever tried. Asked for `--prove` on a project whose runner is not installed, the gate said
-   * "every deliberate change made to this code was noticed" - about no changes at all, in the
-   * strongest claim it makes, to somebody who had asked for it specifically.
-   */
-  proofsTried: number;
-  /** Why nothing could be proved, when nothing could. */
-  proofSkipped: string;
-  /** Deliberate changes that no covering test noticed. Null when proving was not run. */
-  unnoticed: Array<{ file: string; line: number; kind: string }> | null;
-  /** Failures in the most recent kept run that touch the changed files. */
-  failingNow: Array<{ testId: string; category: string }>;
-  /** True when this project keeps no run history, so "nothing is failing" would be an assumption. */
-  noHistory: boolean;
-  /** Scenarios of a kept plan that the change relates to and nothing covers. Null when no plans exist. */
-  uncovered: Array<{ id: string; title: string }> | null;
-  /** Rules from this project's own standards that the change breaks. Null when it has written none. */
-  brokenRules: Array<{ standard: string; file: string; line: number; why: string }> | null;
-}
-
-/**
- * The verdict, in a fixed order: what is broken first, then what cannot be believed, then what is
- * missing, and only then "ready".
- */
 export function decide(evidence: Evidence): Decision {
   const checks: Check[] = [];
 
@@ -250,6 +184,19 @@ export function decide(evidence: Evidence): Decision {
       standing: 'not-met',
       answer: `${evidence.uncovered.length} scenario(s) related to this change have no test: ${evidence.uncovered.slice(0, 2).map((u) => `${u.id} ${u.title}`).join('; ')}`,
       decidedBy: 'tewip trace, which counts a scenario covered only when a real test can be named',
+    });
+  } else if (evidence.plansUnreadable > 0 || evidence.plansConsidered === 0) {
+    // An empty gap list means one of three things and only one of them is good news. A plan that
+    // would not parse was skipped in silence, and a project whose plans are all about other
+    // features has not had this question answered at all.
+    checks.push({
+      question: 'Is what was asked for covered?',
+      standing: 'not-checked',
+      answer:
+        evidence.plansUnreadable > 0
+          ? `${evidence.plansUnreadable} plan file(s) here could not be read, so their scenarios were never compared with this change`
+          : 'no plan this project keeps is about this change, so there was nothing to compare it with',
+      decidedBy: 'tewip trace',
     });
   } else {
     checks.push({ question: 'Is what was asked for covered?', standing: 'met', answer: 'every scenario this change relates to has a test that can be named', decidedBy: 'tewip trace' });

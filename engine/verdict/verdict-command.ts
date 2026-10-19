@@ -52,12 +52,22 @@ function history(root: string, only?: string): { runs: RunSummary[]; records: Tr
 }
 
 /** Scenarios of kept plans that this change relates to and nothing covers. Null when no plans exist. */
-function uncoveredFor(root: string, changed: string[], attempted: string[]): Evidence['uncovered'] {
+/**
+ * Scenarios this change touches that no test covers, and what stopped the question being answered.
+ *
+ * The gaps alone cannot carry it. An empty list means one of three different things: every scenario
+ * is covered, no plan here is about this change, or every plan failed to parse and was silently
+ * skipped - and the gate read all three as "every scenario this change relates to has a test".
+ * Measured on a project with one plan file containing the word "refunds" and no valid JSON.
+ */
+function uncoveredFor(root: string, changed: string[], attempted: string[]): { gaps: Evidence['uncovered']; unreadable: number; considered: number } {
   const dir = join(root, '.tewip', 'plans');
-  if (!existsSync(dir)) return null;
+  if (!existsSync(dir)) return { gaps: null, unreadable: 0, considered: 0 };
   const words = new Set(changed.flatMap((f) => (f.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? [])));
   const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
   const out: Array<{ id: string; title: string }> = [];
+  let unreadable = 0;
+  let considered = 0;
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
     try {
       const saved = JSON.parse(readFileSync(join(dir, file), 'utf8')) as { plan?: { title?: string; scenarios?: Array<Record<string, string>> }; feature?: string };
@@ -67,15 +77,18 @@ function uncoveredFor(root: string, changed: string[], attempted: string[]): Evi
       // would block every pull request in the project forever.
       const about = (`${plan.title ?? ''} ${saved.feature ?? ''}`.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? []).some((w) => words.has(w));
       if (!about) continue;
+      considered += 1;
       for (const scenario of plan.scenarios) {
         const covered = (scenario.covered_by ?? '').trim() || attempted.find((t) => clean(t).includes(clean(scenario.id)) && clean(scenario.id).length >= 4);
         if (!covered) out.push({ id: scenario.id, title: scenario.title });
       }
     } catch {
-      // Not a readable plan.
+        // Skipped in silence until Phase 112: an unparseable plan left the gap list empty,
+        // which the gate read as full coverage.
+        unreadable += 1;
     }
   }
-  return out;
+  return { gaps: out, unreadable, considered };
 }
 
 export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[] } | null {
@@ -123,6 +136,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
     .map((r) => ({ testId: r.testId, category: String((r.diagnosis as { category?: string } | undefined)?.category ?? 'UNKNOWN') }));
 
   const standards = loadStandards(cmd.root);
+  const plans = uncoveredFor(cmd.root, changed, Object.keys(newest?.attempts ?? {}));
   const brokenRules = standards.length === 0 ? null : checkChanged(cmd.root, standards, changed).map((v) => ({ standard: v.standard, file: v.file, line: v.line, why: v.rule.because }));
 
   const proved = cmd.prove ? proveChanged(cmd.root, changedSource, { budgetSeconds: cmd.proveBudgetSeconds ?? 300, onStep: (m) => console.error(`  ${m}`) }) : null;
@@ -142,7 +156,9 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
       unnoticed: proved ? proved.proofs.flatMap((p) => p.tried.filter((t) => t.fate === 'unnoticed').map((t) => ({ file: p.file, line: t.mutant.line, kind: t.mutant.kind }))) : null,
       failingNow,
       noHistory: runs.length === 0,
-      uncovered: uncoveredFor(cmd.root, changed, Object.keys(newest?.attempts ?? {})),
+      uncovered: plans.gaps,
+      plansUnreadable: plans.unreadable,
+      plansConsidered: plans.considered,
       brokenRules,
     },
   };

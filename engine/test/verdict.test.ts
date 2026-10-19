@@ -20,6 +20,8 @@ const sound: Evidence = {
     couldNotJudge: 0,
     proofsTried: 1,
     proofSkipped: '',
+    plansUnreadable: 0,
+    plansConsidered: 1,
   unnoticed: [],
   failingNow: [],
   noHistory: false,
@@ -85,6 +87,34 @@ describe('is this work done?', () => {
     assert.equal(decision.verdict, 'cannot-say');
     assert.match(decision.headline, /"Is everything passing\?" - so this is not an approval/);
     assert.match(decision.headline, /not an approval/);
+  });
+
+  it('does not call a change covered when the plan could not be read', () => {
+    // `.tewip/plans/refunds.json` containing one line of nothing. The parse failed, the file was
+    // skipped in silence, and the gap list came back empty - which is also what it does when every
+    // scenario is covered. The gate said "every scenario this change relates to has a test".
+    const unreadable = seen({ uncovered: [], plansUnreadable: 1, plansConsidered: 0 });
+    const check = decide(unreadable).checks.find((c) => c.question === 'Is what was asked for covered?');
+    assert.equal(check?.standing, 'not-checked');
+    assert.match(check?.answer ?? '', /1 plan file\(s\) here could not be read/);
+  });
+
+  it('does not call a change covered when no plan is about it', () => {
+    const unrelated = seen({ uncovered: [], plansUnreadable: 0, plansConsidered: 0 });
+    const check = decide(unrelated).checks.find((c) => c.question === 'Is what was asked for covered?');
+    assert.equal(check?.standing, 'not-checked');
+    assert.match(check?.answer ?? '', /nothing to compare it with/);
+  });
+
+  it('still says yes when a plan was read and every scenario is covered', () => {
+    const check = decide(seen({ uncovered: [], plansUnreadable: 0, plansConsidered: 1 })).checks.find((c) => c.question === 'Is what was asked for covered?');
+    assert.equal(check?.standing, 'met');
+  });
+
+  it('still says no when a scenario has no test', () => {
+    const gap = seen({ uncovered: [{ id: 'LS-2', title: 'refuses an unpaid order' }], plansConsidered: 1 });
+    const check = decide(gap).checks.find((c) => c.question === 'Is what was asked for covered?');
+    assert.equal(check?.standing, 'not-met');
   });
 
   it('does not call the tests proved when nothing could be proved', () => {

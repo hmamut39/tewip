@@ -59,6 +59,17 @@ export interface Evidence {
   crashOnly: number;
   /** Tests in the change vouch would not call either way. */
   couldNotJudge: number;
+  /**
+   * How many deliberate changes were actually made and run, and why none were when none were.
+   *
+   * `unnoticed` being empty means one of two opposite things: every change was caught, or nothing
+   * was ever tried. Asked for `--prove` on a project whose runner is not installed, the gate said
+   * "every deliberate change made to this code was noticed" - about no changes at all, in the
+   * strongest claim it makes, to somebody who had asked for it specifically.
+   */
+  proofsTried: number;
+  /** Why nothing could be proved, when nothing could. */
+  proofSkipped: string;
   /** Deliberate changes that no covering test noticed. Null when proving was not run. */
   unnoticed: Array<{ file: string; line: number; kind: string }> | null;
   /** Failures in the most recent kept run that touch the changed files. */
@@ -198,6 +209,18 @@ export function decide(evidence: Evidence): Decision {
       standing: 'not-met',
       answer: `${evidence.unnoticed.length} deliberate change(s) went unnoticed, including ${evidence.unnoticed[0].file}:${evidence.unnoticed[0].line} (${evidence.unnoticed[0].kind})`,
       decidedBy: 'tewip prove, by running the tests against a broken copy of the code',
+    });
+  } else if (evidence.proofsTried === 0) {
+    // Nothing was tried, so nothing was established. The reason is carried through rather than
+    // flattened into a shrug: "no unit test framework was found here" is a different thing for a
+    // reader to act on than "this costs minutes, ask for it".
+    checks.push({
+      question: 'Would the tests catch a bug in this code?',
+      standing: 'not-checked',
+      answer: evidence.proofSkipped
+        ? `nothing could be proved here: ${evidence.proofSkipped}`
+        : 'nothing was proved here, so whether the tests would catch a bug is unknown',
+      decidedBy: 'tewip prove',
     });
   } else {
     checks.push({ question: 'Would the tests catch a bug in this code?', standing: 'met', answer: 'every deliberate change made to this code was caught by a covering test', decidedBy: 'tewip prove' });

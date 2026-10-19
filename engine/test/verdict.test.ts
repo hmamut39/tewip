@@ -18,6 +18,8 @@ const sound: Evidence = {
   cannotFail: [],
   crashOnly: 0,
     couldNotJudge: 0,
+    proofsTried: 1,
+    proofSkipped: '',
   unnoticed: [],
   failingNow: [],
   noHistory: false,
@@ -83,6 +85,35 @@ describe('is this work done?', () => {
     assert.equal(decision.verdict, 'cannot-say');
     assert.match(decision.headline, /"Is everything passing\?" - so this is not an approval/);
     assert.match(decision.headline, /not an approval/);
+  });
+
+  it('does not call the tests proved when nothing could be proved', () => {
+    // Asked for --prove on a project whose runner is not installed, `proveChanged` returns no proofs
+    // and a reason. `unnoticed` is then empty in exactly the way it is when every change was caught,
+    // and the gate answered "every deliberate change made to this code was noticed" - about no
+    // changes at all, in its strongest claim, to somebody who had asked for it specifically.
+    const nothingRan = seen({ unnoticed: [], proofsTried: 0, proofSkipped: 'no unit test framework was found here, and proving works by running tests' });
+    const check = decide(nothingRan).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.ok(check);
+    assert.equal(check.standing, 'not-checked');
+    assert.match(check.answer, /no unit test framework was found here/, 'and says why, not just that it did not');
+  });
+
+  it('still says yes when changes really were made and caught', () => {
+    const check = decide(seen({ unnoticed: [], proofsTried: 4 })).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.equal(check?.standing, 'met');
+  });
+
+  it('still says no when a change slipped past', () => {
+    const slipped = seen({ unnoticed: [{ file: 'src/refunds.js', line: 2, kind: 'a comparison inverted' }], proofsTried: 4 });
+    const check = decide(slipped).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.equal(check?.standing, 'not-met');
+  });
+
+  it('still says not checked when proving was never asked for', () => {
+    const check = decide(seen({ unnoticed: null })).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.equal(check?.standing, 'not-checked');
+    assert.match(check?.answer ?? '', /Ask for it with/);
   });
 
   it('does not call tests sound when it could not judge any of them', () => {

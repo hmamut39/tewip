@@ -11,7 +11,7 @@ import type { Finding, Risk } from './statements.ts';
 import { ALEMBIC, DJANGO, LARAVEL, RAILS, type Operation } from './dialect-rules.ts';
 import { EFCORE, KNEX, LIQUIBASE, SEQUELIZE } from './dialect-rules-node.ts';
 
-export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'sequelize' | 'knex' | 'efcore' | 'liquibase' | 'laravel' | 'unknown';
+export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'sequelize' | 'knex' | 'kysely' | 'efcore' | 'liquibase' | 'laravel' | 'unknown';
 
 /**
  * Every way a knex migration declares its rollback.
@@ -33,6 +33,16 @@ export function dialectOf(file: string, text: string): Dialect {
   if (/\bmigrations\.Migration\b|\bmigrations\.(?:CreateModel|AddField|RemoveField|AlterField|RenameField|RunSQL|RunPython|DeleteModel|RenameModel)\b/.test(text)) return 'django';
   if (/\bActiveRecord::Migration\b|\bdef\s+(?:up|change)\b[\s\S]*\b(?:add_column|remove_column|add_index|change_column|rename_column|drop_table)\b/.test(text)) return 'rails';
   if (/\bop\.(?:drop_column|add_column|create_index|alter_column|drop_table|rename_table|execute)\b/.test(text)) return 'alembic';
+  // Kysely, which immich moved to from TypeORM. The DDL is raw SQL inside tagged template
+  // literals - await sql`ALTER TABLE ... DROP COLUMN ...`.execute(db) - so it is perfectly readable
+  // once the wrapper is recognised, exactly as it was for TypeORM.
+  //
+  // Before this, immich's 100 migrations were not reported as unreadable. They were not reported
+  // at all: migrationsUnder drops a file whose dialect is unknown, on the grounds that such a file
+  // is not a migration - which is right for a library module called helpers.rb and wrong for a
+  // whole dialect. The 37 files Tewip did find there were generated query files under src/queries,
+  // and the real migration that drops assets.isVisible and assets.isArchived was silent.
+  if (/from\s+['\"]kysely['\"]|\bKysely\s*</.test(text) && /\bsql`/.test(text)) return 'kysely';
   // TypeORM writes a migration as a class with up() and down(), and puts the real DDL in template
   // strings passed to queryRunner.query(). The SQL is right there and perfectly readable; only the
   // wrapper was unfamiliar, so every TypeORM project was told Tewip could not read its migrations
@@ -54,6 +64,10 @@ const BY_DIALECT: Record<Exclude<Dialect, 'sql' | 'unknown'>, Operation[]> = {
   rails: RAILS,
   alembic: ALEMBIC,
   typeorm: [],
+  // Neither has operations of its own: the whole migration is raw SQL, read by `readSql`. TypeORM
+  // hands it over through queryRunner.query(...), Kysely through a tagged template, and Kysely is
+  // routed straight to the SQL reader before this table is consulted.
+  kysely: [],
   sequelize: SEQUELIZE,
   knex: KNEX,
   efcore: EFCORE,
@@ -154,6 +168,8 @@ export function forwardOnly(dialect: Dialect, text: string): string {
       // every rollback was read as part of the change: 122 findings, each one a dropTable in a
       // `down` that undoes its own `up`, which is what a reversible migration is.
       (dialect === 'knex' && KNEX_DOWN.test(line)) ||
+      // Kysely declares its rollback the same way: export async function down(db) {
+      (dialect === 'kysely' && /^\s*(?:export\s+)?(?:async\s+)?function\s+down\s*\(/.test(line)) ||
       (dialect === 'efcore' && /^\s*protected\s+override\s+void\s+Down\s*\(/.test(line)) ||
       // Laravel's rollback, which in real files often comes *before* up().
       (dialect === 'laravel' && /^\s*(?:public\s+)?function\s+down\s*\(/.test(line)) ||

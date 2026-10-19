@@ -124,13 +124,15 @@ export function readMigration(root: string, file: string): Migration {
   // Only the forward path: a rollback step contains the mirror image of the change, and reading it as
   // part of the change says a migration that creates a table destroys one.
   const forward = forwardOnly(dialect, text);
-  if (dialect === 'sql') return { file, dialect, findings: droppingWhatIsNew(readSql(forward), forward), unread: '', irreversible: false };
+  // Kysely's DDL is raw SQL in a template literal, so once the rollback is removed the same
+  // reader that handles a .sql file handles it.
+  if (dialect === 'sql' || dialect === 'kysely') return { file, dialect, findings: droppingWhatIsNew(readSql(forward), forward), unread: '', irreversible: false };
   if (dialect === 'unknown') {
     return {
       file,
       dialect,
       findings: [],
-      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails, Alembic, TypeORM, Sequelize, Knex, Laravel, EF Core and Liquibase migrations',
+      unread: 'Tewip does not recognise how this migration is written, so it says nothing about it rather than passing it. It reads SQL, Django, Rails, Alembic, TypeORM, Sequelize, Knex, Kysely, Laravel, EF Core and Liquibase migrations',
       irreversible: false,
     };
   }

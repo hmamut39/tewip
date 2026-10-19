@@ -800,3 +800,48 @@ describe('a rollback is not the change, and a fixture is not a migration', () =>
     assert.equal(MIGRATION.test('db/migrate/20240101_add_index.rb'), true);
   });
 });
+
+describe('Kysely, which immich moved to from TypeORM', () => {
+  // The last of the dialects `schema` names that no real project had been measured on turned out
+  // not to be TypeORM at all: immich had moved to Kysely. Tewip found 37 "migrations" there, every
+  // one a generated query file under src/queries, and none of the 100 real ones - because a file
+  // whose dialect is unknown is dropped on the grounds that it is not a migration. Right for a
+  // library module called helpers.rb; wrong for a whole dialect.
+  const NL = String.fromCharCode(10);
+  const BT = String.fromCharCode(96);
+  const migration = [
+    "import { Kysely, sql } from 'kysely';",
+    '',
+    'export async function up(db: Kysely<any>): Promise<void> {',
+    `  await sql${BT}ALTER TABLE "assets" DROP COLUMN "isVisible";${BT}.execute(db);`,
+    '}',
+    '',
+    'export async function down(db: Kysely<any>): Promise<void> {',
+    `  await sql${BT}ALTER TABLE "assets" ADD COLUMN "isVisible" BOOLEAN NOT NULL DEFAULT TRUE;${BT}.execute(db);`,
+    '}',
+  ].join(NL);
+
+  it('recognises a Kysely migration', () => {
+    assert.equal(dialectOf('server/src/schema/migrations/1745902563899-AddAssetVisibilityColumn.ts', migration), 'kysely');
+  });
+
+  it('reads the SQL out of the tagged template', () => {
+    // The DDL is raw SQL inside sql`...`, not inside execute(...), so the extractor that reads
+    // TypeORM's queryRunner.query(...) never sees it. Kysely goes to the SQL reader directly.
+    const findings = readSql(forwardOnly('kysely', migration));
+    assert.equal(findings.some((f) => /drops the column isVisible/.test(f.what ?? '')), true);
+  });
+
+  it('ignores the rollback, which adds the column back', () => {
+    const forward = forwardOnly('kysely', migration);
+    assert.equal(/ADD COLUMN/.test(forward), false, 'the down is blanked before anything is read');
+    assert.equal(/DROP COLUMN/.test(forward), true, 'the up survives');
+  });
+
+  it('is not mistaken for a plain .ts file that merely mentions sql', () => {
+    // The import and a tagged sql template are both required. A repository file that builds queries
+    // is not a migration, and immich has 37 of those.
+    const query = ["import { db } from './db';", 'export const all = () => db.selectFrom("assets").selectAll();'].join(NL);
+    assert.notEqual(dialectOf('server/src/queries/asset.repository.ts', query), 'kysely');
+  });
+});

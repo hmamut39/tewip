@@ -365,6 +365,18 @@
             "ask-a-person": 86
           },
           "verified": "2026-10-17. 25 barriers across 425 SvelteKit files, the lowest rate of the three frontends. Svelte needed no fix at all: both its spellings, on:click and Svelte 5's onclick, were already read, which is why this gap only appeared when a third framework was pointed at."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 134,
+            "findings": 115,
+            "breaks-old-code": 29,
+            "destroys-data": 8,
+            "locks-writes": 51,
+            "slow": 27
+          },
+          "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations."
         }
       ]
     },

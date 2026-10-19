@@ -202,6 +202,38 @@ const envServerError: Rule = {
  * is what the streak conditions below are reading and what one CI run cannot supply. Re-derive with
  * `node eval/mismatch-precision.ts` before changing any of this.
  */
+/**
+ * How often this rule is right, measured rather than argued.
+ *
+ * It used to claim `0.65 + 0.05 * failingStreak`, up to 0.9, and across the six labelled datasets
+ * it was right 10 times out of 26 - the only overconfident rule in the set, and the one that tells
+ * a team their application is broken. All 16 misses were the same: a flaky test called a real bug,
+ * which is the failure the comment above this rule exists to warn about.
+ *
+ * The streak term was worse than unearned, it was inverted. Split by streak length:
+ *
+ *     streak 1    10/16   62.5%   across 5 projects
+ *     streak 2+    0/10    0.0%   across 1 project
+ *
+ * So the formula paid the most confidence exactly where the rule was never right. The streak is
+ * gone from the number rather than used to refuse those cases: 0 of 10 is ten failures from one
+ * project, and silencing a category on one project's data is how this rule got here. Lowering an
+ * overstated number is safe; suppressing findings on thin evidence is not.
+ *
+ * A third change was tried and taken back out. Requiring the test to have passed before - the
+ * condition `env-server-error` carries, and the rule was wrong all 3 times it fired without one -
+ * breaks the behaviour six importers deliberately test, that a wrong value failing every attempt in
+ * a single run is a real bug. Three cases is not enough to remove a designed answer, and Phase 64
+ * already recorded the cost of this rule declining too readily: `tewip bugs` filed one ticket out of
+ * 1,964 real failures. Lowering an overstated number is safe. Refusing to answer is not, and it was
+ * not earned.
+ *
+ * 0.40 is simply how often the rule is right: 10 of 26. It sits below the 0.7 the merge gate trusts
+ * and the 0.85 auto-fix needs, which is where a signal right two times in five belongs - in front of
+ * a person, which is what the report already calls it. Re-derive with `node eval/calibration.ts`.
+ */
+const REAL_BUG_ASSERTION_CONFIDENCE = 0.4;
+
 const realBugAssertion: Rule = {
   id: 'real-bug-assertion',
   evaluate({ record, history, loadFailedRequests }) {
@@ -228,7 +260,7 @@ const realBugAssertion: Rule = {
         : `failed all ${failingStreak} recorded runs with the same mismatch: ${values}`;
     return {
       category: 'REAL_BUG',
-      confidence: Math.min(0.9, 0.65 + 0.05 * failingStreak + (passesBeforeStreak >= 3 ? 0.05 : 0)),
+      confidence: REAL_BUG_ASSERTION_CONFIDENCE,
       evidence: [{ source: this.id, message, data: { ...mismatch, failingStreak, passesBeforeStreak } }],
     };
   },

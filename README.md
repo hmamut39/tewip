@@ -1276,6 +1276,40 @@ The first matching rule, in this order, decides the category. If a lower-priorit
 | `timing-flaky` | TIMING | the failure rate is 20%-80% over at least 3 runs, and the error message varies |
 | `real-bug-assertion` | REAL_BUG | a value mismatch on a test whose history is stable: it was clean before and has failed the same way since |
 
+### How often each rule is right
+
+Measured over the six labelled datasets with `node eval/calibration.ts`, rules only, no model. The
+`claimed` column is the confidence the rule prints beside its answer; `observed` is how often that
+answer matched a hand label. A rule that claims more than it delivers is the one kind of error this
+project will not keep.
+
+| rule | cases | right | observed | claimed | projects |
+|---|---|---|---|---|---|
+| `timing-retry-pass` | 1478 | 1463 | 99.0% | 0.74 | 6 |
+| `env-network` | 395 | 395 | 100.0% | 0.80 | 5 |
+| `env-server-error` | 43 | 43 | 100.0% | 0.60 | 5 |
+| `timing-intercepted` | 32 | 32 | 100.0% | 0.80 | 5 |
+| `real-bug-assertion` | 26 | 10 | 38.5% | 0.40 | 5 |
+| `locator-drift-strict` | 17 | 17 | 100.0% | 0.89 | 2 |
+| `timing-flaky` | 9 | 9 | 100.0% | 0.90 | 1 |
+| `test-data-collision` | 6 | 6 | 100.0% | 0.70 | 1 |
+| `locator-drift` | 5 | 3 | 60.0% | 0.80 | 2 |
+
+Every rule but two understates itself, which is safe and not free: the merge gate trusts 0.7 and
+auto-fix needs 0.85, so a rule right 395 times out of 395 while claiming 0.80 sends work to a person
+who did not need to see it.
+
+`real-bug-assertion` was the exception, and it is the rule that tells a team their application is
+broken. It claimed `0.65 + 0.05 x failingStreak`, up to 0.9, and was right 10 times in 26 - all 16
+misses a flaky test called a real bug. The streak term was not merely unearned but inverted: at a
+streak of 1 the rule is right 62.5% across five projects, and at 2 or more it is right none of ten.
+It now claims 0.40, which is how often it is right, and sits below both thresholds - in front of a
+person, where a two-in-five signal belongs. Nothing it decides changed: the rules layer answers the
+same 2,012 failures and gets the same 1,979 right.
+
+`locator-drift` at 60% is measured and left alone: five cases across two projects is not enough to
+move a number, and saying so is better than either ignoring it or inventing a fix.
+
 History is **point-in-time**: each failure is judged only with runs up to and including its own run, never later ones. A test's first-ever failure therefore has no history, and history-based rules decline it.
 
 ## Usage

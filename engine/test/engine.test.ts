@@ -214,7 +214,31 @@ describe('REAL_BUG rule', () => {
   it('value mismatch after a clean history → REAL_BUG', () => {
     const d = diagnoseLast({ a: ['P', 'P', 'P', MISMATCH('$19.99', '$24.99'), MISMATCH('$19.99', '$24.99')] }, 'a');
     assert.equal(d.category, 'REAL_BUG');
-    assert.equal(d.confidence, 0.8);
+    // This is the strongest case the rule has - three passes, then the same mismatch twice - and it
+    // used to claim 0.8. Measured across the six labelled datasets the rule is right 10 times out of
+    // 26, so the number is now what it is rather than what the shape of the history suggests. What
+    // it decides is unchanged; only the claim about how sure it is.
+    assert.equal(d.confidence, 0.4);
+  });
+
+  it('a longer failing streak does not buy more confidence', () => {
+    // The formula used to pay 0.05 a run for the streak, up to 0.9. Measured across the six
+    // labelled datasets, that was not merely unearned, it was inverted: at a streak of 1 the rule
+    // is right 10 times in 16 across five projects, and at a streak of 2 or more it is right none
+    // of 10. The number must not rise with the thing that makes it worse.
+    const two = diagnoseLast({ a: ['P', 'P', 'P', MISMATCH('$19.99', '$24.99'), MISMATCH('$19.99', '$24.99')] }, 'a');
+    const five = diagnoseLast({ a: ['P', 'P', 'P', ...Array.from({ length: 5 }, () => MISMATCH('$19.99', '$24.99'))] }, 'a');
+    assert.equal(two.category, 'REAL_BUG');
+    assert.equal(five.category, 'REAL_BUG');
+    assert.equal(five.confidence, two.confidence, 'five failing runs is not more evidence than two');
+  });
+
+  it('still answers when the test has never passed', () => {
+    // Taken back out after it broke six importers' fixtures. A wrong value that fails every attempt
+    // in a single run is a real bug, deliberately, and Phase 64 measured what this rule declining
+    // too readily costs: one ticket filed out of 1,964 real failures.
+    const d = diagnoseLast({ a: [MISMATCH('4', '3'), MISMATCH('4', '3'), MISMATCH('4', '3')] }, 'a');
+    assert.equal(d.category, 'REAL_BUG');
   });
 
   it('value mismatch on the first ever run is UNKNOWN (cold start)', () => {

@@ -15,10 +15,18 @@ export interface ChangedTests {
   read: number;
   cannotFail: Judgement[];
   crashOnly: Judgement[];
+  /**
+   * Tests vouch would not call either way - the body is one call to something it cannot follow.
+   *
+   * Counted because the absence of a finding is not a finding. With every test in a change coming
+   * back undecided, `cannotFail` is empty, and a gate reading only that said "every test in this
+   * change asserts something" about three tests that assert nothing.
+   */
+  couldNotJudge: Judgement[];
 }
 
 export function vouchChanged(root: string, changed: string[]): ChangedTests {
-  const out: ChangedTests = { files: 0, read: 0, cannotFail: [], crashOnly: [] };
+  const out: ChangedTests = { files: 0, read: 0, cannotFail: [], crashOnly: [], couldNotJudge: [] };
   for (const file of changed) {
     const full = join(root, file);
     if (!existsSync(full)) continue; // deleted in this change, so there is nothing to read
@@ -34,6 +42,7 @@ export function vouchChanged(root: string, changed: string[]): ChangedTests {
     out.read += vouched.judgements.length;
     out.cannotFail.push(...vouched.judgements.filter((j) => CANNOT_FAIL.includes(j.verdict)));
     out.crashOnly.push(...vouched.judgements.filter((j) => j.verdict === 'crash-only'));
+    out.couldNotJudge.push(...vouched.judgements.filter((j) => j.verdict === 'cannot-tell'));
   }
   return out;
 }

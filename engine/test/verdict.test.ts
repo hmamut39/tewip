@@ -17,6 +17,7 @@ const sound: Evidence = {
   covering: [{ testFile: 'tests/refunds.test.js', how: 'imports it' }],
   cannotFail: [],
   crashOnly: 0,
+    couldNotJudge: 0,
   unnoticed: [],
   failingNow: [],
   noHistory: false,
@@ -82,6 +83,34 @@ describe('is this work done?', () => {
     assert.equal(decision.verdict, 'cannot-say');
     assert.match(decision.headline, /"Is everything passing\?" - so this is not an approval/);
     assert.match(decision.headline, /not an approval/);
+  });
+
+  it('does not call tests sound when it could not judge any of them', () => {
+    // The shape a machine writes: call the function under test, assert nothing. vouch declines each
+    // one - the body is a single call to something it cannot follow - so `cannotFail` comes back
+    // empty, exactly as it does for three good tests. The gate read the empty list and answered
+    // "every test in this change asserts something" about three tests that assert nothing.
+    const blind = seen({ changedTests: ['test/refunds.test.js'], cannotFail: [], couldNotJudge: 3 });
+    const check = decide(blind).checks.find((c) => c.question === 'Can the tests in this change fail?');
+    assert.ok(check);
+    assert.equal(check.standing, 'not-checked');
+    assert.match(check.answer, /would not judge any of the 3 test\(s\)/);
+  });
+
+  it('still says yes when it judged them and they assert', () => {
+    const check = decide(seen({ changedTests: ['test/refunds.test.js'], couldNotJudge: 0 })).checks.find((c) => c.question === 'Can the tests in this change fail?');
+    assert.equal(check?.standing, 'met');
+  });
+
+  it('still says no when one of them cannot fail', () => {
+    // A finding outranks an absence: some were judged and one is bad.
+    const mixed = seen({
+      changedTests: ['test/refunds.test.js'],
+      cannotFail: [{ name: 'works', file: 'test/refunds.test.js', line: 3, why: 'compares a value with itself' }],
+      couldNotJudge: 2,
+    });
+    const check = decide(mixed).checks.find((c) => c.question === 'Can the tests in this change fail?');
+    assert.equal(check?.standing, 'not-met');
   });
 
   it('never says a word that reads like reassurance while a test is failing', () => {

@@ -72,6 +72,7 @@ describe('the verdict, once a coverage report is there', () => {
     covering: [],
     cannotFail: [],
     crashOnly: 0,
+    couldNotJudge: 0,
     unnoticed: [],
     failingNow: [],
     noHistory: false,

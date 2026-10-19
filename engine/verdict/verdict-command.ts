@@ -136,6 +136,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
     coverage,
       cannotFail: vouched.cannotFail.map((j) => ({ name: j.name, file: j.file, line: j.line, why: j.why })),
       crashOnly: vouched.crashOnly.length,
+      couldNotJudge: vouched.couldNotJudge.length,
       unnoticed: proved ? proved.proofs.flatMap((p) => p.tried.filter((t) => t.fate === 'unnoticed').map((t) => ({ file: p.file, line: t.mutant.line, kind: t.mutant.kind }))) : null,
       failingNow,
       noHistory: runs.length === 0,

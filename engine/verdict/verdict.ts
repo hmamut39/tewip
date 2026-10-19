@@ -57,6 +57,8 @@ export interface Evidence {
   cannotFail: Array<{ name: string; file: string; line: number; why: string }>;
   /** Tests in the change that compare no value. */
   crashOnly: number;
+  /** Tests in the change vouch would not call either way. */
+  couldNotJudge: number;
   /** Deliberate changes that no covering test noticed. Null when proving was not run. */
   unnoticed: Array<{ file: string; line: number; kind: string }> | null;
   /** Failures in the most recent kept run that touch the changed files. */
@@ -165,6 +167,18 @@ export function decide(evidence: Evidence): Decision {
       standing: 'not-met',
       answer: `${evidence.cannotFail.length} of them cannot: ${evidence.cannotFail.slice(0, 2).map((t) => `${t.name} (${t.file}:${t.line})`).join(', ')}`,
       decidedBy: 'tewip vouch, measured on 41,523 real tests in the six public projects in corpus/expected.json',
+    });
+  } else if (evidence.couldNotJudge > 0 && evidence.couldNotJudge >= evidence.changedTests.length) {
+    // Nothing was established. `cannotFail` is empty because vouch declined every test in the
+    // change, not because it found them sound - three tests that call the function under test and
+    // assert nothing come back exactly like three good ones. Answering "yes" there is a clean
+    // answer produced by looking at nothing, in the question that matters most on a change somebody
+    // did not write by hand.
+    checks.push({
+      question: 'Can the tests in this change fail?',
+      standing: 'not-checked',
+      answer: `vouch would not judge any of the ${evidence.couldNotJudge} test(s) here: each body is one call to something it cannot follow, so whether they assert anything is unknown`,
+      decidedBy: 'tewip vouch',
     });
   } else {
     checks.push({

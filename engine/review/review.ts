@@ -1,3 +1,4 @@
+import { relative, sep } from 'node:path';
 // The risk review of a change, from what Tewip already knows about this project.
 //
 // A general coding agent can read a diff. What it cannot do is tell you that the two tests covering
@@ -144,6 +145,20 @@ const when = (at: string): string => {
 };
 
 /** The review as a person reads it, before they read the diff. */
+/**
+ * The `cd` a suggested command needs, when the runner does not run from the repository root.
+ *
+ * A framework builds its commands relative to its own working directory, which in a layered
+ * project is not where the report is read. `tewip review` printed
+ * `node --test "test/flaky.test.ts"` for a file at engine/test/flaky.test.ts, and copying it gave
+ * "Could not find 'test/flaky.test.ts'". The command is the one line in a review somebody acts on;
+ * it has to work where they paste it.
+ */
+export function runFrom(root: string, cwd: string): string {
+  const where = relative(root, cwd).split(sep).join('/');
+  return where && where !== '.' ? `cd ${where} && ` : '';
+}
+
 export function renderReview(review: Review, runCommand?: (files: string[]) => string): string {
   const lines = [`# Risk review: ${review.range}`, '', `${review.files.length} changed file(s).`, ''];
 

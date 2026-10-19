@@ -6,7 +6,7 @@ import { chooseFramework, detectFrameworks } from '../quality/frameworks.ts';
 import { readTriageRecords, datasetFiles } from '../../reporters/store.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 import { coverageFor, uncovered } from './coverage.ts';
-import { renderReview, reviewChange, type Review } from './review.ts';
+import { renderReview, reviewChange, runFrom, type Review } from './review.ts';
 import { changedExpectations } from './expectations.ts';
 import { changedAgreements } from './agreements.ts';
 import { changedTestLines, vouchChanged } from '../vouch/changed.ts';
@@ -47,7 +47,14 @@ export async function runReview(cmd: ReviewCommand): Promise<Review | null> {
   // Printing a Playwright command for a file Playwright never runs is worse than printing nothing.
   const framework = chooseFramework(detectFrameworks(cmd.root), undefined, false) ?? detectFrameworks(cmd.root)[0] ?? null;
   const ownsThem = framework ? review.runFirst.some((f) => resolve(cmd.root, f).startsWith(resolve(framework.testDir))) : false;
-  const runCommand = framework && ownsThem ? (chosen: string[]) => chosen.map((f) => framework.command(resolve(cmd.root, f))).join(' && ') : undefined;
+  // And from the directory the runner actually runs in. `framework.command` builds paths relative
+  // to the framework's own cwd, which in a layered project is not where the report is read: this
+  // printed `node --test "test/flaky.test.ts"` for a file at engine/test/flaky.test.ts, and copying
+  // it gave "Could not find 'test/flaky.test.ts'". The one actionable line in a review has to work
+  // where somebody pastes it.
+  const prefix = framework ? runFrom(cmd.root, framework.cwd) : '';
+  const runCommand =
+    framework && ownsThem ? (chosen: string[]) => prefix + chosen.map((f) => framework.command(resolve(cmd.root, f))).join(' && ') : undefined;
 
   // Whether the tests in this change could ever fail. Costs nothing, calls no model, and is the one
   // question an agent-written diff most needs asked of it.

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { coverageFor, isCode, isCoverableCode, uncovered } from '../review/coverage.ts';
-import { renderReview, reviewChange } from '../review/review.ts';
+import { renderReview, reviewChange, runFrom } from '../review/review.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
 
 const NL = String.fromCharCode(10);
@@ -176,5 +176,27 @@ describe('a word match that is really a coincidence', () => {
     // "version-compare.d.ts has no test that imports it. A mistake there would reach production
     // unnoticed" is a demand the reader cannot act on.
     assert.deepEqual(uncovered(['src/types.d.ts', 'src/cart.ts'], []), ['src/cart.ts']);
+  });
+});
+
+describe('the command a review tells you to run', () => {
+  // It is the one line in the report somebody acts on. `tewip review` printed
+  // `node --test "test/flaky.test.ts"` for a file at engine/test/flaky.test.ts, because the runner
+  // builds paths relative to its own working directory and the report is read from the repository
+  // root. Pasting it gave "Could not find 'test/flaky.test.ts'".
+  it('says where to run it when the runner lives in a subdirectory', () => {
+    assert.equal(runFrom('/repo', '/repo/engine'), 'cd engine && ');
+    assert.equal(runFrom('/repo', '/repo/packages/api'), 'cd packages/api && ');
+  });
+
+  it('says nothing when the runner is the repository root', () => {
+    assert.equal(runFrom('/repo', '/repo'), '');
+  });
+
+  it('uses forward slashes whatever the platform gave it', () => {
+    // A command is pasted into a shell, and a Windows path separator is not one.
+    const prefix = runFrom(join('/repo'), join('/repo', 'engine', 'sub'));
+    assert.equal(prefix.includes(String.fromCharCode(92)), false, prefix);
+    assert.match(prefix, /^cd engine\/sub && $/);
   });
 });

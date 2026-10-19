@@ -13,6 +13,17 @@ import { EFCORE, KNEX, LIQUIBASE, SEQUELIZE } from './dialect-rules-node.ts';
 
 export type Dialect = 'sql' | 'django' | 'rails' | 'alembic' | 'typeorm' | 'sequelize' | 'knex' | 'efcore' | 'liquibase' | 'laravel' | 'unknown';
 
+/**
+ * Every way a knex migration declares its rollback.
+ *
+ * `exports.down =` is the CommonJS form the first three projects this was verified against all
+ * used - opencollective-api, Matterwiki and Coflnet. TypeScript projects do not write that, and
+ * nocodb writes `const down = async (knex) => {` in 236 of its 219 migration files (some declare
+ * more than one). Missing the declaration means the rollback is read as part of the change, and a
+ * migration that adds tables is reported as one that drops them.
+ */
+const KNEX_DOWN = /^\s*(?:export\s+)?(?:const|let|var)\s+down\s*=|^\s*(?:export\s+)?(?:async\s+)?function\s+down\s*\(|^\s*(?:module\.)?exports\.down\s*=/;
+
 export function dialectOf(file: string, text: string): Dialect {
   const path = file.split('\\').join('/').toLowerCase();
   if (path.endsWith('.sql')) return 'sql';
@@ -138,7 +149,11 @@ export function forwardOnly(dialect: Dialect, text: string): string {
       // ecosystems as dropping a column. Verified on real migrations from opencollective-api,
       // Matterwiki and Coflnet, all three of which have their only destructive call in down.
       (dialect === 'sequelize' && /^\s*down\s*:/.test(line)) ||
-      (dialect === 'knex' && /^\s*(?:exports\.down|module\.exports\.down)\s*=/.test(line)) ||
+      // Knex is declared four ways and the pattern only knew two of them. nocodb writes
+      // `const down = async (knex) => {` in 236 of its migrations and `exports.down` in none, so
+      // every rollback was read as part of the change: 122 findings, each one a dropTable in a
+      // `down` that undoes its own `up`, which is what a reversible migration is.
+      (dialect === 'knex' && KNEX_DOWN.test(line)) ||
       (dialect === 'efcore' && /^\s*protected\s+override\s+void\s+Down\s*\(/.test(line)) ||
       // Laravel's rollback, which in real files often comes *before* up().
       (dialect === 'laravel' && /^\s*(?:public\s+)?function\s+down\s*\(/.test(line)) ||

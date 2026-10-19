@@ -11,7 +11,7 @@ import { describe, it } from 'node:test';
 import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
 import { schemaFiles } from '../schema/schema-command.ts';
-import { MIGRATION } from '../schema/migration-files.ts';
+import { MIGRATION, SCHEMA_FILE } from '../schema/migration-files.ts';
 import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -741,5 +741,62 @@ describe('where Alembic actually keeps its revisions', () => {
     assert.notEqual(dialectOf('alembic/versions/helpers.py', notAMigration), 'alembic');
     const real = ['def upgrade():', '    op.drop_table("document_terms")'].join(String.fromCharCode(10));
     assert.equal(dialectOf('alembic/versions/0001_drop.py', real), 'alembic');
+  });
+});
+
+describe('a rollback is not the change, and a fixture is not a migration', () => {
+  // Both found on nocodb, the first knex project `schema` was measured against. It reported 129
+  // findings there; one of them was real.
+  it('reads a knex down declared as a const, not only as exports.down', () => {
+    // nocodb writes `const down = async (knex) => {` in 236 of its migrations and `exports.down` in
+    // none. Missing the declaration means the rollback is read as part of the change, so a
+    // migration that creates tables is reported as one that drops them - 122 times over.
+    const NL = String.fromCharCode(10);
+    const migration = [
+      'const up = async (knex) => {',
+      "  await knex.schema.createTable('nc_plugins', (t) => { t.string('id'); });",
+      '};',
+      '',
+      'const down = async (knex) => {',
+      "  await knex.schema.dropTable('nc_plugins');",
+      '};',
+      '',
+      'export { up, down };',
+    ].join(NL);
+    assert.equal(dialectOf('packages/nocodb/src/meta/migrations/v1/nc_001_init.ts', migration), 'knex');
+    // `forwardOnly` is what removes the rollback; `readFramework` reads what is left. The
+    // command applies them in that order, so the test has to as well.
+    const findings = readFramework('knex', forwardOnly('knex', migration));
+    assert.equal(findings.filter((f) => f.risk === 'destroys-data').length, 0, 'the dropTable is in down(), which is what reversible means');
+  });
+
+  it('still reports a drop that is in up', () => {
+    // nc_096_deprecate_unused.ts, the one real finding in that repository.
+    const NL = String.fromCharCode(10);
+    const migration = [
+      'const up = async (knex) => {',
+      "  await knex.schema.dropTableIfExists('nc_shared_bases');",
+      '};',
+      '',
+      'const down = async (knex) => {};',
+    ].join(NL);
+    assert.equal(readFramework('knex', forwardOnly('knex', migration)).some((f) => f.risk === 'destroys-data'), true);
+  });
+
+  it('does not read a sample database dump as a migration', () => {
+    // nocodb ships Sakila for its tests. Eleven of those dumps were read as migrations that destroy
+    // data - 102 of the 106 findings - and not one will ever run against a live database.
+    assert.equal(MIGRATION.test('packages/nocodb/tests/sqlite-dump/sqlite-sakila-drop-objects.sql'), false);
+    assert.equal(SCHEMA_FILE.test('packages/nocodb/tests/mysql-dump/mysql-sakila-delete-data.sql'), false);
+  });
+
+  it('does not read a test-only app migration as one that ships', () => {
+    assert.equal(SCHEMA_FILE.test('saleor/tests/migrations/0001_initial.py'), false);
+    assert.equal(MIGRATION.test('saleor/tests/migrations/0001_initial.py'), false);
+  });
+
+  it('still reads a real migration beside them', () => {
+    assert.equal(SCHEMA_FILE.test('saleor/order/migrations/0160_drop_nickname.py'), true);
+    assert.equal(MIGRATION.test('db/migrate/20240101_add_index.rb'), true);
   });
 });

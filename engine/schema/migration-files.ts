@@ -33,8 +33,22 @@ const COULD_HOLD_DDL = /\.(sql|py|rb|js|mjs|cjs|ts|php|cs|xml|ya?ml|json|go|exs?
 // strength of its directory alone is what filled that list with source files.
 const FLYWAY_JAVA = /(^|\/)[VR][\w.]*__[\w.-]+\.(java|kt|scala)$/;
 
+/**
+ * Directories whose SQL is a fixture, not something anybody deploys.
+ *
+ * `SCHEMA_FILE` takes any `.sql` file anywhere, because a migration really can sit outside a
+ * directory that says so. nocodb ships the Sakila sample database for its tests, and eleven of
+ * those dumps - `mysql-sakila-drop-objects.sql`, `oracle-sakila-delete-data.sql` and the rest -
+ * were read as migrations that destroy data. They were 102 of the 106 findings in that repository,
+ * and not one of them will ever run against a live database.
+ *
+ * This command answers what a migration will do to a running system, so a file under `tests` is
+ * out of scope by the question's own definition.
+ */
+const FIXTURE_DIR = /(^|\/)(tests?|__tests__|specs?|fixtures?|testdata|mocks?)\//i;
+
 export const MIGRATION = {
-  test: (path: string): boolean => MIGRATION_DIR.test(path) && (COULD_HOLD_DDL.test(path) || FLYWAY_JAVA.test(path)),
+  test: (path: string): boolean => !FIXTURE_DIR.test(path) && MIGRATION_DIR.test(path) && (COULD_HOLD_DDL.test(path) || FLYWAY_JAVA.test(path)),
 };
 
 // A changelog is often not in a directory that says so. OpenMRS keeps 44 Liquibase changelogs in
@@ -47,7 +61,8 @@ export const MIGRATION = {
 // project has more than one database. Letting a release-notes `CHANGELOG.xml` through costs nothing,
 // because `dialectOf` still has to find `<databaseChangeLog` in it before it is read as a migration.
 export const NAMED_MIGRATION = /(^|\/)[\w.-]*(liquibase|changelog)[\w.-]*\.(xml|ya?ml|json)$/i;
-export const SCHEMA_FILE = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate|versions)\/.*\.(py|rb|js|ts|php|cs)$/i;
+const SCHEMA_PATH = /\.(sql)$|(^|\/)(migrations?|migration|db\/migrate|versions)\/.*\.(py|rb|js|ts|php|cs)$/i;
+export const SCHEMA_FILE = { test: (path: string): boolean => !FIXTURE_DIR.test(path) && SCHEMA_PATH.test(path) };
 
 /**
  * Every migration in a whole repository, by the same filters a diff is read through.

@@ -124,27 +124,27 @@
           "expect": {
             "files": 1229,
             "tests": 12982,
-            "crash-only": 187,
-            "checks": 12772,
+            "crash-only": 181,
+            "checks": 12778,
             "cannot-tell": 23,
             "swallows-failure": 0,
             "unfinished-expectation": 0,
             "tautology": 0,
             "never-runs": 0
           },
-          "verified": "2026-10-12. Zero accusations across 12,982 tests - no tautology, no unfinished expectation, no swallowed failure, nothing skipped - and that agrees with the hand verification in Phase 42, which read the condemned list and found it empty. The four zeros are the measurement here: Saleor is the largest Python suite in the corpus and the one most likely to surface a false accusation, so any of them moving off zero needs reading before it is believed."
+          "verified": "2026-10-12. Zero accusations across 12,982 tests - no tautology, no unfinished expectation, no swallowed failure, nothing skipped - and that agrees with the hand verification in Phase 42, which read the condemned list and found it empty. The four zeros are the measurement here: Saleor is the largest Python suite in the corpus and the one most likely to surface a false accusation, so any of them moving off zero needs reading before it is believed. | 2026-10-19: six tests moved from crash-only to checks when the comment stripper stopped cutting inside strings. test_price_override_reason.py assigns reason = \"Loyalty pricing rule #42\"; the old stripper cut at that # - inside a string - left an unterminated quote, and the string blanker that runs next swallowed the rest of the body. Those tests assert three things each. Read by hand."
         },
         {
           "command": "schema",
           "expect": {
-            "filesRead": 1433,
+            "filesRead": 1432,
             "findings": 743,
             "slow": 285,
             "breaks-old-code": 323,
             "destroys-data": 37,
             "locks-writes": 98
           },
-          "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep."
+          "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep. | 2026-10-19: one file fewer. saleor/tests/migrations/0001_initial.py is a Django migration belonging to a test-only app, and this command answers what a migration will do to a live database."
         },
         {
           "command": "secrets",
@@ -338,6 +338,15 @@
             "ask-a-person": 125
           },
           "verified": "2026-10-17. 481 barriers, 377 of them click-without-keyboard, which is what a Vue codebase of this age looks like: plain <div @click> with no role, no tabindex and no key handler. Samples read by hand - Breadcrumb.vue's nc-breadcrumb-item is exactly that. It was 286 until Vue's modifier forms were understood: the attribute is @click.stop, not @click, and nocodb has 455 of those."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 219,
+            "findings": 1,
+            "destroys-data": 1
+          },
+          "verified": "read by hand on 2026-10-19. The single finding is real: nc_096_deprecate_unused.ts drops nc_shared_bases in its up(). Before this phase the same checkout gave 129 findings - 122 of them dropTable calls inside knex down() functions, which is what a reversible migration is, and 102 of those were Sakila sample-database dumps under packages/nocodb/tests/ that nobody will ever deploy."
         }
       ]
     },

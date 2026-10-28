@@ -97,3 +97,26 @@ describe('reading what collided', () => {
     assert.equal(findLiteral('const a = "x-1"; const b = `x-1`;', 'x-1').length, 2);
   });
 });
+
+// Phase 118: the same hole in the data fixer. See autofix.test.ts for how it is reachable.
+describe('the original value goes back when the verifier throws', () => {
+  it('restores the file and lets the error through', async () => {
+    const files = new Map([[SPEC, SOURCE]]);
+    let wroteAChange = false;
+    const d: AutofixDeps = {
+      allowedRoot: 'C:/repo/tests',
+      readFile: (p) => files.get(p) ?? '',
+      writeFile: (p, c) => {
+        if (c !== SOURCE) wroteAChange = true;
+        files.set(p, c);
+      },
+      verify: async (): Promise<{ passed: boolean; detail: string }> => {
+        throw new TypeError('The "file" argument must be of type string. Received undefined');
+      },
+      loadSnapshot: () => null,
+    };
+    await assert.rejects(() => attemptDataFix({ record: record(PG), diagnosis, action, specFile: SPEC }, d), /must be of type string/);
+    assert.equal(wroteAChange, true, 'this proves nothing unless a candidate really was written');
+    assert.equal(files.get(SPEC), SOURCE);
+  });
+});

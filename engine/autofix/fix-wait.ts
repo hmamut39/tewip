@@ -71,24 +71,32 @@ export async function attemptWaitFix(
   const candidates = waitFixCandidates(source, site, framework);
   if (candidates.length === 0) return stop('no-candidate', 'nothing to replace the wait with: the next step does not act on an element');
 
-  for (const c of candidates) {
-    deps.writeFile(specFile, applyWaitFix(source, site, c.replacement));
-    const shown = c.replacement === '' ? 'removing the wait' : c.replacement.trim();
-    let passed = 0;
-    let detail = '';
-    for (let i = 0; i < passes; i++) {
-      const outcome = await deps.verify(specFile, title);
-      detail = outcome.detail;
-      if (!outcome.passed) break;
-      passed++;
+  // A verifier that throws instead of answering is the one way out of this loop that leaves the
+  // file changed. Of all the fixes this is the worst one to leave behind: a deleted wait looks
+  // like a deliberate edit, and the test it was holding up passes by luck. See autofix.ts.
+  try {
+    for (const c of candidates) {
+      deps.writeFile(specFile, applyWaitFix(source, site, c.replacement));
+      const shown = c.replacement === '' ? 'removing the wait' : c.replacement.trim();
+      let passed = 0;
+      let detail = '';
+      for (let i = 0; i < passes; i++) {
+        const outcome = await deps.verify(specFile, title);
+        detail = outcome.detail;
+        if (!outcome.passed) break;
+        passed++;
+      }
+      result.attempts.push({ candidate: shown, passes: passed, detail });
+      result.log.push(`tried ${shown}: passed ${passed} of ${passes} run(s)${passed === passes ? '' : ` (${detail})`}`);
+      if (passed === passes) {
+        if (!keep) deps.writeFile(specFile, source);
+        return { ...result, status: 'fixed', applied: keep, replacement: c.replacement, why: c.why, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
+      }
+      deps.writeFile(specFile, source);
     }
-    result.attempts.push({ candidate: shown, passes: passed, detail });
-    result.log.push(`tried ${shown}: passed ${passed} of ${passes} run(s)${passed === passes ? '' : ` (${detail})`}`);
-    if (passed === passes) {
-      if (!keep) deps.writeFile(specFile, source);
-      return { ...result, status: 'fixed', applied: keep, replacement: c.replacement, why: c.why, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
-    }
+  } catch (error) {
     deps.writeFile(specFile, source);
+    throw error;
   }
   return stop('all-candidates-failed', `no candidate passed ${passes} runs in a row; original file restored`);
 }

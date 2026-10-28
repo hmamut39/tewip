@@ -114,3 +114,54 @@ describe('reviseAfterVerification', () => {
     assert.match(action.summary, /possible real bug/);
   });
 });
+
+// Phase 118: the file goes back unless the fix is proved - including when the verifier throws.
+//
+// Every path out of the candidate loop restored the file except the one nobody wrote. `deps.verify`
+// runs the project's own test command through `spawnSync`, and `spawnSync` throws outright rather
+// than reporting a failure when it is handed no command at all - TRIAGE_VERIFY_COMMAND set to
+// whitespace does exactly that. The exception then left the developer's test file holding a
+// candidate Tewip never verified, in CI, on the branch ci/fix-pr.ts opens a pull request from.
+//
+// fix-selector.ts and code-fix.ts already restored on a throw. autofix.ts, fix-wait.ts and
+// fix-data.ts predate them and did not, which is the only reason this was anywhere to be found.
+describe('a verifier that throws is not a licence to keep the change', () => {
+  const checkout = { record: record('starts checkout', "locator('#checkout-button')", 2), diagnosis: drift, action: decide(drift), specFile: SPEC };
+
+  const throwing = (): AutofixDeps & { file: string } => {
+    const state = {
+      file: SOURCE,
+      allowedRoot: '/sandbox/tests',
+      readFile: () => state.file,
+      writeFile: (_: string, content: string) => void (state.file = content),
+      verify: async (): Promise<{ passed: boolean; detail: string }> => {
+        throw new TypeError('The "file" argument must be of type string. Received undefined');
+      },
+      loadSnapshot: () => snapshot,
+    };
+    return state;
+  };
+
+  it('puts the file back and lets the error through', async () => {
+    const d = throwing();
+    await assert.rejects(() => attemptFix(checkout, d), /must be of type string/, 'the failure is not swallowed either');
+    assert.equal(d.file, SOURCE, 'the developer keeps the file they had');
+  });
+
+  it('leaves nothing behind even when the throw comes after a write', async () => {
+    // The ordering that matters: the candidate is written first, then verified. A throw in between
+    // is precisely when the file is already changed.
+    const d = throwing();
+    let wroteACandidate = false;
+    const watched: AutofixDeps = {
+      ...d,
+      writeFile: (file: string, content: string) => {
+        if (content !== SOURCE) wroteACandidate = true;
+        d.writeFile(file, content);
+      },
+    };
+    await assert.rejects(() => attemptFix(checkout, watched));
+    assert.equal(wroteACandidate, true, 'this proves nothing unless a candidate really was written');
+    assert.equal(d.file, SOURCE);
+  });
+});

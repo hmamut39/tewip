@@ -100,3 +100,36 @@ describe('replacing a fixed wait with a condition', () => {
     assert.deepEqual(waitFixCandidates(source, findFixedWaits(source)[0], 'other'), []);
   });
 });
+
+// Phase 118: a verifier that throws must not leave the wait deleted.
+//
+// Of the three fixers this is the worst one to leave a half-done change in. A removed
+// `waitForTimeout` reads as a deliberate cleanup, and the test it was propping up now passes by
+// luck - which is the exact failure this fixer exists to repair, reintroduced by the repair.
+describe('the wait goes back when the verifier throws', () => {
+  const throwing = (source = SOURCE) => {
+    const files = new Map([[SPEC, source]]);
+    let wroteAChange = false;
+    const d: AutofixDeps = {
+      allowedRoot: 'C:/repo/tests',
+      readFile: (p) => files.get(p) ?? '',
+      writeFile: (p, c) => {
+        if (c !== source) wroteAChange = true;
+        files.set(p, c);
+      },
+      verify: async (): Promise<{ passed: boolean; detail: string }> => {
+        throw new TypeError('The "file" argument must be of type string. Received undefined');
+      },
+      loadSnapshot: () => null,
+    };
+    return { d, files, wrote: () => wroteAChange };
+  };
+
+  it('restores the file and lets the error through', async () => {
+    const { d, files, wrote } = throwing();
+    await assert.rejects(() => attemptWaitFix({ record, diagnosis, action, specFile: SPEC }, d), /must be of type string/);
+    assert.equal(wrote(), true, 'this proves nothing unless the wait really was removed first');
+    assert.equal(files.get(SPEC), SOURCE, 'the fixed wait is still there');
+    assert.match(files.get(SPEC) ?? '', /await page\.waitForTimeout\(3000\);/);
+  });
+});

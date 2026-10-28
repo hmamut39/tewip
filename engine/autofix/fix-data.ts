@@ -78,23 +78,30 @@ export async function attemptDataFix(
   const candidates = dataFixCandidates(found.value, languageOf(specFile));
   if (candidates.length === 0) return stop('no-candidate', `Tewip does not know how to write a unique value in ${specFile}`);
 
-  for (const c of candidates) {
-    deps.writeFile(specFile, applyDataFix(source, site, c.expression));
-    let passed = 0;
-    let detail = '';
-    for (let i = 0; i < passes; i++) {
-      const outcome = await deps.verify(specFile, title);
-      detail = outcome.detail;
-      if (!outcome.passed) break;
-      passed++;
+  // The file goes back unless the fix is proved, including when the verifier throws rather than
+  // answering - which was the one way out of this loop that did not. See autofix.ts.
+  try {
+    for (const c of candidates) {
+      deps.writeFile(specFile, applyDataFix(source, site, c.expression));
+      let passed = 0;
+      let detail = '';
+      for (let i = 0; i < passes; i++) {
+        const outcome = await deps.verify(specFile, title);
+        detail = outcome.detail;
+        if (!outcome.passed) break;
+        passed++;
+      }
+      result.attempts.push({ candidate: c.expression, passes: passed, detail });
+      result.log.push(`tried ${c.expression}: passed ${passed} of ${passes} run(s)${passed === passes ? ', so the value really is different every run' : ` (${detail})`}`);
+      if (passed === passes) {
+        if (!keep) deps.writeFile(specFile, source);
+        return { ...result, status: 'fixed', applied: keep, replacement: c.expression, why: c.why, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
+      }
+      deps.writeFile(specFile, source);
     }
-    result.attempts.push({ candidate: c.expression, passes: passed, detail });
-    result.log.push(`tried ${c.expression}: passed ${passed} of ${passes} run(s)${passed === passes ? ', so the value really is different every run' : ` (${detail})`}`);
-    if (passed === passes) {
-      if (!keep) deps.writeFile(specFile, source);
-      return { ...result, status: 'fixed', applied: keep, replacement: c.expression, why: c.why, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
-    }
+  } catch (error) {
     deps.writeFile(specFile, source);
+    throw error;
   }
   return stop('all-candidates-failed', `no candidate passed ${passes} runs in a row; original file restored`);
 }

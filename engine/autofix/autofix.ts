@@ -88,17 +88,30 @@ export async function attemptFix({ record, diagnosis, action, specFile }: FixInp
   const candidates = [...strictCandidates(diagnosis), ...candidatesFor(locator, snapshot, MAX_CANDIDATES)].slice(0, MAX_CANDIDATES);
   if (candidates.length === 0) return stop('no-candidate', 'no element on the failure-time page is similar enough to the old locator');
 
-  for (const c of candidates) {
-    const patched = source.slice(0, site.start) + c.expression + source.slice(site.end);
-    deps.writeFile(specFile, patched);
-    const outcome = await deps.verify(specFile, title);
-    result.attempts.push({ candidate: c.expression, passed: outcome.passed, detail: outcome.detail });
-    result.log.push(`tried ${c.expression} (similarity ${c.score.toFixed(2)}): ${outcome.passed ? 'test passed' : `test still fails (${outcome.detail})`}`);
-    if (outcome.passed) {
-      if (!keep) deps.writeFile(specFile, source);
-      return { ...result, status: 'fixed', applied: keep, replacement: c.expression, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
+  // Every path out of the loop below puts the file back - except the one nobody wrote, where the
+  // verifier throws instead of answering. `deps.verify` runs the project's own test command, and
+  // `spawnSync` throws outright rather than reporting a failure when it is handed no command at
+  // all: TRIAGE_VERIFY_COMMAND set to whitespace does it. The developer's test file is then left
+  // holding a candidate Tewip never verified, in CI, on a branch this then opens a pull request
+  // from - and the one promise this file makes is that the file goes back unless the fix is proved.
+  //
+  // fix-selector.ts and code-fix.ts already did this. These three predate them.
+  try {
+    for (const c of candidates) {
+      const patched = source.slice(0, site.start) + c.expression + source.slice(site.end);
+      deps.writeFile(specFile, patched);
+      const outcome = await deps.verify(specFile, title);
+      result.attempts.push({ candidate: c.expression, passed: outcome.passed, detail: outcome.detail });
+      result.log.push(`tried ${c.expression} (similarity ${c.score.toFixed(2)}): ${outcome.passed ? 'test passed' : `test still fails (${outcome.detail})`}`);
+      if (outcome.passed) {
+        if (!keep) deps.writeFile(specFile, source);
+        return { ...result, status: 'fixed', applied: keep, replacement: c.expression, log: keep ? result.log : [...result.log, 'suggestion check only: file restored'] };
+      }
+      deps.writeFile(specFile, source);
     }
+  } catch (error) {
     deps.writeFile(specFile, source);
+    throw error;
   }
   return stop('all-candidates-failed', `all ${candidates.length} candidate(s) failed verification; original file restored`);
 }

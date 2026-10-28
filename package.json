@@ -61,6 +61,7 @@
     "harvest": "node eval/harvest/harvest.ts",
     "eval:synthetic": "node eval/evaluate.ts eval/ground-truth.synthetic.jsonl",
     "eval:recall": "node eval/recall-counting.ts",
+    "eval:incident": "node eval/incident-frames.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",

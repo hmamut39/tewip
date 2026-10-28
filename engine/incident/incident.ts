@@ -34,7 +34,32 @@ export interface Incident {
 const LIBRARY = /[\\/](?:node_modules|site-packages|dist-packages|vendor|\.venv|venv|target[\\/]dependency|gems)[\\/]/;
 const RUNTIME = /^(?:node:|internal[\\/]|java\.|javax\.|sun\.|System\.|Microsoft\.)/;
 
-const ours = (file: string): boolean => Boolean(file) && !LIBRARY.test(file) && !RUNTIME.test(file);
+/** Served over the network, so not a path in this repository however much of it is ours. */
+const SERVED = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * Does this name a file at all? A path has a separator, or at least a file extension: `Pay.java`
+ * from a JVM frame is a file, and `debugger eval code` is not.
+ */
+const namesAFile = (file: string): boolean => /[\\/]/.test(file) || /\.[a-z0-9]{1,10}$/i.test(file);
+
+/**
+ * Is this the project's own code - somewhere a reproduction could be written against?
+ *
+ * The two tests above used to be the whole of it, so anything that was not a library path was
+ * claimed as this project's code, including things that are not files at all. Firefox names an
+ * evaluated script `debugger eval code`, and a browser frame names a URL. On a real gutenberg
+ * trace `incident` reported **"Your code in the trace: @debugger eval code:1"**, and then told the
+ * test writer to "call the code in @debugger eval code around line 1 the way production did". The
+ * project's actual frames - transform-block-to.ts:14 and list.spec.js:309 - were sixth and seventh
+ * in the list, behind five things that were not code.
+ *
+ * Both kinds still enter `frames`, so nothing in the trace is lost; they are only not offered as
+ * the place to write a test. "No file of yours appears in the trace" is a usable answer. A
+ * confident pointer at a file that does not exist is not.
+ */
+const ours = (file: string): boolean =>
+  Boolean(file) && !LIBRARY.test(file) && !RUNTIME.test(file) && !SERVED.test(file) && namesAFile(file);
 
 /**
  * A `file://` URL back into the path it names.
@@ -56,9 +81,25 @@ function asPath(file: string): string {
   }
 }
 
+/**
+ * Firefox and Safari print `name@location`, not `at name (location)`, and Playwright passes those
+ * lines through with its own `at ` prefix bolted on - so a real trace contains
+ * `at Ai@http://host/bundle.js?ver=x:2:58423`. Read as a V8 frame, the whole thing including the
+ * function name becomes the file.
+ *
+ * The separator is only honoured when what precedes it holds no path separator, because
+ * `/app/node_modules/@scope/pkg/index.js` is a path with an `@` in it and splitting that would
+ * destroy it.
+ */
+function splitFirefox(file: string, fn: string): { file: string; fn: string } {
+  const at = /^(?<fn>[^\s/\\@]*)@(?<rest>.+)$/.exec(file);
+  if (!at?.groups) return { file, fn };
+  return { file: at.groups.rest, fn: fn || at.groups.fn };
+}
+
 const frame = (file: string, line: unknown, fn: string): Frame => {
-  const path = asPath(file);
-  return { file: path, line: Number(line) || 0, fn: String(fn ?? ''), ours: ours(path) };
+  const split = splitFirefox(asPath(file), String(fn ?? ''));
+  return { file: split.file, line: Number(line) || 0, fn: split.fn, ours: ours(split.file) };
 };
 
 /** A stack trace as every language prints it, which is the fallback when there is no tool. */

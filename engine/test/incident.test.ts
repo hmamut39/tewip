@@ -199,3 +199,102 @@ describe('how the written test imports the code it is about', () => {
     assert.equal(importPathFor('/p', '/p', 'src/pay.ts'), './src/pay.ts');
   });
 });
+
+// Phase 114: "Your code in the trace: @debugger eval code:1".
+//
+// Measured by running `framesFromStack` over the 7,984 real stack traces in the kept histories.
+// Firefox prints frames as `name@location`, not `at name (location)`, and Playwright passes those
+// through with its own `at ` prefix bolted on - so a real gutenberg trace contains
+// `at Ai@http://localhost:8889/.../index.min.js?ver=50a951f318fffff24607:2:58423`. Read as a V8
+// frame, the whole thing became the file name.
+//
+// Worse than the mis-parse: `ours()` tested only for library paths, so all five of those
+// non-frames were claimed as this project's own code - and `ourFrames()[0]` is what the report
+// names as "Your code in the trace" and what the scenario tells the test writer to exercise. The
+// project's real frames were sixth and seventh, behind five things that are not code.
+//
+// Across the corpus the fix takes 114 false claims away (90 that are not file names, 24 URLs) and
+// changes nothing else: the parse rate is the same 7,053 of 7,984, and every stack that had an own
+// frame still has one.
+describe('a frame that is not a file is not your code', () => {
+  // Trimmed from the real record, verbatim in shape.
+  const FIREFOX = [
+    'Error: page.evaluate: can\'t access property "name", i is undefined',
+    '    at Ai@http://localhost:8889/wp-content/plugins/gutenberg/build/scripts/blocks/index.min.js?ver=50a951f318fffff24607:2:58423',
+    '    at @debugger eval code line 311 > eval:4:92',
+    '    at evaluate@debugger eval code:313:16',
+    '    at Editor.transformBlockTo (/home/runner/work/gutenberg/gutenberg/packages/e2e-test-utils-playwright/src/editor/transform-block-to.ts:14:18)',
+    '    at /home/runner/work/gutenberg/gutenberg/test/e2e/specs/editor/blocks/list.spec.js:309:3',
+  ].join(NL);
+
+  it('offers the first real file as the place to write a test, not an evaluated script', () => {
+    const our = ourFrames(readIncident(FIREFOX));
+    assert.equal(our.length, 2, 'two of the five frames name a file in this project');
+    assert.match(our[0].file, /transform-block-to\.ts$/, 'the report says this is your code in the trace');
+    assert.equal(our[0].line, 14);
+  });
+
+  it('keeps every frame, so nothing in the trace is lost', () => {
+    const frames = framesFromStack(FIREFOX);
+    assert.equal(frames.length, 5, 'all five are read');
+    assert.deepEqual(
+      frames.filter((f) => !f.ours).map((f) => f.file),
+      [
+        'http://localhost:8889/wp-content/plugins/gutenberg/build/scripts/blocks/index.min.js?ver=50a951f318fffff24607',
+        'debugger eval code line 311 > eval',
+        'debugger eval code',
+      ],
+      'they are still there; they are just not claimed as yours',
+    );
+  });
+
+  it('reads the function name out of a Firefox frame instead of into the file name', () => {
+    const frames = framesFromStack(FIREFOX);
+    assert.equal(frames[0].fn, 'Ai');
+    assert.equal(frames[0].line, 2);
+    assert.equal(frames[2].fn, 'evaluate');
+  });
+
+  it('does not split a path that simply contains an @', () => {
+    // The separator must not eat a scoped package. This path is the project's own code.
+    const frames = framesFromStack('    at render (/home/me/app/packages/@acme/ui/button.tsx:88:3)');
+    assert.deepEqual(frames, [{ file: '/home/me/app/packages/@acme/ui/button.tsx', line: 88, fn: 'render', ours: true }]);
+  });
+
+  it('says no file of yours is in the trace rather than naming one that is not a file', () => {
+    const only = readIncident(['TypeError: x is undefined', '    at @debugger eval code:1:44'].join(NL));
+    assert.equal(only.frames.length, 1, 'the frame is read');
+    assert.deepEqual(ourFrames(only), [], 'and it is not offered as somewhere to write a test');
+  });
+});
+
+// The same defect in Chromium's syntax, which the corpus measurement turned up after the Firefox
+// one: V8 names an evaluated script `<anonymous>`, and an eval inside an eval
+// `eval at evaluate (:311:30), <anonymous>`. 90 of the 114 frames the fix stopped claiming are
+// these, not the Firefox ones. Verbatim lines from gutenberg's kept history.
+describe('an evaluated script is not a file either', () => {
+  const CHROMIUM = [
+    'Error: page.evaluate: ReferenceError: x is not defined',
+    '    at eval (eval at evaluate (:311:30), <anonymous>:6:15)',
+    '    at UtilityScript.evaluate (<anonymous>:313:16)',
+    '    at UtilityScript.<anonymous> (<anonymous>:1:44)',
+    '    at Editor.insertBlock (/home/runner/work/gutenberg/gutenberg/packages/e2e-test-utils-playwright/src/editor/insert-block.ts:21:5)',
+  ].join(NL);
+
+  it('does not offer <anonymous> as the code to write a test against', () => {
+    const our = ourFrames(readIncident(CHROMIUM));
+    assert.equal(our.length, 1, 'one of the four frames names a file');
+    assert.match(our[0].file, /insert-block\.ts$/);
+    assert.equal(our[0].line, 21);
+  });
+
+  it('reads all four frames, keeping the ones it will not vouch for', () => {
+    const frames = framesFromStack(CHROMIUM);
+    assert.equal(frames.length, 4);
+    assert.deepEqual(frames.filter((f) => !f.ours).map((f) => f.file), [
+      'eval at evaluate (:311:30), <anonymous>',
+      '<anonymous>',
+      '<anonymous>',
+    ]);
+  });
+});

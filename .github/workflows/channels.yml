@@ -26,9 +26,15 @@ jobs:
       - name: Ask every channel
         run: |
           set +e
-          node scripts/channels.ts | tee answer.txt
+          # Not `node scripts/channels.ts | tee answer.txt`, which is what this shipped as. After a
+          # pipeline `$?` is the status of the last command in it - tee, which always succeeds - so
+          # `code` was always 0 and this step could not fail. It ran every night for nine days while
+          # npm sat a release behind, printed BEHIND every time, and went green every time. A check
+          # that cannot fail is not a check, which is the thing it exists to say about other people.
+          node scripts/channels.ts > answer.txt 2>&1
           code=$?
           set -e
+          cat answer.txt
           {
             echo '```'
             cat answer.txt

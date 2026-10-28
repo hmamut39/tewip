@@ -3,7 +3,11 @@
 // three are the whole point of the report, so they are what is tested here.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { asLabels, ENOUGH_FOR_A_PATTERN, renderLearning, whatWeLearned } from '../learn/learn.ts';
+import { runLearn } from '../learn/learn-command.ts';
 import { errorShape } from '../signature.ts';
 import type { Correction } from '../corrections.ts';
 import type { VerdictCorrection } from '../learn/verdicts.ts';
@@ -152,5 +156,64 @@ describe('what the corrections add up to', () => {
     assert.equal(lines[0].category, 'TIMING');
     assert.equal(lines[0].was, 'REAL_BUG', 'both answers, so the pair is usable as training data');
     assert.equal(lines[0].source, 'tewip correct');
+  });
+});
+
+// Phase 114: the denominator still counted attempts.
+//
+// A prior phase fixed half of this - it used to divide the corrections by every kept failure,
+// including thousands nothing had diagnosed - and left a comment saying why that made Tewip look
+// more accurate than it is. The other half survived: it counted diagnosed *records*, and the
+// reporter writes one record per attempt, so a retried test put three in the denominator. The
+// numerator cannot follow, because a correction is matched by test and error shape and three
+// attempts share one. So the correction rate came out low, in the same direction, for the same
+// reason, in a report whose only job is to say how often Tewip is wrong.
+describe('the correction rate counts decisions, not attempts', () => {
+  const NOW = '2026-09-01T00:00:00.000Z';
+  const error = 'TimeoutError: locator.click: Timeout 10000ms exceeded waiting for the cart';
+
+  const project = (retries: number): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-learn-'));
+    const where = join(root, '.tewip', 'history', 'app');
+    mkdirSync(where, { recursive: true });
+    const lines = Array.from({ length: retries }, (_, retry) =>
+      JSON.stringify({
+        schemaVersion: 1, testId: 'cart > totals', file: 'tests/a.spec.ts', status: 'failed',
+        errorMessage: error, errorStack: '', duration: 1, retry, attachments: [], runId: 'r1',
+        gitSha: 'abc1234', timestamp: NOW,
+        diagnosis: { category: 'REAL_BUG', confidence: 0.8, source: 'rules', evidence: [] },
+      }),
+    );
+    writeFileSync(join(where, 'triage.jsonl'), `${lines.join(NL)}${NL}`, 'utf8');
+    writeFileSync(
+      join(where, 'corrections.jsonl'),
+      `${JSON.stringify({ schemaVersion: 1, testId: 'cart > totals', errorShape: errorShape(error), category: 'TIMING', by: 'sam', at: '2026-09-02T00:00:00.000Z', reason: 'it passes on a rerun', source: 'test', wasCategory: 'REAL_BUG' })}${NL}`,
+      'utf8',
+    );
+    return root;
+  };
+
+  it('counts one decision for a test retried three times', () => {
+    const report = runLearn({ root: project(3), days: 30 } as unknown as Parameters<typeof runLearn>[0]);
+    assert.match(report, /1 diagnosis correction\(s\) of 1 diagnoses kept here, which is 100\.0%/);
+    assert.doesNotMatch(report, /of 3 diagnoses kept here/, 'three attempts were one decision');
+  });
+
+  it('still counts a second run as a second decision', () => {
+    // The guard above must not be bought by collapsing every run into one.
+    const root = project(1);
+    const where = join(root, '.tewip', 'history', 'app');
+    appendFileSync(
+      join(where, 'triage.jsonl'),
+      `${JSON.stringify({
+        schemaVersion: 1, testId: 'cart > totals', file: 'tests/a.spec.ts', status: 'failed',
+        errorMessage: error, errorStack: '', duration: 1, retry: 0, attachments: [], runId: 'r2',
+        gitSha: 'def5678', timestamp: NOW,
+        diagnosis: { category: 'REAL_BUG', confidence: 0.8, source: 'rules', evidence: [] },
+      })}${NL}`,
+      'utf8',
+    );
+    const report = runLearn({ root, days: 30 } as unknown as Parameters<typeof runLearn>[0]);
+    assert.match(report, /of 2 diagnoses kept here/, 'the same test failing in two runs is two decisions');
   });
 });

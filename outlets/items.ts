@@ -65,8 +65,18 @@ function relationOf(d: Diagnosis, h: TestHistory): TriageItem['relation'] {
   return { verdict: 'unclear', why: 'not enough history on other commits to tell' };
 }
 
+/**
+ * Who decided, and from which data, on the line a person reads under every failure.
+ *
+ * `engineVersion` is declared `string` on the record type, so nothing ever flagged this - but a
+ * stored history is untyped JSON read off disk, and any history written before the field existed
+ * simply has no value for it. Every item in those reports said `source: rules undefined`. A report
+ * that cannot name the version that decided should say so in words; printing the word `undefined`
+ * at a reader is the kind of small dishonesty that makes them doubt the numbers next to it.
+ */
 export function sourceOf(d: Diagnosis, dataset: string): string {
-  const who = d.source === 'human' ? 'corrected by a person' : d.source === 'llm' ? `AI ${d.model ?? 'model'}` : `rules ${d.engineVersion}`;
+  const rules = d.engineVersion ? `rules ${d.engineVersion}` : 'rules (version not recorded)';
+  const who = d.source === 'human' ? 'corrected by a person' : d.source === 'llm' ? `AI ${d.model ?? 'model'}` : rules;
   return `${who} · data: ${dataset}`;
 }
 

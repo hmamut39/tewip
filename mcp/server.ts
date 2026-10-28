@@ -138,7 +138,7 @@ server.registerTool(
   {
     title: 'Has this happened here before?',
     description:
-      "What this project already concluded about a failure like this one: earlier failures that resemble it, what was decided, by which rule or which person, and the run each came from. Answers from records Tewip kept, never from a guess - and says plainly when nothing resembles it. Use before deciding what a failure means, and for questions like \"have we seen this error before?\".",
+      "What this project already concluded about a failure like this one: earlier problems that resemble it, how many separate runs each happened in, what was decided, by which rule or which person, and the run each came from. Retries of one failure are counted once, and it says so when the earlier decisions disagreed. Answers from records Tewip kept, never from a guess - and says plainly when nothing resembles it. Use before deciding what a failure means, and for questions like \"have we seen this error before?\".",
     inputSchema: {
       question: z.string().describe('An error message, or a question in plain words'),
       project,

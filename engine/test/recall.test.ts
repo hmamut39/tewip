@@ -197,9 +197,13 @@ describe('recalling from a history nothing has diagnosed yet', () => {
     const root = project();
     const { report, searched } = await recallReport({ root, question: 'locator.waitFor: Timeout 30000ms exceeded waiting for getByRole' });
     assert.equal(searched, 3, 'every kept failure is searchable, diagnosed on read the way the note already does');
-    assert.match(report, /earlier failure\(s\) look like this one/);
+    assert.match(report, /earlier problem\(s\) in this project's history look like this one/);
     assert.match(report, /collaborators are listed/, 'the two timeouts are what the question was about');
     assert.doesNotMatch(report, /this is new here/, 'it is not new here: it has happened twice');
+    // Phase 114: the same test failing the same way in r1 and r2 is one problem seen twice, not
+    // two problems. Both runs still have to be accounted for in the answer.
+    assert.equal(report.match(/collaborators are listed/g)?.length, 1, 'one row for the one problem');
+    assert.match(report, /Seen in 2 separate run\(s\)/, 'and the second run is still counted, not dropped');
   });
 
   it('counts what it searched, not what is on disk', async () => {

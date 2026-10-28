@@ -39,7 +39,16 @@ export function runLearn(cmd: LearnCommand): string {
   // divides the corrections by a number far larger than the decisions Tewip actually made, making
   // it look more accurate than it is. Found next to the same mistake in `recall`, which called 1,305
   // undiagnosed failures "searched".
-  const diagnosed = records.filter((r) => (r.diagnosis as { category?: string } | undefined)?.category).length;
+  //
+  // Phase 114 found the other half of it. Counting *records* was still wrong, because the reporter
+  // writes one record per attempt: a retried test with a stored diagnosis put three in the
+  // denominator. The numerator cannot move with it - a correction is matched by test and error
+  // shape, so three attempts share one correction - so the rate came out low for the same reason
+  // the comment above was written, and in the same direction. One decision per failing test per
+  // run is the number Tewip actually made.
+  const diagnosed = new Set(
+    records.filter((r) => (r.diagnosis as { category?: string } | undefined)?.category).map((r) => `${r.runId}::${r.testId}`),
+  ).size;
   const learned = whatWeLearned(corrections, loadVerdicts(cmd.root), records, diagnosed);
   const report = renderLearning(learned);
   console.log(report);

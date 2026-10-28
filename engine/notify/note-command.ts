@@ -50,7 +50,6 @@ export async function runNote(cmd: NoteCommand): Promise<string> {
     const runs = readRunSummaries(history.runs).filter((r) => r.startedAt >= since);
     if (records.length === 0 && runs.length === 0) continue;
     totalRuns += runs.length;
-    totalFailures += records.length;
 
     // The diagnoses were made when each failure happened; nothing is judged again here - except
     // where a person overruled one. This note is the report a lead reads, and it was printing
@@ -59,7 +58,12 @@ export async function runNote(cmd: NoteCommand): Promise<string> {
     const index = new HistoryIndex(records, runs);
     const where = join(cmd.root, '.tewip', 'history', name);
     const items: TriageItem[] = await buildItems(records, index, { dataset: `history: ${name}`, llm: null, reuseStoredDiagnoses: true, corrections: loadCorrections(where) });
-    parts.push(`## ${name}`, '', `${runs.length} run(s), ${records.length} failure(s).`, '');
+    // Phase 114: this counted records, and a retried test is one record per attempt. So the
+    // heading said "1053 failure(s)" while the digest and the quality breakdown directly beneath
+    // it - which count `items`, one per failing test per run - added up to 553. A report cannot
+    // disagree with its own body. `items` is the number both halves now use.
+    totalFailures += items.length;
+    parts.push(`## ${name}`, '', `${runs.length} run(s), ${items.length} failure(s).`, '');
     if (items.length > 0) {
       parts.push(digestView(items, runs, `history: ${name}`).markdown, '', qualityView(items, `history: ${name}`).markdown, '');
       const top = [...countBy(items).entries()].sort((a, b) => b[1] - a[1])[0];

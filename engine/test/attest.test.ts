@@ -180,3 +180,49 @@ describe('what --verify establishes, and what it must refuse to', () => {
     assert.equal(digestOf(withSeal('aaa')), digestOf(withSeal('bbb')));
   });
 });
+
+// Phase 114: a signed bundle that counted the same failure three times.
+//
+// The reporter writes one record per attempt, so a retried test arrived here three times and
+// became three identical claims under a `failures` count that agreed with them. In the worst real
+// gutenberg run that is 492 claims about 164 failing tests; 50 of its 283 runs were affected. Of
+// everything in Tewip this is the worst place for it: an attestation exists to be checked by
+// somebody who was not there, and a count they cannot trust makes the rest of it worthless.
+//
+// The sharper half was the contradiction. Where one attempt was decided and another was not, the
+// same test produced a claim *and* a refusal - one sealed document asserting a cause and
+// disclaiming it at the same time.
+describe('a retried test is one failure, even in a signed bundle', () => {
+  const thrice = (testId: string, category: string) => [decided(testId, category), decided(testId, category), decided(testId, category)];
+
+  it('makes one claim about a test that failed three times, and says it failed three times', () => {
+    const a = bundle(thrice('a > three', 'ENV'));
+    assert.equal(a.claims.length, 1, 'three attempts at one failing test are one claim');
+    assert.equal(a.claims[0].attempts, 3, 'and the three attempts are recorded, not discarded');
+    assert.equal(a.failures, 1, 'one test failed, however many times it was retried');
+  });
+
+  it('never claims and disclaims the same test at once', () => {
+    // Attempt one undecided, attempt two decided: the test is decided.
+    const a = bundle([undecided('a > three'), decided('a > three', 'TIMING')]);
+    assert.equal(a.claims.length, 1);
+    assert.equal(a.claims[0].attempts, 2);
+    assert.deepEqual(a.refusals, [], 'a decided test is not also a refusal');
+    assert.equal(a.failures, 1);
+  });
+
+  it('still refuses a test no attempt of which was ever decided', () => {
+    // The guard above must not be bought by letting a decided attempt launder an undecided test.
+    const a = bundle([undecided('a > three'), undecided('a > three')]);
+    assert.deepEqual(a.claims, [], 'nothing was settled, so nothing is claimed');
+    assert.equal(a.refusals.length, 1, 'and it is refused once, not once per attempt');
+    assert.equal(a.failures, 1);
+  });
+
+  it('keeps separate tests separate', () => {
+    const a = bundle([...thrice('a > one', 'ENV'), ...thrice('a > two', 'TIMING')]);
+    assert.equal(a.claims.length, 2);
+    assert.equal(a.failures, 2);
+    assert.deepEqual(a.claims.map((c) => c.attempts), [3, 3]);
+  });
+});

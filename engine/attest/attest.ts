@@ -26,6 +26,12 @@ export interface AttestedClaim {
   /** rules | llm | person - who decided. A claim with no source is never written. */
   decidedBy: string;
   confidence: number;
+  /**
+   * How many attempts of this test failed in the run. Retries are not separate claims - see
+   * `oneClaimPerTest` - but they are not thrown away either: a test that failed every attempt and
+   * one that failed once are different facts about the same run.
+   */
+  attempts: number;
 }
 
 export interface Refusal {
@@ -58,6 +64,38 @@ export interface Attestation {
 
 const sourceOf = (record: TriageRecord): string => String((record.diagnosis as { source?: string } | undefined)?.source ?? '');
 
+/**
+ * One record per failing test, with the attempts counted.
+ *
+ * Phase 114. A retried test is written to the history once per attempt, and this file turned each
+ * attempt into its own claim. In the worst real gutenberg run that is **492 claims about 164
+ * failing tests**, each one repeated three times, under `failures: 492` - inside a signed bundle
+ * whose entire purpose is to be a precise record somebody else can check. 50 of that project's 283
+ * runs were affected.
+ *
+ * It was not only duplication. Where one attempt was decided and another was not, the same test
+ * produced both a claim and a refusal: a signed document asserting a cause and disclaiming it at
+ * once. So the attempt that carries a decision is the one kept, and a test is undecided here only
+ * when no attempt of it was decided at all.
+ */
+function oneClaimPerTest(records: TriageRecord[]): Array<{ record: TriageRecord; attempts: number }> {
+  const byTest = new Map<string, { record: TriageRecord; attempts: number }>();
+  for (const record of records) {
+    const already = byTest.get(record.testId);
+    if (!already) {
+      byTest.set(record.testId, { record, attempts: 1 });
+      continue;
+    }
+    already.attempts += 1;
+    const decided = (r: TriageRecord): boolean => {
+      const category = (r.diagnosis as { category?: string } | undefined)?.category;
+      return Boolean(category) && category !== 'UNKNOWN' && Boolean(sourceOf(r));
+    };
+    if (!decided(already.record) && decided(record)) already.record = record;
+  }
+  return [...byTest.values()];
+}
+
 /** The evidence line a person reads: the first thing the deciding layer actually said. */
 function evidenceOf(record: TriageRecord): string {
   const evidence = (record.diagnosis as { evidence?: Array<{ message?: string }> } | undefined)?.evidence ?? [];
@@ -87,7 +125,8 @@ export function attestRun(
   // this bundle will not vouch for.
   const refusals: Refusal[] = [...given];
 
-  for (const record of records) {
+  const perTest = oneClaimPerTest(records);
+  for (const { record, attempts } of perTest) {
     const diagnosis = record.diagnosis as { category?: string; confidence?: number } | undefined;
     const category = diagnosis?.category ?? 'UNKNOWN';
     const decidedBy = sourceOf(record);
@@ -106,6 +145,7 @@ export function attestRun(
       runId: record.runId,
       decidedBy,
       confidence: Number(diagnosis?.confidence ?? 0),
+      attempts,
     });
   }
 
@@ -116,7 +156,8 @@ export function attestRun(
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     testsAttempted: Object.keys(run.attempts ?? {}).length,
-    failures: records.length,
+    // Failing tests, not failure records. This read 492 for a run in which 164 tests failed.
+    failures: perTest.length,
     checked,
     notChecked,
     claims,

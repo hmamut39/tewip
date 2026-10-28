@@ -142,3 +142,36 @@ describe('a quote that is mostly real and wrong where it matters', () => {
     assert.equal(quoteHolds('src/a.js: const greeting = "hello";', quoted), true, 'quote characters');
   });
 });
+
+// Phase 116: measured on 14 strangers' repositories rather than on three cases found by hand.
+//
+// 852 real lines pulled out of real source in ten languages, and 2,268 fabrications built from
+// them the four ways a model misquotes a line it is looking straight at - one digit changed, one
+// identifier swapped, two real lines welded, the words reordered. Every real line is accepted and
+// not one fabrication gets through. Run the same measurement against the logic this replaced and
+// 1,544 of the 2,268 (68.1%) are accepted, and 6 of the real lines are refused: the contiguous
+// match is better in both directions, which was believed and had never been shown.
+//
+// See eval/spec-quotes.ts. The one case below is the only surprise the corpus turned up, and it
+// is written down here because it is deliberate and looks like a bug.
+describe('what the corpus measurement pinned down', () => {
+  // Verbatim from dispatch/tests/factories.py, which is where this surfaced.
+  const PY = ['import uuid', 'from datetime import datetime', '', 'from factory import (', '    LazyAttribute,', ')'].join(NL);
+  const sources = [{ file: 'tests/factories.py', content: PY }];
+
+  it('accepts a quote that spans two lines, because that is a real quote', () => {
+    assert.equal(quoteHolds('tests/factories.py: from datetime import datetime from factory import (', sources), true);
+  });
+
+  it('and so accepts a fragment across the line break, which is the price of that', () => {
+    // "datetime import datetime from" is not a statement, but it is text that is in the file, and
+    // the normalisation that lets an honest two-line quote through lets this through too. Do not
+    // "fix" it by forbidding the line break: that would refuse every multi-line quote, and no
+    // model has ever been seen to produce a fragment like this. It is recorded, not defended.
+    assert.equal(quoteHolds('tests/factories.py: datetime import datetime from', sources), true);
+  });
+
+  it('still refuses words of the file in an order the file never had', () => {
+    assert.equal(quoteHolds('tests/factories.py: datetime from import uuid datetime', sources), false);
+  });
+});

@@ -116,7 +116,11 @@ describe('what the extension offers and what it can actually do', () => {
   });
 
   it('has the files it says it has', () => {
-    for (const file of ['extension.js', 'run.js', 'engine-version.js', 'version-compare.js', 'README.md', 'icon.png']) {
+    // factories.js and correct.js were added in 0.14.0. There is no .vscodeignore and no `files`
+    // field, so vsce takes whatever is in the folder - which means a packaging change could drop
+    // one of these and the extension would fail at `require` time, in the editor, on a user's
+    // machine, with nothing here having complained.
+    for (const file of ['extension.js', 'factories.js', 'correct.js', 'run.js', 'engine-version.js', 'version-compare.js', 'README.md', 'icon.png']) {
       assert.ok(existsSync(join(DIR, file)), `extensions/vscode/${file} is missing`);
     }
   });

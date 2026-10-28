@@ -2,7 +2,7 @@
   "name": "tewip",
   "displayName": "Tewip - can these tests actually fail?",
   "description": "Proves the work: can these tests fail at all, what will this migration do to a live database, who cannot use this interface, is it slower, and why did CI fail.",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "publisher": "hmamut39",
   "license": "Apache-2.0",
   "repository": {
@@ -145,6 +145,31 @@
       {
         "command": "tewip.perf",
         "title": "Tewip: Is this change slower?"
+      },
+      {
+        "command": "tewip.correct",
+        "title": "Tewip got this wrong - tell it",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.incident",
+        "title": "Reproduce a production incident as a test…",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.note",
+        "title": "Quality note for the last week",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.spec",
+        "title": "Write an epic and its stories…",
+        "category": "Tewip"
+      },
+      {
+        "command": "tewip.plan",
+        "title": "Write a test plan…",
+        "category": "Tewip"
       }
     ],
     "configuration": {

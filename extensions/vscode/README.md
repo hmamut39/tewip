@@ -27,11 +27,16 @@ Tewip never changes your code from the editor.
 - **Risk review of this change.** Before anyone reads your diff: which tests cover it and how, which have flaked before, what has gone wrong in these areas, what nothing tests at all.
 - **Which flaky tests to quarantine.** What each one costs in CI time, and the evidence behind the verdict.
 - **Check secrets and dependencies.** Credentials committed by accident and vulnerable packages, each judged for whether it can actually be reached.
+- **Tewip got this wrong - tell it.** Pick what it was wrong about - a diagnosis, a flaky verdict, a security finding, a design difference, a refused build - say what it really is, and it answers with your decision from then on and says the decision was yours. It never acts on a correction by itself.
 - **What our corrections add up to.** Where Tewip has been wrong in the same way more than once, so the rule gets fixed instead of the correction being re-entered.
 - **Has this happened here before?** Paste an error, or ask in plain words, and get the earlier problems that resemble it, how many separate runs each happened in, what was decided and by which rule or person. Retries of one failure count once. No model is called.
 - **Is this requirement covered, and passing?** The thread from the plan someone asked for to the test that covers it. A scenario counts as covered only when a real test can be named.
 - **What should be done next about...?** Give it a goal and it says what it would do next and why, in a fixed published order. It decides; it never changes a file.
 - **What did Tewip check for this build?** One artifact with the claims and their evidence, what it refused to decide, and what it did not check at all.
+- **Reproduce a production incident as a test.** Open a Sentry export, an OpenTelemetry span or a stack trace somebody pasted into a ticket. Tewip writes a test against the code the trace names, runs it, and keeps it only if it fails for the incident's own reason.
+- **The week, for a lead.** A quality note written from the runs Tewip already diagnosed. No model is called, so it costs nothing.
+- **An epic and its stories.** From this project's code, tests and failure history. Anything it says the system already does is quoted from a file it read; what it cannot quote becomes an open question.
+- **A test plan grounded in the project.** Its existing tests, the change in front of you, and what has failed here before.
 
 ## Requirements
 

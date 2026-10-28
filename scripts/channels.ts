@@ -31,9 +31,50 @@ function hoursSinceTag(version: string): number | null {
     return null;
   }
 }
+/**
+ * Files under `dir` that changed after the commit which set `version` in its package.json.
+ *
+ * The editor extension carries its own version, bumped only when the extension changes, and the
+ * two marketplaces render its README on the listing page. So the version can be right and the
+ * listing wrong, and this check used to call that "ok" - which is the stale channel looking
+ * exactly like a current one, from the very tool written to stop that happening.
+ *
+ * Returning `{}` is not "nothing changed". A shallow CI checkout has no history to search, and a
+ * check that cannot run must say so rather than return a clean answer, which is the mistake this
+ * whole file exists to avoid making.
+ */
+function changedSinceVersionSet(dir: string, version: string): { changedSince?: string[]; contentProblem?: string; ageHours?: number | null } {
+  const git = (args: string[]) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let setAt = '';
+  try {
+    setAt = git(['log', '-1', '--format=%H', '-S', `"version": "${version}"`, '--', `${dir}/package.json`]);
+  } catch (error) {
+    return { contentProblem: `git could not be read (${error instanceof Error ? error.message.split('\n')[0] : 'unknown'})` };
+  }
+  if (!setAt) return { contentProblem: `no commit in this checkout sets version ${version} in ${dir}/package.json - a shallow clone cannot answer this` };
+  // How old this version is, measured from when it was set rather than from the repository's own
+  // release tag. The extension has its own version line and is usually many releases behind the
+  // tag that last shipped it, so borrowing the repository's tag age would report a version bumped
+  // ten minutes ago as having been missing for 220 hours.
+  let ageHours: number | null = null;
+  try {
+    const when = new Date(git(['log', '-1', '--format=%cI', setAt])).getTime();
+    if (Number.isFinite(when)) ageHours = (Date.now() - when) / 3_600_000;
+  } catch {
+    ageHours = null;
+  }
+  try {
+    return { changedSince: git(['diff', '--name-only', `${setAt}..HEAD`, '--', dir]).split('\n').filter(Boolean), ageHours };
+  } catch (error) {
+    return { contentProblem: `git diff failed (${error instanceof Error ? error.message.split('\n')[0] : 'unknown'})`, ageHours };
+  }
+}
+
 const pkg = read('package.json');
 const server = read('server.json');
 const extension = read('extensions/vscode/package.json');
+/** Both marketplaces publish the same folder, so they share one answer. */
+const extensionContent = changedSinceVersionSet('extensions/vscode', extension.version);
 
 /**
  * Fetches JSON, or says why it could not. Never throws: an outage is a reading, not a crash.
@@ -83,7 +124,7 @@ async function mcpChannel(): Promise<ChannelReading> {
 async function openVsxChannel(): Promise<ChannelReading> {
   const asked = `GET open-vsx.org/api/${extension.publisher}/${extension.name} -> version`;
   const { body, problem } = await ask<{ version?: string; error?: string }>(`https://open-vsx.org/api/${extension.publisher}/${extension.name}`);
-  return { name: 'Open VSX', expected: extension.version, ageHours: hoursSinceTag(pkg.version), actual: body?.version ?? null, problem: body?.version ? undefined : body?.error ?? problem, asked };
+  return { name: 'Open VSX', expected: extension.version, actual: body?.version ?? null, problem: body?.version ? undefined : body?.error ?? problem, asked, ...extensionContent };
 }
 
 async function marketplaceChannel(): Promise<ChannelReading> {
@@ -94,15 +135,18 @@ async function marketplaceChannel(): Promise<ChannelReading> {
     body: JSON.stringify({ filters: [{ criteria: [{ filterType: 7, value: `${extension.publisher}.${extension.name}` }] }], flags: 914 }),
   });
   const version = body?.results?.[0]?.extensions?.[0]?.versions?.[0]?.version ?? null;
-  return { name: 'VS Code Marketplace', expected: extension.version, ageHours: hoursSinceTag(pkg.version), actual: version, problem: version ? undefined : problem ?? 'the gallery returned no version for this extension', asked };
+  return { name: 'VS Code Marketplace', expected: extension.version, actual: version, problem: version ? undefined : problem ?? 'the gallery returned no version for this extension', asked, ...extensionContent };
 }
 
 const readings = await Promise.all([npmChannel(), mcpChannel(), openVsxChannel(), marketplaceChannel()]);
-const { text, behind, unverified } = renderChannels(readings);
+const { text, behind, unverified, stale } = renderChannels(readings);
 console.log(text);
 
 // A channel that is definitively behind is a failure. One that could not be read is not - a
 // registry outage is not a release problem - but it is printed above in its own right, and the
-// exit code says which of the two happened.
+// exit code says which of the three happened.
 if (behind > 0) process.exit(1);
 if (unverified > 0) process.exit(2);
+// The right version carrying the wrong content. Last, because it is the least urgent of the
+// three and the most easily fixed, not because it is acceptable.
+if (stale > 0) process.exit(3);

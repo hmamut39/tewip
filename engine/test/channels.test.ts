@@ -169,3 +169,60 @@ describe('a release in flight is not a release that failed', () => {
     assert.equal(out.waiting, 0);
   });
 });
+
+// Phase 117: the right version number, carrying the wrong thing.
+//
+// The editor extension keeps its own version line, bumped only when the extension changes, and
+// both marketplaces render its README on the listing page. Phase 114 corrected a sentence in that
+// README; the version did not move, because no code changed. This check then said
+//
+//   ok    Open VSX    has 0.13.0.
+//
+// which was true, while both listings went on showing the old sentence - and it said it to the
+// standing rule's own face: a stale channel looks exactly like a current one, and here the check
+// written to stop that was the thing making it look current.
+//
+// Comparing versions is not comparing content, and this is the only place where every number can
+// agree and the channel still be wrong.
+describe('a channel can carry the right version and the wrong content', () => {
+  it('says so, and names what changed', () => {
+    const v = judge(reading({ changedSince: ['extensions/vscode/README.md'] }));
+    assert.equal(v.verdict, 'stale-content');
+    assert.match(v.says, /has 0\.70\.14, which is the version this repository expects/);
+    assert.match(v.says, /extensions\/vscode\/README\.md/, 'the reader is told which file, not just that one exists');
+    assert.match(v.says, /what is published is not what is here/);
+  });
+
+  it('is plainly current when nothing changed since that version was set', () => {
+    const v = judge(reading({ changedSince: [] }));
+    assert.equal(v.verdict, 'current');
+    assert.equal(v.says, 'has 0.70.14.');
+  });
+
+  it('never reports an unmade content check as a clean one', () => {
+    // A shallow CI checkout has no history to search. "Could not tell" is not "nothing changed",
+    // and this whole file exists because those two were once the same sentence.
+    const v = judge(reading({ contentProblem: 'a shallow clone cannot answer this' }));
+    assert.equal(v.verdict, 'current', 'the version really did check out');
+    assert.match(v.says, /could not be checked: a shallow clone cannot answer this/);
+  });
+
+  it('counts the stale ones separately from the behind ones and the unreadable ones', () => {
+    const { text, behind, unverified, stale } = renderChannels([
+      reading({ name: 'npm', actual: '0.70.12' }),
+      reading({ name: 'MCP registry', actual: null, problem: 'timed out' }),
+      reading({ name: 'Open VSX', changedSince: ['extensions/vscode/README.md'] }),
+      reading({ name: 'VS Code Marketplace', changedSince: [] }),
+    ]);
+    assert.deepEqual({ behind, unverified, stale }, { behind: 1, unverified: 1, stale: 1 });
+    assert.match(text, /1 channel\(s\) carry the right version and the wrong content: Open VSX/);
+    assert.doesNotMatch(text, /Every channel answered, and every one has this release/, 'a stale channel is not everything being fine');
+    assert.ok(text.split(NL).some((l) => l.startsWith('  STALE ')), 'and it is marked so it cannot be skimmed past');
+  });
+
+  it('lists the channels whose content nobody could check', () => {
+    const { text, stale } = renderChannels([reading({ name: 'Open VSX', contentProblem: 'a shallow clone cannot answer this' })]);
+    assert.equal(stale, 0, 'not knowing is not the same as being stale');
+    assert.match(text, /whether their content is current could not be checked: Open VSX/);
+  });
+});

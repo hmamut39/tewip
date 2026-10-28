@@ -38,12 +38,29 @@ export interface ChannelReading {
    * reads as "waiting 38 hours", which is a sentence nobody can mistake for fine.
    */
   ageHours?: number | null;
+  /**
+   * Files that make up this channel's published artifact and have changed since its current
+   * version was set - so the channel carries the right version number and the wrong content.
+   *
+   * The editor extension keeps its own version line, bumped only when the extension itself
+   * changes, and the marketplaces render its README on the listing page. Phase 114 corrected a
+   * line of that README; the version did not move, because the extension's code did not. This
+   * check then reported "ok - Open VSX has 0.13.0", which was true, while both listings went on
+   * showing the old sentence. The standing rule on this project is that a stale channel looks
+   * exactly like a current one, and here the check itself was the thing that made it look current.
+   *
+   * An empty array means nothing changed. `undefined` with `contentProblem` set means nobody
+   * could tell, which is not the same thing and is never rendered as if it were.
+   */
+  changedSince?: string[];
+  /** Why the content comparison could not be made. */
+  contentProblem?: string;
 }
 
 /** A gap younger than this is a release in flight, not a release that failed. */
 export const PATIENCE_HOURS = 12;
 
-export type Verdict = 'current' | 'behind' | 'waiting' | 'ahead' | 'unverified';
+export type Verdict = 'current' | 'behind' | 'waiting' | 'ahead' | 'unverified' | 'stale-content';
 
 export interface ChannelVerdict extends ChannelReading {
   verdict: Verdict;
@@ -71,7 +88,22 @@ export function judge(reading: ChannelReading): ChannelVerdict {
     };
   }
   const order = compareVersions(reading.actual, reading.expected);
-  if (order === 0) return { ...reading, verdict: 'current', says: `has ${reading.actual}.` };
+  if (order === 0) {
+    // The version matching is not the same as the content matching, and this is the only place
+    // where a channel can be wrong while every number agrees.
+    const changed = reading.changedSince ?? [];
+    if (changed.length > 0) {
+      const some = changed.slice(0, 4).join(', ');
+      const rest = changed.length > 4 ? `, and ${changed.length - 4} more` : '';
+      return {
+        ...reading,
+        verdict: 'stale-content',
+        says: `has ${reading.actual}, which is the version this repository expects - but ${changed.length} file(s) changed since that version was set (${some}${rest}), so what is published is not what is here.`,
+      };
+    }
+    const caveat = reading.contentProblem ? ` Whether its files changed since could not be checked: ${reading.contentProblem}.` : '';
+    return { ...reading, verdict: 'current', says: `has ${reading.actual}.${caveat}` };
+  }
   if (order < 0) {
     const age = reading.ageHours;
     // Unknown age is treated as old. Not knowing how long a channel has been behind is not a reason
@@ -92,10 +124,17 @@ export function judge(reading: ChannelReading): ChannelVerdict {
   return { ...reading, verdict: 'ahead', says: `has ${reading.actual}, which is newer than this checkout's ${reading.expected}.` };
 }
 
-const MARK: Record<Verdict, string> = { current: 'ok', behind: 'BEHIND', waiting: 'waiting', ahead: 'ahead', unverified: 'UNVERIFIED' };
+const MARK: Record<Verdict, string> = {
+  current: 'ok',
+  behind: 'BEHIND',
+  waiting: 'waiting',
+  ahead: 'ahead',
+  unverified: 'UNVERIFIED',
+  'stale-content': 'STALE',
+};
 
-/** The whole answer, written so the two states that need a person are impossible to skim past. */
-export function renderChannels(readings: ChannelReading[]): { text: string; behind: number; unverified: number; waiting: number } {
+/** The whole answer, written so the states that need a person are impossible to skim past. */
+export function renderChannels(readings: ChannelReading[]): { text: string; behind: number; unverified: number; waiting: number; stale: number } {
   const judged = readings.map(judge);
   const width = Math.max(...judged.map((c) => c.name.length), 12);
   const lines = ['Where Tewip is published', ''];
@@ -116,9 +155,22 @@ export function renderChannels(readings: ChannelReading[]): { text: string; behi
   if (waiting.length > 0) {
     lines.push(`${waiting.length} channel(s) have not caught up with this release yet: ${waiting.map((c) => c.name).join(', ')}. Nothing is wrong unless this is still true tomorrow.`, '');
   }
-  if (behind.length === 0 && unverified.length === 0 && waiting.length === 0) lines.push('Every channel answered, and every one has this release.', '');
+  const stale = judged.filter((c) => c.verdict === 'stale-content');
+  if (stale.length > 0) {
+    lines.push(
+      `${stale.length} channel(s) carry the right version and the wrong content: ${stale.map((c) => c.name).join(', ')}. Their published files were built before those changes, so what people read there is out of date. Bump the version and release to fix it.`,
+      '',
+    );
+  }
+  const unchecked = judged.filter((c) => c.verdict === 'current' && c.contentProblem);
+  if (unchecked.length > 0) {
+    lines.push(`${unchecked.length} channel(s) are on the right version, but whether their content is current could not be checked: ${unchecked.map((c) => c.name).join(', ')}.`, '');
+  }
+  if (behind.length === 0 && unverified.length === 0 && waiting.length === 0 && stale.length === 0) {
+    lines.push('Every channel answered, and every one has this release.', '');
+  }
 
   lines.push('How each was asked:');
   for (const c of judged) lines.push(`  ${c.name}: ${c.asked}`);
-  return { text: lines.join(String.fromCharCode(10)), behind: behind.length, unverified: unverified.length, waiting: waiting.length };
+  return { text: lines.join(String.fromCharCode(10)), behind: behind.length, unverified: unverified.length, waiting: waiting.length, stale: stale.length };
 }

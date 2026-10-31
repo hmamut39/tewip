@@ -158,8 +158,7 @@ export function urlCredentialIsHarmless(value: string, line: string): string | n
 }
 
 export function looksPlanted(value: string, line: string, file: string, before = '', whole = value): string | null {
-  // Substitution, not illustration. `${GH_PUSH_TOKEN}` read as "the value says it is an example":
-  // right verdict, wrong reason, and the reason is the part a reader checks. See jwt.ts.
+  // Substitution, not illustration: `${VAR}` is not an example, and the reason is what gets read.
   if (/\$\{|\{\{|\$\(/.test(value)) return 'the value is a variable, substituted at run time, so no credential is written here';
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
   // Only the words *around* the credential are commentary about it. A hostname or a database name

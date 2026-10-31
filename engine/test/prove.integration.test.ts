@@ -401,3 +401,51 @@ describe('proving a change tests the change', () => {
     assert.ok(proof.tried.some((t) => t.mutant.line !== 2), 'the whole-file run reaches past the change');
   });
 });
+
+// Phase 120a: two gaps Tewip found in Phase 120, an hour after it was written.
+//
+// Running the new pull-request prover against its own commit reported two mutants nobody noticed,
+// and both were real:
+//
+//   line 63  `return out` -> `return null`   the git-failed path had no test at all
+//   line 79  `set.size > 0` -> `set.size >= 0`  the empty-set guard had no test, and was wrong
+//
+// The second was a bug, not just a gap. A file whose only change is deletions produces a hunk with
+// a count of 0, so its set stayed empty, so the guard kept it out of the map - and a file absent
+// from the map falls back to mutating the whole file. The one case nobody pictured put
+// deletion-only changes straight back on the path Phase 120 existed to close.
+describe('what the prover found in the prover', () => {
+  const repo = (): { root: string; git: (...a: string[]) => string } => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-lines-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    return { root, git };
+  };
+
+  it('records a file whose change only deletes lines, with no lines to prove', () => {
+    const { root, git } = repo();
+    writeFileSync(join(root, 'a.js'), file('const a = 1;', 'const b = 2;', 'const c = 3;'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    writeFileSync(join(root, 'a.js'), file('const a = 1;', 'const c = 3;'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'delete one line');
+
+    const byFile = changedLinesByFile(root, 'HEAD~1..HEAD');
+    assert.ok(byFile.has('a.js'), 'the file must be in the map, or the prover falls back to the whole file');
+    assert.deepEqual([...(byFile.get('a.js') ?? [])], [], 'and it added no line, so there is nothing of this change to mutate');
+  });
+
+  it('returns nothing at all when git cannot resolve the range', () => {
+    // Nothing, not an empty entry: not knowing which lines changed is a reason to fall back to the
+    // whole file, which is the opposite of knowing the change added none.
+    const { root, git } = repo();
+    writeFileSync(join(root, 'a.js'), file('const a = 1;'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    const byFile = changedLinesByFile(root, 'no-such-ref...also-missing');
+    assert.equal(byFile.size, 0);
+  });
+});

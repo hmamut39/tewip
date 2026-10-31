@@ -71,12 +71,18 @@ export function changedLinesByFile(root: string, range: string): Map<string, Set
     }
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
     if (!hunk || !file) continue;
-    // A hunk with a count of 0 is a pure deletion: there is no new line to mutate.
+    // A hunk with a count of 0 is a pure deletion: there is no new line to mutate. The file is
+    // still recorded, with an empty set, and that distinction carries the whole meaning. Absent
+    // means git said nothing, so fall back to the file; present and empty means this change added
+    // no line here, so there is nothing of it to prove. Skipping the `set` call for an empty set
+    // put deletion-only changes back on the whole-file path - the very bug this function was
+    // written to fix, surviving in the one case nobody pictured. Found by running `prove` on this
+    // file an hour after writing it: the guard was a mutant no test noticed.
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
     const start = Number(hunk[1]);
     const set = out.get(file) ?? new Set<number>();
     for (let i = 0; i < count; i++) set.add(start + i);
-    if (set.size > 0) out.set(file, set);
+    out.set(file, set);
   }
   return out;
 }

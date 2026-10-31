@@ -17,7 +17,7 @@ import { releaseView } from '../outlets/views/release.ts';
 import { sdetBoardView } from '../outlets/views/sdet.ts';
 import { attestRun, renderAttestation } from '../engine/attest/attest.ts';
 import { changedTestLines, vouchChanged } from '../engine/vouch/changed.ts';
-import { proveChanged, provedChangeLines } from '../engine/prove/changed.ts';
+import { changedLinesByFile, proveChanged, provedChangeLines } from '../engine/prove/changed.ts';
 import { readMigration, renderSchema, schemaFiles, stillUsed } from '../engine/schema/schema-command.ts';
 import { checkChanged, loadStandards } from '../engine/standards/standards-command.ts';
 import { renderViolations } from '../engine/standards/standards.ts';
@@ -75,11 +75,13 @@ async function reportJobDeath(ctx: CiContext, hint: string): Promise<void> {
  * neither range resolves - a checkout with `fetch-depth: 1` has no base - it returns nothing rather
  * than guessing at a file list and reporting about the wrong files.
  */
-function changedFiles(ctx: CiContext): string[] | null {
+function changedFiles(ctx: CiContext): { files: string[]; range: string } | null {
   const base = ctx.pr?.baseRef ?? ctx.defaultBranch;
   for (const range of [diffRange(ctx), `origin/${base}...HEAD`, `${base}...HEAD`]) {
     const change = changeSummary(ctx.workspace, range);
-    if (change && change.files.length > 0) return change.files.map((f) => f.split(String.fromCharCode(92)).join('/'));
+    // The range comes back too: `prove` must ask which lines changed using the range that actually
+    // resolved, not one of the two guesses above it that did not.
+    if (change && change.files.length > 0) return { files: change.files.map((f) => f.split(String.fromCharCode(92)).join('/')), range };
   }
   log('could not read the range of this pull request, so its own changes were not examined (set fetch-depth: 0 on actions/checkout to enable it)');
   return null;
@@ -138,7 +140,8 @@ async function main(): Promise<void> {
   // Could the tests this pull request touches ever fail? Asked only about the diff, and only when
   // the diff can really be read: a shallow checkout cannot produce the range, and reporting on the
   // wrong set of files would be worse than reporting on none.
-  const changed = ctx.pr ? changedFiles(ctx) : null;
+  const change = ctx.pr ? changedFiles(ctx) : null;
+  const changed = change?.files ?? null;
   const changedTests = changed ? vouchChanged(ctx.workspace, changed) : null;
   const testLines = changedTests ? changedTestLines(changedTests) : [];
   if (changedTests) log(`tests in this change: ${changedTests.read} read, ${changedTests.cannotFail.length} cannot fail`);
@@ -159,7 +162,8 @@ async function main(): Promise<void> {
 
   // And the stronger question, when the repository asked for it: break the changed code and see
   // whether anything notices. Off by default because every change costs a real test run.
-  const proved = changed && ctx.prove ? proveChanged(ctx.workspace, changed, { budgetSeconds: ctx.proveBudgetSeconds, onStep: (m) => log(m) }) : null;
+  const proveOpts = change ? { budgetSeconds: ctx.proveBudgetSeconds, lines: changedLinesByFile(ctx.workspace, change.range), onStep: log } : null;
+  const proved = changed && proveOpts && ctx.prove ? proveChanged(ctx.workspace, changed, proveOpts) : null;
   const proveLines = proved ? provedChangeLines(proved) : [];
   if (proved) log(proved.skipped || `proved ${proved.proofs.length} file(s): ${proved.unnoticed} change(s) went unnoticed`);
 

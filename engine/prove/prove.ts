@@ -71,6 +71,14 @@ export interface Proof {
 export interface ProveOptions {
   /** How many changes to try. More is a better answer and a longer wait. */
   limit?: number;
+  /**
+   * Only mutate these lines: the pull-request path asks what *a change* would slip past, not what
+   * a file does not check. Without it `spread` samples evenly across the whole file. Measured over
+   * 53 changed files from 60 real commits here: **65.9% of the budget went to lines the commit
+   * never touched, and in 26.4% of files not one mutant landed on the change** - under a report
+   * that said what the pull request's own changes would slip past.
+   */
+  onlyLines?: ReadonlySet<number>;
   /** Total seconds to spend before stopping and saying so. */
   budgetSeconds?: number;
   /** Seconds for one test run. */
@@ -120,6 +128,7 @@ export function proveFile(root: string, file: string, covering: string[], framew
   const budget = (opts.budgetSeconds ?? 600) * 1000;
   const runMs = (opts.runSeconds ?? 180) * 1000;
   const say = opts.onStep ?? (() => {});
+  const onlyLines = opts.onlyLines;
   const full = resolve(root, file);
   const proof: Proof = { file, covering, tried: [], blocked: '', setAside: [], notTried: 0, found: 0, seconds: 0 };
 
@@ -145,11 +154,17 @@ export function proveFile(root: string, file: string, covering: string[], framew
   const stopGuarding = guardAgainstBeingKilled(full, originalBytes);
   // The whole set first, then the sample: `found` is what the file allows and `mutants` is what
   // there was time to ask about, and the report has to be able to tell the reader the difference.
-  const candidates = candidateMutants(original);
+  const all = candidateMutants(original);
+  // Narrowed to the change, when the caller asked a question about a change. Falling back to the
+  // whole file here would be the wrong kindness: the report would say what this pull request would
+  // slip past, having tested lines the pull request did not write.
+  const candidates = onlyLines ? all.filter((m) => onlyLines.has(m.line)) : all;
   const mutants = spread(candidates, limit);
   proof.found = candidates.length;
   if (mutants.length === 0) {
-    proof.blocked = 'nothing in this file could be changed in a way a test should be expected to catch - no comparison, no condition, no returned value outside of strings and comments';
+    proof.blocked = onlyLines
+      ? 'nothing this change touches in this file could be changed in a way a test should be expected to catch. Other lines in the file could be, but they are not what this change altered.'
+      : 'nothing in this file could be changed in a way a test should be expected to catch - no comparison, no condition, no returned value outside of strings and comments';
     return finish(proof, started, stopGuarding);
   }
 

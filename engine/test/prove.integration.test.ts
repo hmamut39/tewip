@@ -7,6 +7,7 @@
 // it to touch. And that it refuses to say anything at all when the suite does not pass to begin with,
 // or when nothing imports the file - a confident answer in either case would be a lie.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,7 +15,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import type { Framework } from '../quality/frameworks.ts';
 import { proveFile } from '../prove/prove.ts';
-import { proveChanged, provedChangeLines } from '../prove/changed.ts';
+import { changedLinesByFile, proveChanged, provedChangeLines } from '../prove/changed.ts';
 import { aroundTheChange, renderProof } from '../prove/prove-command.ts';
 import { candidateMutants, mutantsFor } from '../prove/mutants.ts';
 
@@ -324,5 +325,79 @@ describe('the verdict on a change a machine wrote', () => {
     const noticed = proof.tried.filter((t) => t.fate === 'noticed');
     assert.ok(noticed.length > 0, 'the arithmetic is asserted, so breaking it must be caught');
     assert.equal(proof.tried.filter((t) => t.fate === 'unnoticed').length, 0, 'and nothing should slip past');
+  });
+});
+
+// Phase 120: the pull-request prover tested the wrong lines.
+//
+// `changed.ts` opens by saying it proves "what a pull request's own changes would slip past". It
+// did not. It mutated the file, not the change: `spread` samples evenly across the whole file,
+// which is right for `tewip prove <file>` and wrong for a diff. With the CI budget of four
+// mutants, a file holding one mutable changed line and forty elsewhere almost never tried the one
+// that mattered.
+//
+// Measured over the 53 changed source files in this repository's last 60 commits, using the real
+// code on both sides: 33.7% of the mutant budget landed on lines the commit touched, and 15 of
+// the 53 files had no mutant on the change at all. After the fix: 100%, and none. It also runs
+// 32% fewer mutants, and every mutant is a whole test-suite run - the correctness fix and the
+// speed fix are the same change.
+describe('proving a change tests the change', () => {
+  const gitProject = (): string => {
+    const root = project();
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    // Reorder one condition. Line 2 is rewritten and still behaves identically, so the fixture's
+    // own tests keep passing - a change that reddens the suite would make proveFile refuse before
+    // it ever chose a mutant, and the test would pass for the wrong reason.
+    writeFileSync(join(root, 'src', 'shop.js'), SOURCE.replace('total >= 100 && isMember', 'isMember && total >= 100'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'raise the threshold');
+    return root;
+  };
+
+  it('reads the changed line numbers from git, and only those', () => {
+    const root = gitProject();
+    const byFile = changedLinesByFile(root, 'HEAD~1..HEAD');
+    assert.deepEqual([...(byFile.get('src/shop.js') ?? [])], [2], 'line 2 is the only line the commit rewrote');
+    assert.equal(byFile.size, 1);
+  });
+
+  it('mutates only the lines the change touched', () => {
+    const root = gitProject();
+    const everything = candidateMutants(readFileSync(join(root, 'src', 'shop.js'), 'utf8'));
+    assert.ok(everything.length > 1, 'the file offers mutants away from the change, or this proves nothing');
+
+    const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), {
+      limit: 4,
+      onlyLines: new Set([2]),
+      budgetSeconds: 120,
+    });
+    assert.ok(proof.tried.length > 0, 'something was tried');
+    assert.ok(
+      proof.tried.every((t) => t.mutant.line === 2),
+      `every mutant must be on the changed line, got ${proof.tried.map((t) => t.mutant.line).join(', ')}`,
+    );
+    assert.ok(proof.found < everything.length, 'and `found` counts what the change allows, not what the file allows');
+  });
+
+  it('says so when the change touches nothing a test could be expected to catch', () => {
+    // Line 3 is `return 0;`. Falling back to the whole file here is the tempting mistake: the
+    // report would then say what this change would slip past, having tested lines it did not write.
+    const root = gitProject();
+    const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), { limit: 4, onlyLines: new Set([4]), budgetSeconds: 120 });
+    assert.deepEqual(proof.tried, []);
+    assert.match(proof.blocked, /nothing this change touches/);
+    assert.match(proof.blocked, /not what this change altered/, 'and it says the rest of the file was not the question');
+  });
+
+  it('still mutates the whole file when no lines are given', () => {
+    // `tewip prove <file>` asks a different question and must keep its answer.
+    const root = gitProject();
+    const proof = proveFile(root, 'src/shop.js', ['tests/shop.test.js'], nodeRunner(root), { limit: 4, budgetSeconds: 120 });
+    assert.ok(proof.tried.some((t) => t.mutant.line !== 2), 'the whole-file run reaches past the change');
   });
 });

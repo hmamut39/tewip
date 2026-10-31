@@ -8,6 +8,7 @@
 // It says nothing when nothing slipped past. A section that appears on every pull request to report
 // "all good" is one people stop reading, and then it is worth nothing on the day it matters.
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { chooseFramework, detectFrameworks } from '../quality/frameworks.ts';
 import { coverageFor, testFiles } from '../review/coverage.ts';
@@ -33,7 +34,51 @@ export interface ProveBudget {
   limit?: number;
   /** Seconds for the whole thing, across every file. */
   budgetSeconds?: number;
+  /**
+   * The lines this change actually touched, per file, from `changedLinesByFile`. Given them, only
+   * those lines are mutated - which is the question this file claims to answer in its own first
+   * sentence and, until it was measured, did not.
+   */
+  lines?: ReadonlyMap<string, ReadonlySet<number>>;
   onStep?: (message: string) => void;
+}
+
+/**
+ * The line numbers a range added or changed, per file, asked of git rather than reconstructed.
+ *
+ * `-U0` is the whole trick: with no context lines, every hunk header names exactly the lines that
+ * changed. With the default three lines of context the numbers quietly include six lines nobody
+ * touched, which on a small change is most of them.
+ *
+ * A range git cannot resolve returns an empty map, and an empty map means "mutate the file as
+ * before" rather than "mutate nothing" - not knowing which lines changed is a reason to fall back,
+ * where knowing they hold nothing mutable is a reason to say so.
+ */
+export function changedLinesByFile(root: string, range: string): Map<string, Set<number>> {
+  const out = new Map<string, Set<number>>();
+  let diff: string;
+  try {
+    diff = execFileSync('git', ['diff', '-U0', range], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch {
+    return out;
+  }
+  let file = '';
+  for (const line of diff.split('\n')) {
+    const header = /^\+\+\+ b\/(.+)$/.exec(line);
+    if (header) {
+      file = header[1].split('\\').join('/');
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (!hunk || !file) continue;
+    // A hunk with a count of 0 is a pure deletion: there is no new line to mutate.
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    const start = Number(hunk[1]);
+    const set = out.get(file) ?? new Set<number>();
+    for (let i = 0; i < count; i++) set.add(start + i);
+    if (set.size > 0) out.set(file, set);
+  }
+  return out;
 }
 
 export function proveChanged(root: string, changed: string[], budget: ProveBudget = {}): ProvedChange {
@@ -62,8 +107,9 @@ export function proveChanged(root: string, changed: string[], budget: ProveBudge
     }
     const direct = importingTests(root, coverageFor(root, [file], known), file);
     const covering = direct.length > 0 ? direct : testsReaching(root, file, known.map((t) => t.split('\\').join('/'))).map((r) => r.testFile);
-    say(`proving ${file} against ${covering.length} test file(s)`);
-    proofs.push(proveFile(root, file, covering, framework, { limit: budget.limit ?? 4, budgetSeconds: Math.floor(left / 1000), onStep: say }));
+    const onlyLines = budget.lines?.get(file);
+    say(`proving ${file} against ${covering.length} test file(s)${onlyLines ? `, on the ${onlyLines.size} line(s) it changed` : ''}`);
+    proofs.push(proveFile(root, file, covering, framework, { limit: budget.limit ?? 4, budgetSeconds: Math.floor(left / 1000), onStep: say, ...(onlyLines ? { onlyLines } : {}) }));
   }
 
   return {

@@ -20,7 +20,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 
 Formerly *triage-agent*: the repository moved to `hmamut39/tewip`, and GitHub redirects the old address. See [ROADMAP.md](ROADMAP.md) for the plan.
 
-**Status: phases 1 to 14 are built; the two auto-fix phases (5 and 8) are the ones still in progress.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
+**Status: built, and measured on other people's code.** Tewip collects failures from any framework, diagnoses them with rules first and a model only for what rules cannot settle, and turns that into work for each role: a CI comment and merge gate, test plans and verified tests, a flake dossier, a PR-risk review, security scanning, tickets in Jira, Rally, GitHub Issues, Azure Boards or Linear, checks generated from a Figma design, specifications written for people, and - opt in, and only when proved - fixes to test or application code. The fix loops are built and measured, not planned: on real labelled CI failures every one of 17 locator suggestions was the locator the developers themselves wrote, a wait fix is kept only after three passes in a row, and a change to application code is kept only when the failing test passes **and** the whole suite still does. It runs live in GitHub CI and answers questions from AI assistants through MCP. On fresh real Gutenberg CI failures, with the pipeline frozen before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%, and the caveats are in [eval/README.md](eval/README.md).
 
 
 ## If your CI already writes a coverage report, point Tewip at it
@@ -1344,7 +1344,7 @@ npm run triage -- --data data/real/gutenberg-holdout   # the same on real CI dat
 npm run test:engine   # unit tests for rules, LLM layer, decide step and views (no network)
 ```
 
-## Auto-fix and the drift lab (Phase 5, in progress)
+## Auto-fix and the drift lab
 
 `engine/autofix/` is the ACT + VERIFY loop for LOCATOR_DRIFT. It finds the failing locator in the spec, then tries up to 3 role-based replacements taken from the failure-time page. It re-runs that one test after each attempt, keeps a change only if the test passes, and otherwise restores the file. These safety rules are built into the code:
 

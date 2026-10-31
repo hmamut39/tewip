@@ -85,3 +85,46 @@ describe('the cost line', () => {
     assert.equal((cli.match(/usageLine\(\)/g) ?? []).length, 1, 'cli/tewip.ts should call usageLine exactly once');
   });
 });
+
+// Phase 125: nothing checked the README.
+//
+// The help text has been held to the verbs since Phase 19. The README - the page a buyer reads,
+// and the one Tewip is judged by - was held to nothing, and it had drifted badly: it said
+// "phases 1 to 14 are built; the two auto-fix phases are the ones still in progress" while the
+// fix loops were built, measured and guarded, and a heading still called auto-fix "in progress".
+// I read that line myself and repeated it back as "Tewip can only fix a narrow set of things",
+// which is how a stale sentence becomes a wrong belief about your own product.
+//
+// This holds the cheapest half of the problem: a command the README names must exist. It cannot
+// catch a sentence that is merely out of date, but it catches every invented verb, and an
+// invented verb is the version of this that wastes a reader's afternoon.
+describe('the README', () => {
+  const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+  /** Verbs the CLI really answers, read from its own switch and the two verb modules. */
+  const shipped = new Set(
+    [cli, readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'verbs-work.ts'), 'utf8'), readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'verbs-prove.ts'), 'utf8')]
+      .flatMap((src) => [...src.matchAll(/case '([a-z][a-z0-9-]*)':/g)].map((m) => m[1])),
+  );
+
+  it('names only commands that exist', () => {
+    assert.ok(shipped.size > 20, `only ${shipped.size} verbs found; the reader of this test is being fooled`);
+    // A verb may hold a digit - `tewip a2a` - and a flag is not a verb.
+    const named = [...new Set([...readme.matchAll(/`?tewip ([a-z][a-z0-9-]*)/g)].map((m) => m[1]))];
+    assert.ok(named.length > 15, `only ${named.length} commands found in the README`);
+    const invented = named.filter((v) => !shipped.has(v) && !['mcp', 'help', 'version'].includes(v));
+    assert.deepEqual(invented, [], 'the README tells people to run a command that does not exist');
+  });
+
+  it('does not call a built capability unfinished', () => {
+    // The exact drift that was there. `engine/autofix/` has been built and under test for a
+    // hundred phases; saying otherwise in the shop window costs more than saying nothing.
+    assert.doesNotMatch(readme, /auto-fix phases \([0-9 and]+\) are the ones still in progress/i);
+    assert.doesNotMatch(readme, /##[^\n]*Auto-fix[^\n]*in progress/i);
+  });
+
+  it('says the fix loops were measured, with a number', () => {
+    // The sentence I got wrong out loud. If it goes vague again, this fails.
+    assert.match(readme, /17 locator suggestions was the locator/);
+    assert.match(readme, /the whole suite still does/, 'the strongest safety property of `fix --code` belongs in the summary');
+  });
+});

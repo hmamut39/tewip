@@ -43,3 +43,6 @@ msg.txt
 .mm
 .cm
 answer.txt
+
+# Scratch probes used to measure something once. They belong in the scratchpad, not here.
+probe-tmp.ts

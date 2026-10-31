@@ -108,6 +108,29 @@ it('asserts plenty', () => {
     assert.doesNotMatch(first.why, /through file\(\)/);
   });
 
+  it('reads a custom assertSomething() helper as an assertion', () => {
+    // Phase 138, and the defect that matters most of the three, because it is a false accusation
+    // rather than a false clearance. keycloak's Playwright tests delegate to a helper that calls
+    // `assertSwitchIsChecked(...)`, and its Java tests to one built from
+    // `assertNullAdditionalJdbcProperty(...)`. Neither matched: the suffix list needs a word
+    // boundary after `Null`, and `NullAdditional` has none. So vouch told tests that assert through
+    // a custom helper that they "compare no value" - the same shape as the 166 false accusations
+    // against keycloak in Phase 43, which is why the corpus exists.
+    const text = `const assertSwitchIsChecked = async (page, sel) => {
+  await expect(page.locator(sel)).toBeChecked();
+};
+
+const testToggle = async (page, sel) => {
+  await assertSwitchIsChecked(page, sel);
+};
+
+test('toggles the switch', async ({ page }) => {
+  await testToggle(page, '#s');
+});`;
+    const last = vouchFile('login.spec.ts', text).judgements.at(-1);
+    assert.equal(last?.verdict, 'checks', 'it asserts through two levels of helper, and both are in this file');
+  });
+
   it('does not read a stub named verify as an assertion', () => {
     // Phase 138, and the second defect the recall measurement turned up. `verify` was matched as a
     // bare word, so a dependency-injection fixture that *defines* a stub called `verify` counted as

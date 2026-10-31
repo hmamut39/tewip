@@ -14,6 +14,14 @@ const CHECKS: RegExp[] = [
   /\bshould\s*\.\s*not\b/,
   /\bassert\b\s*[.(]/,
   /\bassert(Equals?|True|False|Null|NotNull|That|Throws|Match|Contains|Rejects|Fails)\b/i,
+  // Any call named assertSomething. The list above needs the suffix to end on a word boundary, so
+  // keycloak's own `assertNullAdditionalJdbcProperty(config, null, prop)` matched nothing: `Null` is
+  // followed by `A`. Four of its ConfigurationTest tests delegate to a helper built out of those
+  // calls, and the helper was being credited only because the *string* `--db-tls-mode=verify-server`
+  // happened to contain the word `verify` - so narrowing `verify` to a call turned four correct
+  // verdicts into accusations. The corpus caught it. A call named `assertX(` is the universal
+  // convention for a custom assertion, and reading it as one is both broader and the actual reason.
+  /\bassert[A-Z]\w*\s*\(/,
   /\.\s*to\s*\.\s*(equal|be|deep|have|include|throw|match|exist)\b/,
   /\btoMatch(Snapshot|InlineSnapshot|ImageSnapshot)\s*\(/,
   /\bexpect(Type|TypeOf)\s*[<(]/,

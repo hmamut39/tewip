@@ -7,7 +7,7 @@
 //
 // The cap now counts the files the caller actually wants. A budget spent on files the caller will
 // discard is not a budget.
-import { readdirSync, statSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.tewip', '.next', '.cache']);
@@ -49,10 +49,27 @@ export function scanSourceFiles(root: string, limit: number = 5000, keep?: (path
       const path = join(dir, entry);
       let info;
       try {
-        info = statSync(path);
+        // `lstat`, not `stat`: a symlink must be seen as a symlink. See below.
+        info = lstatSync(path);
       } catch {
         continue;
       }
+      // A symlink is neither walked nor read.
+      //
+      // `stat` follows them, so a link to a directory looked like a directory and was walked. In
+      // immich, `fastlane/metadata` points at `../mobile/android/fastlane/metadata` inside the same
+      // repository: following it read 77 files a second time, under a path they do not really have.
+      // A finding in one of them would have been reported twice, at two different paths, and the
+      // file count no longer meant what the report said it meant.
+      //
+      // Worse than the double count: a link pointing out of the project would have Tewip reading
+      // files outside the directory it was given, which it must never do whatever is on the other
+      // end. Anything genuinely inside the project is still reached by its real path.
+      //
+      // Windows was already doing the right thing by accident - git writes a symlink there as a
+      // small text file - which is exactly why this hid: the numbers were recorded on Windows and
+      // only the Linux corpus run disagreed.
+      if (info.isSymbolicLink()) continue;
       if (info.isDirectory()) {
         if (!SKIP_DIR.has(entry)) walk(path);
         continue;

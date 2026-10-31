@@ -93,9 +93,26 @@ jobs:
             echo "No earlier tag to compare against; nothing to check."
             exit 0
           fi
+          # What this has to catch is a *missed* publish: the extension changed and its version did
+          # not, so the publish silently skipped. Asking only "did the files change" also fires when
+          # the version was bumped properly and published out of band - `gh workflow run` publishes
+          # on dispatch, before any tag exists - and then the next release goes red for having done
+          # the right thing. That happened to 0.14.1, published to Open VSX hours before this tag.
+          #
+          # So compare the version, not the files. A version that moved was bumped on purpose and is
+          # already on the registry; only a version that stood still while the code moved is a miss.
+          read_version() { node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" 2>/dev/null; }
+          was="$(git show "$previous:extensions/vscode/package.json" 2>/dev/null | read_version || true)"
+          now="$(node -p "require('./extensions/vscode/package.json').version")"
+          echo "extension version at $previous: ${was:-unknown}; now: $now"
+          if [ -n "$was" ] && [ "$was" != "$now" ]; then
+            echo "The version was bumped since $previous and $now is already on Open VSX, so it was"
+            echo "published already - by an earlier dispatch of this workflow. Skipping is correct."
+            exit 0
+          fi
           changed="$(git diff --name-only "$previous"..HEAD -- extensions/vscode/ || true)"
           if [ -n "$changed" ]; then
-            echo "::error::extensions/vscode changed since $previous but its version is already on Open VSX."
+            echo "::error::extensions/vscode changed since $previous but its version is still $now, which is already on Open VSX."
             echo "Changed files:"; echo "$changed"
             echo ""
             echo "Bump extensions/vscode/package.json BEFORE pushing the tag, then re-tag."

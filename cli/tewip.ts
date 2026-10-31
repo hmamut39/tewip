@@ -250,9 +250,30 @@ async function main(): Promise<void> {
   }
 }
 
+/**
+ * What the answer cost, after every verb.
+ *
+ * Twelve of the thirty-five verbs printed this; the rest left the reader to assume. The ones that
+ * said nothing are mostly the ones that cost nothing, which is exactly backwards: a tool that runs
+ * a model over every pull request cannot print "$0.00", and Tewip was hiding its best line on the
+ * commands that earn it.
+ *
+ * Here rather than in each verb, because thirty-five copies of a sentence drift apart, and the
+ * next verb added would quietly not have one. On stderr, so `tewip vouch > report.md` keeps a
+ * clean report and a person watching still sees the figure.
+ *
+ * Not for `mcp`, which is a server speaking JSON-RPC and has no single answer to price, and not
+ * for the verbs that only print text.
+ */
+const QUIET = new Set(['mcp', '--help', '-h', 'help', '--version', '-v', 'version', undefined as unknown as string]);
+
 try {
   await main();
 } catch (error) {
   console.error(`tewip: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
+}
+if (!QUIET.has(process.argv[2])) {
+  const { usageLine } = await import('../engine/llm/usage.ts');
+  console.error(usageLine());
 }

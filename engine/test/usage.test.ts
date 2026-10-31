@@ -63,7 +63,11 @@ describe('pipeline when the AI layer fails', () => {
 describe('usage line', () => {
   it('says so plainly when nothing was asked of the model', () => {
     resetLlmUsage();
-    assert.match(usageLine(), /no calls \(rules only\)/);
+    // Phase 122: the zero case now names the figure. "no calls (rules only)" was true and left
+    // the reader to work out what it cost, which for most of what Tewip answers is nothing - and
+    // that is the line a tool running a model over every pull request cannot print.
+    assert.match(usageLine(), /cost \$0\.00/);
+    assert.match(usageLine(), /no model was called/);
   });
 });
 
@@ -95,12 +99,13 @@ describe('what a run cost', () => {
     recordCall(10, { prompt: 1_000_000, completion: 100_000, cached: 500_000 }, 'gpt-5.4-mini');
     recordCall(10, { prompt: 100_000, completion: 10_000 }, 'gpt-5.5');
     assert.ok(Math.abs(llmUsage().costUsd - (0.375 + 0.0375 + 0.45 + 0.5 + 0.3)) < 1e-9);
-    assert.match(usageLine(), /cost: ~\$1\.6625$/);
+    assert.match(usageLine(), /^This answer cost ~\$1\.6625: 2 model call\(s\)/, 'the figure leads the line, and is the sum of both models priced separately');
   });
 
   it('says when a model has no known price instead of guessing', () => {
     resetLlmUsage();
     recordCall(10, { prompt: 1000, completion: 10 }, 'some-local-model');
-    assert.match(usageLine(), /unknown model price/);
+    assert.match(usageLine(), /AI cost is unknown/, 'an unpriced model is never reported as free');
+    assert.doesNotMatch(usageLine(), /\$0\.00/, 'and never as zero, which is the dangerous way to be wrong here');
   });
 });

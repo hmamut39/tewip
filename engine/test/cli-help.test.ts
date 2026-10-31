@@ -6,6 +6,7 @@
 // the commit had been pushed. And five verbs shipped across phases 15 to 19 that existed only if
 // somebody already knew their names.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -39,5 +40,48 @@ describe('the command line and its help', () => {
     const lines = HELP.split(String.fromCharCode(10));
     const tooWide = lines.filter((l) => l.length > 110);
     assert.deepEqual(tooWide, [], `these lines will wrap in a terminal: ${tooWide.slice(0, 2).join(' | ')}`);
+  });
+});
+
+// Phase 122: what the answer cost, on every verb.
+//
+// Twelve of the thirty-five verbs printed a cost line; the rest left the reader to assume, and
+// the silent ones are mostly the ones that cost nothing - exactly backwards. A tool that runs a
+// model over every pull request cannot print "$0.00", and Tewip was hiding its best line on the
+// commands that earn it.
+//
+// Printed once at the end of the process rather than in each verb, because thirty-five copies of
+// a sentence drift apart and the next verb added would quietly not have one. These tests run the
+// real binary, because the point is the behaviour a user sees, not the presence of a function.
+describe('the cost line', () => {
+  const run = (...args: string[]): { out: string; err: string } => {
+    const r = spawnSync(process.execPath, [join(import.meta.dirname, '..', '..', 'cli', 'tewip.ts'), ...args], {
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    return { out: r.stdout ?? '', err: r.stderr ?? '' };
+  };
+
+  it('says a rules-only answer cost nothing, on a verb that never printed it before', () => {
+    const { err } = run('vouch', join(import.meta.dirname, 'cli-help.test.ts'));
+    assert.match(err, /This answer cost \$0\.00/);
+    assert.match(err, /no model was called/);
+  });
+
+  it('keeps it out of the report itself, so a piped file stays clean', () => {
+    const { out } = run('vouch', join(import.meta.dirname, 'cli-help.test.ts'));
+    assert.doesNotMatch(out, /This answer cost/, 'stdout is the report; the cost belongs on stderr');
+  });
+
+  it('stays quiet for help and version, which answer nothing and cost nothing', () => {
+    for (const verb of ['--help', '--version']) {
+      const { out, err } = run(verb);
+      assert.doesNotMatch(`${out}${err}`, /This answer cost/, `${verb} should not report a cost`);
+    }
+  });
+
+  it('is printed from one place, not copied into each verb', () => {
+    // The guard that keeps it from drifting: if someone starts pasting it per-verb, this fails.
+    assert.equal((cli.match(/usageLine\(\)/g) ?? []).length, 1, 'cli/tewip.ts should call usageLine exactly once');
   });
 });

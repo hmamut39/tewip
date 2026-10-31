@@ -72,16 +72,26 @@ export function estimatedCostUsd(u: Usage = usage): number | null {
 
 /** One line for a report or job summary. Says "no AI calls" rather than printing zeros. */
 export function usageLine(u: Usage = llmUsage()): string {
-  if (u.calls === 0 && u.cacheHits === 0) return 'AI layer: no calls (rules only)';
+  // The zero case is the one worth saying out loud. Most of what Tewip answers it answers from
+  // rules, the code in front of it and the history it already kept - and a report that does not
+  // say so leaves the reader assuming it cost whatever an AI tool costs. A competitor that runs a
+  // model over every pull request cannot print this line at all; that is the whole point of it.
+  if (u.calls === 0 && u.cacheHits === 0) return 'This answer cost $0.00: no model was called (rules only)';
   const seconds = (u.totalMs / 1000).toFixed(1);
   const perCall = u.calls > 0 ? ` (${Math.round(u.totalMs / u.calls)} ms each)` : '';
   const tokens = `${u.promptTokens.toLocaleString('en-US')} in / ${u.completionTokens.toLocaleString('en-US')} out tokens`;
   const cost = estimatedCostUsd(u);
   const parts = [
-    `AI layer: ${u.calls} call(s) in ${seconds}s${perCall}`,
+    cost === null
+      ? `This answer's AI cost is unknown: ${u.calls} call(s) in ${seconds}s${perCall}`
+      : `This answer cost ~$${cost.toFixed(4)}: ${u.calls} model call(s) in ${seconds}s${perCall}`,
     `${u.cacheHits} cache hit(s)`,
     tokens,
-    cost === null ? (u.calls ? 'cost: unknown model price, set TRIAGE_LLM_PRICE_IN/OUT' : 'cost: $0 (all from cache)') : `cost: ~$${cost.toFixed(4)}${u.unpriced ? ` plus ${u.unpriced} call(s) at an unknown price` : ''}`,
+    cost === null
+      ? 'set TRIAGE_LLM_PRICE_IN/OUT to price this model'
+      : u.unpriced
+        ? `plus ${u.unpriced} call(s) at an unknown price`
+        : 'nothing else here cost anything',
   ];
   if (u.failures) parts.push(`${u.failures} call(s) failed, kept the rules' answer`);
   if (u.refused) parts.push(`${u.refused} call(s) skipped: budget TRIAGE_LLM_MAX_CALLS reached`);

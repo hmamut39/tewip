@@ -141,7 +141,7 @@ export function decide(evidence: Evidence): Decision {
     checks.push({
       question: 'Would the tests catch a bug in this code?',
       standing: 'not-met',
-      answer: `${evidence.unnoticed.length} deliberate change(s) went unnoticed, including ${evidence.unnoticed[0].file}:${evidence.unnoticed[0].line} (${evidence.unnoticed[0].kind})`,
+      answer: `${evidence.unnoticed.length} of ${evidence.proofsTried} deliberate change(s) to the lines this change wrote went unnoticed, including ${evidence.unnoticed[0].file}:${evidence.unnoticed[0].line} (${evidence.unnoticed[0].kind})`,
       decidedBy: 'tewip prove, by running the tests against a broken copy of the code',
     });
   } else if (evidence.proofsTried === 0) {
@@ -157,7 +157,16 @@ export function decide(evidence: Evidence): Decision {
       decidedBy: 'tewip prove',
     });
   } else {
-    checks.push({ question: 'Would the tests catch a bug in this code?', standing: 'met', answer: 'every deliberate change made to this code was caught by a covering test', decidedBy: 'tewip prove' });
+    // The sentence a reviewer of agent-written code needs, and the one thing a count makes
+    // checkable: "every deliberate change" could be one mutant or forty, and the reader could not
+    // tell which. Since Phase 120 the changes are made on the lines the diff wrote, not sampled
+    // across the file, so the claim is about this change and now says so.
+    checks.push({
+      question: 'Would the tests catch a bug in this code?',
+      standing: 'met',
+      answer: `all ${evidence.proofsTried} deliberate change(s) made to the lines this change wrote were caught by a covering test`,
+      decidedBy: 'tewip prove, by running the tests against a broken copy of the code',
+    });
   }
 
   // 5. Does it keep the rules this team wrote down? Only a project that has written some can break them.

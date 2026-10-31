@@ -134,6 +134,25 @@ describe('is this work done?', () => {
     assert.equal(check?.standing, 'met');
   });
 
+  // Phase 123: the sentence a reviewer of agent-written code actually needs.
+  //
+  // "every deliberate change made to this code was caught" could be one mutant or forty, and the
+  // reader had no way to tell which - an unquantified claim in the strongest row of the gate. It
+  // is also a claim about *this change* now rather than about the file, because since Phase 120
+  // the mutants are made on the lines the diff wrote instead of sampled across the whole file,
+  // and the wording had not caught up with what the code does.
+  it('says how many deliberate changes were caught, and that they were on this change', () => {
+    const check = decide(seen({ unnoticed: [], proofsTried: 4 })).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.match(check?.answer ?? '', /all 4 deliberate change\(s\)/, 'a number, or the reader cannot weigh the claim');
+    assert.match(check?.answer ?? '', /lines this change wrote/, 'about the change, not the file');
+  });
+
+  it('says how many slipped past, out of how many were tried', () => {
+    const slipped = seen({ unnoticed: [{ file: 'src/refunds.js', line: 2, kind: 'a comparison inverted' }], proofsTried: 4 });
+    const check = decide(slipped).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');
+    assert.match(check?.answer ?? '', /1 of 4 deliberate change\(s\)/, '1 of 4 and 1 of 40 are different findings');
+  });
+
   it('still says no when a change slipped past', () => {
     const slipped = seen({ unnoticed: [{ file: 'src/refunds.js', line: 2, kind: 'a comparison inverted' }], proofsTried: 4 });
     const check = decide(slipped).checks.find((c) => c.question === 'Would the tests catch a bug in this code?');

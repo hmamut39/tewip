@@ -95,6 +95,12 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip sbom [--out sbom.json] [--gate]
+                                    What this project ships and under what licence: a CycloneDX 1.6
+                                    bill of materials, plus the licences that need a person to look
+                                    - copyleft, source-available, or none stated at all. It reads
+                                    what the project wrote down and names every ecosystem it could
+                                    not read, rather than filling the gap. No model, no network.
   tewip safety [--out safety.md]
                                     What Tewip may do to your code and what it will not, with the
                                     test that enforces each promise named beside it - and how many

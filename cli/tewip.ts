@@ -239,6 +239,11 @@ async function main(): Promise<void> {
       runStart(process.cwd());
       return;
     }
+    case 'sbom': {
+      const { runSbom } = await import('../engine/sbom/sbom-command.ts');
+      runSbom({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      return;
+    }
     case 'safety': {
       const { runSafety } = await import('../engine/safety/safety-command.ts');
       runSafety({ root: process.cwd(), out: flag(args, 'out') });

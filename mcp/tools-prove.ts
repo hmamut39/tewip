@@ -257,4 +257,24 @@ server.registerTool(
       return renderStandards(standards, changed.length > 0 ? checkChanged(root, standards, changed) : [], changed.length);
     }),
 );
+
+// The page somebody asks for before letting an agent near a repository. It is reachable from an
+// assistant because the person who needs it - whoever has to approve this - is the least likely
+// of anyone to open a terminal and run a command to get it.
+server.registerTool(
+  'what_tewip_may_do',
+  {
+    title: 'What may Tewip change here, and what will it never do?',
+    description:
+      "What Tewip is allowed to do to this codebase and what it refuses to do, with the test that enforces each promise named beside it - and how many failures it declined to explain in this project rather than guessing. The page is written by reading those tests off disk, so a promise whose test has been deleted is reported as no longer enforced instead of being repeated. Use it when somebody asks whether this agent is safe to run, what it can touch, or what evidence there is for either answer. No model is called.",
+    inputSchema: { project },
+    annotations: readOnly,
+  },
+  ({ project: root }) =>
+    answer(async () => {
+      if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
+      const { safetyReport } = await import('../engine/safety/safety-command.ts');
+      return safetyReport(root);
+    }),
+);
 }

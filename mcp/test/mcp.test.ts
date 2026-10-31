@@ -84,7 +84,7 @@ describe('MCP server', () => {
   it('lists every tool as read-only, except the two that write, and none destructive', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    for (const expected of ['github_ci_report', 'triage_board', 'pr_impact', 'environment_report', 'release_readiness', 'quality_report', 'architecture_report', 'risk_digest', 'explain_failure', 'list_datasets', 'list_failed_runs', 'test_plan']) {
+    for (const expected of ['github_ci_report', 'triage_board', 'pr_impact', 'environment_report', 'release_readiness', 'quality_report', 'architecture_report', 'risk_digest', 'explain_failure', 'list_datasets', 'list_failed_runs', 'test_plan', 'what_tewip_may_do']) {
       assert.ok(names.includes(expected), `missing tool ${expected}`);
     }
     // Two tools write, and each says so rather than claiming to be read-only: `test_plan` saves a plan
@@ -123,5 +123,27 @@ describe('MCP server', () => {
     const { isError, text } = await call('triage_board', { run: 'no-such-run', ai: false });
     assert.equal(isError, true);
     assert.match(text, /No failed run matches/);
+  });
+
+  // Phase 126: the safety page, reachable by the person who needs it.
+  //
+  // `tewip safety` existed only on the command line, which is the wrong place for it: whoever has
+  // to approve an agent touching a repository is the least likely person in the building to open a
+  // terminal. Over MCP their assistant can be asked "is this thing safe to run here?" and answer
+  // from the page rather than from the marketing.
+  describe('what_tewip_may_do', () => {
+    it('answers with the promises and the test enforcing each', async () => {
+      const { text, isError } = await call('what_tewip_may_do', { project: PROJECT_ROOT });
+      assert.equal(isError, false, text);
+      assert.match(text, /promises are enforced by a test right now/);
+      assert.match(text, /never edits a file outside the sandbox/, 'the test name is the evidence, so it has to be in the answer');
+      assert.match(text, /What this page does not cover/);
+    });
+
+    it('refuses a project path that is not there, rather than answering about nothing', async () => {
+      const { text, isError } = await call('what_tewip_may_do', { project: join(PROJECT_ROOT, 'no-such-folder-here') });
+      assert.equal(isError, true);
+      assert.match(text, /must be an existing absolute path/);
+    });
   });
 });

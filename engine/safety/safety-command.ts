@@ -107,8 +107,17 @@ export function renderSafety(checked: Checked[], refused: { kept: number; decide
   return lines.join('\n');
 }
 
+/**
+ * The page, without printing it. An MCP server speaks JSON-RPC over stdout, so a tool that logs
+ * on its way to an answer corrupts every response the assistant receives - and the corruption
+ * reads as the tool being broken rather than noisy.
+ */
+export function safetyReport(root: string): string {
+  return renderSafety(checkPromises(root), refusedHere(root));
+}
+
 export function runSafety(cmd: SafetyCommand): string {
-  const report = renderSafety(checkPromises(cmd.root), refusedHere(cmd.root));
+  const report = safetyReport(cmd.root);
   console.log(report);
   if (cmd.out) {
     mkdirSync(dirname(resolve(cmd.out)), { recursive: true });

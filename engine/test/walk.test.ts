@@ -45,6 +45,30 @@ describe('the file walker', () => {
     assert.equal(scanSourceFiles(project()).total, 2);
   });
 
+  it('reads files in a stable order, so a capped scan is the same scan everywhere', () => {
+    // `secrets` stops at 5,000 files on a large project, and then the order decides *which* 5,000.
+    // n8n is over that cap, and its findings came out 34/21/13 on Windows and 33/18/15 on Linux
+    // from the same pinned commit - a different set of files, not a different answer about the same
+    // ones. `readdir` order is the filesystem's business; a measurement's order has to be ours.
+    //
+    // Honest limit: deleting the `.sort()` does not fail this on NTFS, which returns entries in
+    // name order anyway, so locally it pins the contract without proving who sorted. On ext4 -
+    // which is what CI runs, and where readdir order follows a hash of the name - it bites.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-order-'));
+    mkdirSync(join(root, 'z'), { recursive: true });
+    mkdirSync(join(root, 'a'), { recursive: true });
+    for (const name of ['m.ts', 'b.ts', 'q.ts']) writeFileSync(join(root, name), `export const x = 1;${NL}`, 'utf8');
+    writeFileSync(join(root, 'z', 'f.ts'), `export const z = 1;${NL}`, 'utf8');
+    writeFileSync(join(root, 'a', 'f.ts'), `export const a = 1;${NL}`, 'utf8');
+    const first = scanSourceFiles(root, 3).files;
+    assert.deepEqual(scanSourceFiles(root, 3).files, first, 'the same project gives the same first three');
+    // Sorted means `a/` before the loose files before `z/`, whatever order readdir gave.
+    assert.deepEqual(
+      scanSourceFiles(root).files.map((f) => f.slice(root.length + 1).replace(/\\/g, '/')),
+      ['a/f.ts', 'b.ts', 'm.ts', 'q.ts', 'z/f.ts'],
+    );
+  });
+
   it('does not read a file twice through a symlink to a directory inside the project', () => {
     // immich's case exactly: the link and its target are both inside the repository, so following
     // it does not escape anywhere - it just counts the same two files again under a second path.

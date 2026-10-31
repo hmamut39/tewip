@@ -36,12 +36,12 @@
         {
           "command": "access",
           "expect": {
-            "filesRead": 650,
+            "filesRead": 640,
             "findings": 15,
             "barrier": 7,
             "ask-a-person": 8
           },
-          "verified": "2026-10-31. filesRead 644 -> 650 and findings 13 -> 15. `access` used to borrow the secret scanner's 5,000-text-file budget, which on a large repository is spent before the markup is reached; the cap now counts markup. The 6 extra files brought 2 findings, both read by hand: 3p-cookies-step1.html and -step2.html declare `<html>` with no lang, a real WCAG 3.1.1 Level A failure. Both are hidden iframes that probe third-party cookie support and contain no text at all, so nobody is harmed in practice - kept as barriers because a missing lang is a missing lang, and downgrading a Level A criterion on my own judgement is not this corpus's job. 2026-10-12: all 5 barriers opened and read in the source. Two are real defects in Red Hat's production interface - an unlabelled <img src={application.logoUri}> in the account console users see, and a bare <input type=\"color\"> in the admin theme editor. The other three are a missing alt and two <html> elements with no lang."
+          "verified": "2026-10-31. filesRead 644 -> 650 and findings 13 -> 15. `access` used to borrow the secret scanner's 5,000-text-file budget, which on a large repository is spent before the markup is reached; the cap now counts markup. The 6 extra files brought 2 findings, both read by hand: 3p-cookies-step1.html and -step2.html declare `<html>` with no lang, a real WCAG 3.1.1 Level A failure. Both are hidden iframes that probe third-party cookie support and contain no text at all, so nobody is harmed in practice - kept as barriers because a missing lang is a missing lang, and downgrading a Level A criterion on my own judgement is not this corpus's job. 2026-10-12: all 5 barriers opened and read in the source. Two are real defects in Red Hat's production interface - an unlabelled <img src={application.logoUri}> in the account console users see, and a bare <input type=\"color\"> in the admin theme editor. The other three are a missing alt and two <html> elements with no lang. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         },
         {
           "command": "secrets",
@@ -52,7 +52,7 @@
             "noise": 1,
             "not-reachable": 42
           },
-          "verified": "2026-10-31. 43 findings in 12 distinct classes, every class read. 40 are SD-JWT test vectors under core/src/test/resources/sdjwt/*.txt - deliberately committed conformance fixtures - plus a JWT literal in SkeletonKeyTokenTest.java, a documented JWT in an oid4vci .adoc, and a credentialled URL in an outgoinghttp .adoc example. needs-someone 0 is the number that matters: an identity server is where a false 'go revoke this' would be most expensive. filesRead 5000 is the scan's budget rather than the project, and the report says what it did not read."
+          "verified": "2026-10-31. 43 findings in 12 distinct classes, every class read. 40 are SD-JWT test vectors under core/src/test/resources/sdjwt/*.txt - deliberately committed conformance fixtures - plus a JWT literal in SkeletonKeyTokenTest.java, a documented JWT in an oid4vci .adoc, and a credentialled URL in an outgoinghttp .adoc example. needs-someone 0 is the number that matters: an identity server is where a false 'go revoke this' would be most expensive. filesRead 5000 is the scan's budget rather than the project, and the report says what it did not read. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         }
       ]
     },
@@ -182,13 +182,13 @@
         {
           "command": "secrets",
           "expect": {
-            "filesRead": 4621,
+            "filesRead": 4619,
             "findings": 6,
             "needs-someone": 0,
             "noise": 4,
             "not-reachable": 2
           },
-          "verified": "read by hand on 2026-10-18, every finding opened in the file. Saleor's six: four noise (three url-credentials on example.com, which RFC 2606 reserves so it cannot be anybody's system, and one user==password stand-in) and two not-reachable (RSA private keys in test fixtures, conftest.py:149 and tests/settings.py:60, both deliberate). Nothing needs anybody. Before this phase the same checkout reported six needing someone now, at high severity, each told to revoke it at the issuer - three of them the Django postgres://saleor:saleor@localhost default, one on a commented-out line."
+          "verified": "read by hand on 2026-10-18, every finding opened in the file. Saleor's six: four noise (three url-credentials on example.com, which RFC 2606 reserves so it cannot be anybody's system, and one user==password stand-in) and two not-reachable (RSA private keys in test fixtures, conftest.py:149 and tests/settings.py:60, both deliberate). Nothing needs anybody. Before this phase the same checkout reported six needing someone now, at high severity, each told to revoke it at the issuer - three of them the Django postgres://saleor:saleor@localhost default, one on a commented-out line. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         }
       ]
     },
@@ -338,11 +338,11 @@
         {
           "command": "secrets",
           "expect": {
-            "filesRead": 234,
+            "filesRead": 233,
             "findings": 0,
             "needs-someone": 0
           },
-          "verified": "read by hand on 2026-10-18. 234 files read, nothing accused."
+          "verified": "read by hand on 2026-10-18. 234 files read, nothing accused. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         },
         {
           "command": "schema",
@@ -461,13 +461,13 @@
         {
           "command": "secrets",
           "expect": {
-            "filesRead": 3141,
+            "filesRead": 3140,
             "findings": 8,
             "needs-someone": 0,
             "noise": 3,
             "not-reachable": 5
           },
-          "verified": "2026-10-31. 8 findings in 6 classes, every class read: three Postgres connection strings in administration docs, a private key in packages/e2e-auth-server/test-keys.ts, two URLs pointing at example.com, and a `${...}` variable in a GitHub workflow. needs-someone 0. filesRead 3141 is the whole project."
+          "verified": "2026-10-31. 8 findings in 6 classes, every class read: three Postgres connection strings in administration docs, a private key in packages/e2e-auth-server/test-keys.ts, two URLs pointing at example.com, and a `${...}` variable in a GitHub workflow. needs-someone 0. filesRead 3141 is the whole project. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         }
       ]
     },
@@ -557,12 +557,12 @@
           "command": "secrets",
           "expect": {
             "filesRead": 5000,
-            "findings": 34,
+            "findings": 33,
             "needs-someone": 0,
-            "noise": 21,
-            "not-reachable": 13
+            "noise": 18,
+            "not-reachable": 15
           },
-          "verified": "2026-10-31. 34 findings in 8 classes, every class read. The noise is a deliberate fixture file - evaluations/computer-use/fixtures/leaked-credentials.txt, which exists to hold fake credentials - plus values whose own text says example. The not-reachable are tokens inside __tests__ files and a documented example in an eslint rule's markdown. needs-someone 0."
+          "verified": "2026-10-31. 34 findings in 8 classes, every class read. The noise is a deliberate fixture file - evaluations/computer-use/fixtures/leaked-credentials.txt, which exists to hold fake credentials - plus values whose own text says example. The not-reachable are tokens inside __tests__ files and a documented example in an eslint rule's markdown. needs-someone 0. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
         }
       ]
     }

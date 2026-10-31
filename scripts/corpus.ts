@@ -13,7 +13,7 @@
 //
 // Nothing here is a fixture. These are other people's repositories at a known commit.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { vouchAll } from '../engine/vouch/vouch-command.ts';
 import { findBarriers } from '../engine/access/access-command.ts';
@@ -29,8 +29,10 @@ interface Repo { name: string; url: string; commit: string; why: string; checks:
 const MANIFEST = resolve('corpus/expected.json');
 const CACHE = process.env.TEWIP_CORPUS ?? join(process.env.TEMP ?? '/tmp', 'tewip-corpus');
 
+// maxBuffer, because `ls-files -s` over keycloak is 1.04 MB and the default is 1 MB: it threw
+// ENOBUFS and printed a megabyte of file modes as the error.
 const git = (args: string[], cwd?: string): string =>
-  execFileSync('git', ['-c', 'core.longpaths=true', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  execFileSync('git', ['-c', 'core.longpaths=true', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 });
 
 /** The repository at exactly that commit, cloned once and reused. */
 function checkout(repo: Repo): string {
@@ -48,7 +50,42 @@ function checkout(repo: Repo): string {
   }
   // Forced, because a previous run may have left files behind, and Windows refuses some paths.
   git(['checkout', '--quiet', '--force', repo.commit], dir);
+  dropSymlinkStandIns(dir);
   return dir;
+}
+
+/**
+ * Remove the files git writes in place of symlinks it could not create.
+ *
+ * Without this the corpus measures a different tree on each platform, and these numbers are
+ * supposed to be the same number everywhere. On Linux git makes a real symlink, which the walker
+ * skips. On Windows, without the privilege, git writes a small regular file whose contents are the
+ * target path - and a regular file named `thing.ts` is read like any other, so Windows counted a
+ * handful of files Linux did not.
+ *
+ * immich has one such entry, n8n twenty-five. The disagreement was 77 files before the walker
+ * stopped following links and 1 to 10 after, which is how a platform difference looks when it is
+ * nearly fixed: still a difference, and still enough to fail a verified number.
+ *
+ * Deleting them is right rather than convenient. On Linux these paths contribute nothing, because a
+ * symlink is not walked; removing them on Windows makes the measured tree identical, and anything
+ * genuinely in the repository is still there under its real path. Nothing is deleted outside the
+ * corpus cache.
+ */
+function dropSymlinkStandIns(dir: string): void {
+  for (const line of git(['ls-files', '-s'], dir).split(String.fromCharCode(10))) {
+    // `<mode> <sha> <stage>\t<path>` - mode 120000 is a symlink.
+    if (!line.startsWith('120000 ')) continue;
+    const path = line.slice(line.indexOf(String.fromCharCode(9)) + 1);
+    if (!path) continue;
+    const full = join(dir, path);
+    try {
+      // Only when this platform did not make a real link: on Linux there is nothing to do.
+      if (!lstatSync(full).isSymbolicLink()) rmSync(full, { force: true });
+    } catch {
+      continue;
+    }
+  }
 }
 
 /** Counts, derived from the engine rather than from the words of a report. */

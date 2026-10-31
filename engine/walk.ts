@@ -45,7 +45,16 @@ export function scanSourceFiles(root: string, limit: number = 5000, keep?: (path
     } catch {
       return;
     }
-    for (const entry of entries) {
+    // Sorted, so a capped scan reads the same files everywhere.
+    //
+    // `readdir` returns whatever order the filesystem gives, which differs between platforms. That
+    // does not matter while everything is read - but `secrets` stops at 5,000 files on a large
+    // project, and then the order decides *which* 5,000. n8n is over the cap, and its findings came
+    // out as 34/21/13 on Windows and 33/18/15 on Linux from the same pinned commit: not a different
+    // answer about the same files, a different set of files. A number that depends on the order the
+    // filesystem happened to list a directory in is not reproducible, and a capped scan is exactly
+    // where that shows.
+    for (const entry of entries.sort()) {
       const path = join(dir, entry);
       let info;
       try {

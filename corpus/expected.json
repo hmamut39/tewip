@@ -121,6 +121,17 @@
             "ask-a-person": 21
           },
           "verified": "2026-10-31. filesRead 257 -> 261, findings unchanged at 251. Same cause as keycloak: the markup budget no longer runs out on unrelated text files. The 4 extra files produced no findings, which is the useful half - more was read and nothing new was claimed. 2026-10-12. 251 findings, down from 374. The 111 input-label barriers that went were ASP.NET Core Tag Helpers: asp-for=\"Name\" renders for=\"Name\" on the label and id=\"Name\" on the input, so the association is real and simply not written here. The 3 input-label that remain were opened and read - two labels carrying neither for nor asp-for, and one input whose only description is a placeholder, which is not a label. The link-name findings are genuine: social icon links in the email templates whose only content is an <img alt>, so a screen reader announces 'link' and nothing else."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 5000,
+            "findings": 3,
+            "needs-someone": 0,
+            "noise": 2,
+            "not-reachable": 1
+          },
+          "verified": "2026-10-31. Pinned to hold Phase 127. All three findings read by hand: a Slack token in a README markdown table (documentation), `xoxb-test-token` in SlackIntegrationControllerTests.cs (a fixture), and the Duende IdentityServer product licence in GlobalSettings.cs:532, whose own header declares \"typ\":\"license+jwt\". That last one was the single real-risk verdict across ten repositories and it was wrong; needs-someone 0 is the number guarding it. filesRead 5000 is the scan's budget, not the project: bitwarden has more text files than that, and the report now says how many it did not read."
         }
       ]
     },
@@ -205,6 +216,14 @@
             "needs-someone": 0
           },
           "verified": "read by hand on 2026-10-18. 1,010 files read, nothing accused."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0
+          },
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file anywhere in the repository. A design system has no database."
         }
       ]
     },
@@ -313,6 +332,14 @@
             "needs-someone": 0
           },
           "verified": "read by hand on 2026-10-18. 234 files read, nothing accused."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0
+          },
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file. A command-line search tool has no database."
         }
       ]
     },
@@ -331,6 +358,26 @@
             "barrier": 194
           },
           "verified": "2026-10-17. 194 barriers, down from 533. The 339 that went were Angular Material's own form fields: <mat-form-field><mat-label>Title</mat-label><input matInput></mat-form-field>, where MatFormField binds the two when it renders - the label is real and simply not expressed in the file. Samples of what remains were read by hand: the ARIA combobox examples carry a placeholder and no label, which is the classic WCAG 3.3.2 failure, and <tr (click)=...> rows really are not focusable. click-without-keyboard was 0 before this trial and is 16: Angular binds events as (click) and Tewip knew four exact spellings, none of them Angular's, so the rule could never fire in any Angular project. mat-checkbox and mat-list-item carrying a click are excluded - they are components that render keyboard-accessible controls."
+        },
+        {
+          "command": "vouch",
+          "expect": {
+            "files": 372,
+            "tests": 8267,
+            "checks": 8150,
+            "crash-only": 21,
+            "cannot-tell": 95,
+            "never-runs": 1
+          },
+          "verified": "2026-10-31. Pinned to hold Phase 128. unfinished-expectation is 0 and absent here; it was 525 before the fix, every one a Jasmine `.withContext` chain whose matcher sits on a later line. The single never-runs was read: autocomplete.spec.ts:2852 is an `xit(`, with a `// tslint:disable-next-line:ban` above it, so the team skipped it deliberately - a correct finding. tautology and swallows-failure are 0. crash-only 21 and cannot-tell 95 are not accusations that a test cannot fail and were not read one by one; they anchor against drift."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0
+          },
+          "verified": "2026-10-31. A genuine zero, and the interesting kind. The repository does hold a directory called `migrations` - src/cdk/schematics/ng-update/migrations - which is TypeScript that rewrites a user's project on `ng update`, not database work. Reading it as schema changes is the mistake this 0 holds in place."
         }
       ]
     },
@@ -406,6 +453,22 @@
             "crash-only": 3
           },
           "verified": "read by hand on 2026-10-19, all three opened in the file and all three real: gin_test.go:437 TestRebuild404Handlers has an empty body; tree_test.go:528 and tree_test.go:896 add a route and call getValue with no assertion - the second says so itself, 'try to trigger slice bounds out of range'. A fourth, utils_test.go:63 TestParseAccept, was a false accusation: its Accept header contains the media type star-slash-star, which opened a comment inside a string and swallowed all five of its assertions."
+        },
+        {
+          "command": "schema",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0
+          },
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file in a Go HTTP router."
+        },
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0
+          },
+          "verified": "2026-10-31. A zero with a reason, recorded so it is not mistaken for the Phase 129 bug returning. gin holds exactly two markup-ish files, testdata/template/hello.tmpl and raw.tmpl, and a Go `.tmpl` is not a format Tewip claims to read. Nothing was skipped by a budget here; there is nothing in scope to read."
         }
       ]
     },
@@ -446,6 +509,16 @@
             "slow": 20
           },
           "verified": "read by hand on 2026-10-19. The six destroys-data: CleanEvaluations drops test_definition twice, two RemoveCredentialUsageTable migrations drop credential_usage, and two drop a leftover temporary_execution_entity with IF EXISTS before rebuilding it - that last pair is scaffolding rather than loss, reported because it is true and a reader recognises it on sight. Before this phase the same checkout gave 33 findings: one said \"drops the table IF\", several said \"drops the table \" with nothing where the name goes, and 22 were SQLite table rebuilds - create a copy, move every row into it, drop the original, rename the copy back - reported as destroying data."
+        },
+        {
+          "command": "access",
+          "expect": {
+            "filesRead": 1437,
+            "findings": 391,
+            "ask-a-person": 209,
+            "barrier": 182
+          },
+          "verified": "2026-10-31. Pinned to hold Phase 129, where this read 0 files and reported 0 findings on a project with 1,456 markup files. filesRead is the number that matters here: if it falls back toward zero the budget bug has returned. Three barrier rules were opened and read - a <li @click> with no keyboard handler in TabItem.vue:34, an <html> with no lang in admin-consent-callback.handlebars, an <iframe> with no title in form-shell.handlebars:201 - all genuine. The other 388 findings were not read one by one and this note does not claim they were."
         }
       ]
     }

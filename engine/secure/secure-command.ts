@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { auditDependencies } from './deps.ts';
-import { scanSecrets, sourceFiles } from './secrets.ts';
+import { scanSecrets, scanSourceFiles } from './secrets.ts';
 import { readAccepted, triageDependency, triageSecret, triageWeb, worstFirst, type SecurityItem } from './triage.ts';
 import { isLocal, scanWeb } from './web.ts';
 import { reconcile } from './reconcile.ts';
@@ -24,6 +24,8 @@ export interface SecureCommand {
   url?: string;
   /** Say yes to checking an address that is not this machine's. */
   authorised?: boolean;
+  /** How many text files the secret scan may read. Lowered in tests so the cap can be exercised. */
+  fileLimit?: number;
   /** A report from an OWASP ZAP baseline scan, whose findings are triaged like the rest. */
   zapReport?: string;
 }
@@ -72,11 +74,20 @@ export function renderSecurity(items: SecurityItem[], checked: string[], notChec
 export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
   const root = resolve(cmd.root);
   const accepted = readAccepted(root);
-  const files = sourceFiles(root);
+  const scan = scanSourceFiles(root, cmd.fileLimit);
+  const files = scan.files;
   const items: SecurityItem[] = [];
   const checked: string[] = ['secrets in the working tree'];
   const notChecked: string[] = [];
 
+  // A scan that stopped short is not a scan of the project, and "no secrets found" is the worst
+  // place to let that pass unsaid. Named in notChecked rather than appended to checked, because
+  // the files past the limit were not read at all.
+  if (scan.capped) {
+    notChecked.push(
+      `${scan.total - files.length} of ${scan.total} text file(s): the secret scan reads the first ${files.length} it finds, so nothing here is known about the rest`,
+    );
+  }
   for (const finding of scanSecrets(root, files)) items.push(triageSecret(finding, root, accepted));
 
   if (!cmd.secretsOnly) {

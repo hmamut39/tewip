@@ -85,6 +85,24 @@ export function triageSecret(finding: SecretFinding, root: string, accepted: Set
     source: 'tewip secret scan',
   };
   if (accepted.has(key)) return { ...base, verdict: 'accepted', why: 'a person marked this one accepted in .tewip/security-accepted.txt', next: 'nothing: it was reviewed' };
+  // A token that says what it is. Tewip's only "go and revoke this" verdict across ten real
+  // repositories was a Duende IdentityServer product licence in Bitwarden's GlobalSettings.cs,
+  // whose own header reads `"typ":"license+jwt"`. There is no issuer to revoke it at and nothing
+  // was leaked: it is meant to ship in source. Matching the shape of a JWT and never opening it
+  // is how a scanner tells a password-manager team to rotate their software licence.
+  //
+  // Kept visible rather than dropped, for the same reason a template is: it is still a committed
+  // token, and a reader may want to know the licence is in the repository. It is simply not an
+  // emergency, and the advice no longer pretends there is something to revoke.
+  if (finding.declares) {
+    return {
+      ...base,
+      verdict: 'noise',
+      severity: 'low',
+      why: `the token says what it is: its header declares "typ":"${finding.declares}", which is not an access token - ${finding.evidence}`,
+      next: 'nothing to revoke: no issuer holds a credential matching this. If it is a paid licence, check your vendor terms before publishing the repository.',
+    };
+  }
   if (finding.placeholder) {
     return { ...base, verdict: 'noise', severity: 'low', why: `${finding.placeholder}: ${finding.evidence}`, next: 'nothing: this is not a credential' };
   }

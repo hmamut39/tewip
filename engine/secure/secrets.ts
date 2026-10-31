@@ -9,6 +9,7 @@
 // than as a leak.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { declaredPurpose } from './jwt.ts';
 
 export interface SecretFinding {
   /** e.g. 'aws-access-key-id'. */
@@ -27,6 +28,11 @@ export interface SecretFinding {
   localOnly?: string | null;
   /** Set when the file is a template or documentation, whatever the value looks like. */
   template: boolean;
+  /**
+   * What a token says it is, when it says - "license+jwt" and the like. A JWT is self-describing
+   * and Tewip was not reading it. See `declaredPurpose`.
+   */
+  declares?: string | null;
 }
 
 /** Shapes their own issuers publish. Each one is a credential, not a guess about one. */
@@ -152,6 +158,9 @@ export function urlCredentialIsHarmless(value: string, line: string): string | n
 }
 
 export function looksPlanted(value: string, line: string, file: string, before = '', whole = value): string | null {
+  // Substitution, not illustration. `${GH_PUSH_TOKEN}` read as "the value says it is an example":
+  // right verdict, wrong reason, and the reason is the part a reader checks. See jwt.ts.
+  if (/\$\{|\{\{|\$\(/.test(value)) return 'the value is a variable, substituted at run time, so no credential is written here';
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
   // Only the words *around* the credential are commentary about it. A hostname or a database name
   // inside the URL is part of the credential: a real password at db.acme-prod.example-corp.io was
@@ -175,11 +184,31 @@ const SKIP_DIR = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'cover
 const BINARY = /\.(?:png|jpe?g|gif|webp|ico|svg|pdf|zip|gz|tar|exe|dll|so|dylib|woff2?|ttf|eot|mp4|mp3|wav|class|jar|pyc|lock)$/i;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
-/** Every text file in a project, skipping what no repository owns. */
-export function sourceFiles(root: string, limit = 5000): string[] {
+export interface FileScan {
+  /** The files that will be read, up to the limit. */
+  files: string[];
+  /** Every file that qualified, including the ones past the limit. */
+  total: number;
+  /** True when the limit stopped it short, so `files` is not the project. */
+  capped: boolean;
+}
+
+/**
+ * The text files in a project, skipping what no repository owns - and how many there really are.
+ *
+ * The count is the point. This used to stop at the limit and say nothing, and `sourceFiles` was
+ * documented as "every text file in a project", which it is not once the limit bites. On
+ * discourse that meant reading 5,000 of 26,472 files, finding nothing, and reporting "secrets in
+ * the working tree" as checked - a clean answer about 19% of a repository, in the one report
+ * where a clean answer is worth the most and justified the least.
+ *
+ * Walking the rest costs a readdir and a stat per file, which is a second or so on the largest
+ * project in the corpus. Knowing that the answer is partial is worth a second.
+ */
+export function scanSourceFiles(root: string, limit: number = 5000): FileScan {
   const out: string[] = [];
+  let total = 0;
   const walk = (dir: string) => {
-    if (out.length >= limit) return;
     let entries: string[];
     try {
       entries = readdirSync(dir);
@@ -187,7 +216,6 @@ export function sourceFiles(root: string, limit = 5000): string[] {
       return;
     }
     for (const entry of entries) {
-      if (out.length >= limit) return;
       const path = join(dir, entry);
       let info;
       try {
@@ -200,12 +228,16 @@ export function sourceFiles(root: string, limit = 5000): string[] {
         continue;
       }
       if (BINARY.test(entry) || info.size > MAX_FILE_BYTES) continue;
-      out.push(path);
+      total += 1;
+      if (out.length < limit) out.push(path);
     }
   };
   walk(root);
-  return out;
+  return { files: out, total, capped: total > out.length };
 }
+
+/** Every text file the scan will read. Callers that need to know what it missed use `scanSourceFiles`. */
+export const sourceFiles = (root: string, limit = 5000): string[] => scanSourceFiles(root, limit).files;
 
 /** The value, blanked: first two characters, then dots. Tewip never prints a credential. */
 export function redact(line: string, value: string): string {
@@ -256,6 +288,7 @@ export function scanSecrets(root: string, files = sourceFiles(root)): SecretFind
           line,
           evidence: redact(lines[line - 1] ?? '', value),
           entropy: Number(entropy.toFixed(2)),
+          declares: declaredPurpose(secret),
           placeholder: looksPlanted(secret, lines[line - 1] ?? '', rel, lines[line - 2] ?? '', value),
           localOnly: credentialGoesNowhere(value, lines[line - 1] ?? ''),
           template: inATemplate(rel),

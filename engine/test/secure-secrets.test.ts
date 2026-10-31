@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { scanSecrets, sourceFiles } from '../secure/secrets.ts';
+import { scanSecrets, scanSourceFiles, sourceFiles } from '../secure/secrets.ts';
 import { triageSecret } from '../secure/triage.ts';
 import { runSecure } from '../secure/secure-command.ts';
 
@@ -149,5 +149,125 @@ describe('a credential is judged, not the URL around it', () => {
     assert.notEqual(item.verdict, 'noise');
     assert.match(item.next, /nothing to revoke/);
     assert.doesNotMatch(item.next, /revoke it at the issuer/);
+  });
+});
+
+// Phase 127: a scanner that told a password-manager team to revoke their software licence.
+//
+// Running `secrets` across the ten corpus repositories it had never seen produced exactly one
+// "go and revoke this now" verdict, against Bitwarden's src/Core/Settings/GlobalSettings.cs. The
+// value is a Duende IdentityServer product licence. Its own header says `"typ":"license+jwt"`
+// and its payload is issued by duendesoftware.com to "Bitwarden Inc.". There is no issuer to
+// revoke it at and no accident to clean up: it is meant to ship, in source.
+//
+// Tewip matched the shape of a JWT and never opened it. One of one real-risk findings was wrong.
+const jwt = (typ: string | undefined, payload: Record<string, unknown> = { iss: 'https://example.test' }): string =>
+  `${Buffer.from(JSON.stringify(typ === undefined ? { alg: 'PS256' } : { alg: 'PS256', typ })).toString('base64url')}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.c2lnbmF0dXJlX2hlcmVfbG9uZ19lbm91Z2g`;
+
+describe('a token that says what it is', () => {
+  const findingFor = (value: string) => {
+    const root = project({ 'src/settings.cs': `public string LicenseKey { get; set; } = "${value}";\n` });
+    const found = scanSecrets(root, sourceFiles(root));
+    return { root, finding: found[0] };
+  };
+
+  it('does not tell anyone to revoke a product licence', () => {
+    const { root, finding } = findingFor(jwt('license+jwt', { iss: 'https://duendesoftware.com', company_name: 'Example Inc.' }));
+    assert.ok(finding, 'the token is still found - it is committed, and that is worth seeing');
+    const item = triageSecret(finding, root, new Set<string>());
+    assert.notEqual(item.verdict, 'real-risk');
+    assert.match(item.why, /"typ":"license\+jwt"/, 'the reason quotes the type, which is the evidence');
+    assert.match(item.next, /nothing to revoke/);
+  });
+
+  it('still calls a verifiable credential a credential', () => {
+    // The dangerous inversion, and the one I shipped first. The original rule asked "is this one
+    // of the token types I recognise?" and treated every other type as harmless, which in a
+    // security scanner gets the burden of proof backwards. Measured against keycloak it quietly
+    // reclassified 38 tokens, among them vc+sd-jwt and dc+sd-jwt - verifiable credentials, by
+    // name - and one fixture whose type is the word "unexpected".
+    for (const typ of ['vc+sd-jwt', 'dc+sd-jwt', 'kb+jwt', 'unexpected', 'at+jwt']) {
+      const { root, finding } = findingFor(jwt(typ));
+      assert.ok(finding, `no finding for ${typ}`);
+      assert.doesNotMatch(
+        triageSecret(finding, root, new Set<string>()).why,
+        /nothing to revoke|says what it is/,
+        `a token typed ${typ} must not be waved through: not recognising a type is not the same as knowing it is safe`,
+      );
+    }
+  });
+
+  it('judges a token with no declared type exactly as before', () => {
+    const { root, finding } = findingFor(jwt(undefined));
+    assert.ok(finding);
+    assert.doesNotMatch(triageSecret(finding, root, new Set<string>()).why, /says what it is/);
+  });
+});
+
+// Phase 127, the second finding: the scan stops at 5,000 files and used to say nothing.
+//
+// On discourse that is 5,000 of 26,472 - nineteen per cent of the repository - reported as zero
+// findings with "secrets in the working tree" listed under what was checked. A clean answer about
+// a fifth of a project, in the report where a clean answer is worth most and justified least.
+describe('a secret scan that stopped early says so', () => {
+  const many = (n: number): Record<string, string> => Object.fromEntries(Array.from({ length: n }, (unused, i) => [`src/f${i}.ts`, `export const n${i} = ${i};\n`]));
+
+  it('counts every file that qualified, not only the ones it read', () => {
+    const root = project(many(40));
+    const scan = scanSourceFiles(root, 10);
+    assert.equal(scan.files.length, 10);
+    assert.equal(scan.total, 40, 'the files past the limit are counted, or nobody can be told about them');
+    assert.equal(scan.capped, true);
+  });
+
+  it('is not capped when it read everything', () => {
+    const scan = scanSourceFiles(project(many(5)), 10);
+    assert.equal(scan.capped, false);
+    assert.equal(scan.total, scan.files.length);
+  });
+
+  it('names the unread files in the report, under what was not checked', async () => {
+    // The first version of this called runSecure and then asserted on scanSourceFiles, which
+    // tests the thing it is not named after - and runSecure had no limit to pass, so nothing was
+    // capped at all. It passed, and proved nothing.
+    const root = project(many(30));
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => void printed.push(args.join(' '));
+    try {
+      await runSecure({ root, secretsOnly: true, fileLimit: 10 });
+    } finally {
+      console.log = log;
+    }
+    const report = printed.join(String.fromCharCode(10));
+    assert.match(report, /\*\*Not checked\*\*/);
+    assert.match(report, /20 of 30 text file\(s\)/, 'the reader is told how many were never read');
+    assert.match(report, /nothing here is known about the rest/);
+  });
+});
+
+// Phase 127, third finding: the right verdict reached by the wrong reason.
+//
+// openmrs-core's release workflow writes `https://x-access-token:${GH_PUSH_TOKEN}@github.com/...`
+// and Tewip dismissed it as "the value itself says it is an example". It says nothing of the
+// kind. It says the value is substituted at run time, which is a stronger exoneration than
+// looking fake - there is no credential in the file at all - and the reason is the part a reader
+// checks before trusting the verdict.
+describe('a credential that is a variable', () => {
+  it('says the value is substituted, not that it looks like an example', () => {
+    const root = project({ '.github/workflows/release.yaml': 'run: git remote set-url origin "https://x-access-token:${GH_PUSH_TOKEN}@github.com/acme/web.git"\n' });
+    const [finding] = scanSecrets(root, sourceFiles(root));
+    assert.ok(finding, 'the shape is still found');
+    const item = triageSecret(finding, root, new Set<string>());
+    assert.equal(item.verdict, 'noise');
+    assert.match(item.why, /substituted at run time/);
+    assert.doesNotMatch(item.why, /says it is an example/, 'a variable is not an example, and saying so is a reason that does not check out');
+  });
+
+  it('still calls a value that really does say "example" an example', () => {
+    const root = project({ 'src/c.ts': 'const apiKey = "sk-example-not-a-real-key-000000000000";\n' });
+    const [finding] = scanSecrets(root, sourceFiles(root));
+    if (!finding) return; // the shape may not match; this guard is about not mislabelling, not about recall
+    assert.match(triageSecret(finding, root, new Set<string>()).why, /example/);
   });
 });

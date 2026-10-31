@@ -125,3 +125,60 @@ describe('what the extension offers and what it can actually do', () => {
     }
   });
 });
+
+// Phase 121: what the published extension actually contains.
+//
+// vsce warned on every publish that the project had neither a .vscodeignore nor a `files`
+// property, so it packaged whatever happened to be in the folder. Phase 119 wrote that risk down
+// - "a packaging change could silently drop one" - and checked only that the files exist on disk,
+// which is a different thing from being in the .vsix a user installs.
+//
+// Now there is a .vscodeignore, and an ignore file is a new way to lose a file: one careless
+// pattern and `require('./correct.js')` throws in the editor, on a user's machine, with every
+// test here still green. So this reads the real package. A .vsix is a zip, and the central
+// directory at its end lists every entry by name - about twenty lines to parse, and worth it,
+// because nothing else here looks at what is actually shipped.
+describe('the packaged extension', () => {
+  /** Entry names from a zip's central directory. No dependency, and it reads the real artifact. */
+  function zipEntries(path: string): string[] {
+    const buf = readFileSync(path);
+    const END = 0x06054b50;
+    const CENTRAL = 0x02014b50;
+    let end = buf.length - 22;
+    while (end >= 0 && buf.readUInt32LE(end) !== END) end -= 1;
+    assert.ok(end >= 0, `${path} has no zip end-of-central-directory record`);
+    let at = buf.readUInt32LE(end + 16);
+    const count = buf.readUInt16LE(end + 10);
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      assert.equal(buf.readUInt32LE(at), CENTRAL, 'central directory entry expected');
+      const nameLen = buf.readUInt16LE(at + 28);
+      const extraLen = buf.readUInt16LE(at + 30);
+      const commentLen = buf.readUInt16LE(at + 32);
+      names.push(buf.toString('utf8', at + 46, at + 46 + nameLen));
+      at += 46 + nameLen + extraLen + commentLen;
+    }
+    return names;
+  }
+
+  it('ships every file the extension needs to run', () => {
+    const vsix = join(DIR, `tewip-${manifest.version}.vsix`);
+    if (!existsSync(vsix)) return; // a clean checkout has no build; the pairing test covers that
+    const inside = zipEntries(vsix).map((n) => n.replace(/^extension\//, ''));
+    assert.ok(inside.length > 5, `only ${inside.length} entries read from the .vsix; the reader is wrong`);
+    for (const needed of ['extension.js', 'factories.js', 'correct.js', 'run.js', 'engine-version.js', 'version-compare.js', 'package.json', 'icon.png']) {
+      assert.ok(inside.includes(needed), `${needed} is missing from tewip-${manifest.version}.vsix: ${inside.join(', ')}`);
+    }
+    // The readme is the marketplace listing page, and vsce lowercases its name.
+    assert.ok(
+      inside.some((n) => n.toLowerCase() === 'readme.md'),
+      `no readme in the package: ${inside.join(', ')}`,
+    );
+  });
+
+  it('does not ship an earlier build inside this one', () => {
+    const vsix = join(DIR, `tewip-${manifest.version}.vsix`);
+    if (!existsSync(vsix)) return;
+    assert.deepEqual(zipEntries(vsix).filter((n) => n.endsWith('.vsix')), [], 'a .vsix inside the .vsix doubles the download for nothing');
+  });
+});

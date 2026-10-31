@@ -1,0 +1,21 @@
+# What does NOT go into the published extension.
+#
+# vsce warns when a project has neither this file nor a `files` property, and it is right to: with
+# neither, it packages whatever happens to be in the folder. Phase 119 wrote that risk down -
+# "a packaging change could silently drop one" - and then left the folder to chance. This is the
+# other half.
+#
+# Deliberately short. Everything the extension needs at runtime is in this folder and must stay in
+# the package, so the safe default here is to exclude almost nothing. engine/test/extension.test.ts
+# holds that: no pattern here may match a file the extension needs to run.
+
+# Earlier builds. A .vsix inside a .vsix doubles the download for nothing.
+*.vsix
+
+# Type declarations are for editing this code, not for running it.
+**/*.d.ts
+
+# Editor and OS leftovers that are no part of the extension.
+.vscode/**
+.DS_Store
+Thumbs.db

@@ -95,6 +95,11 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip safety [--out safety.md]
+                                    What Tewip may do to your code and what it will not, with the
+                                    test that enforces each promise named beside it - and how many
+                                    failures it declined to explain in this project. For the person
+                                    who has to approve an agent touching the codebase. No model.
   tewip correct <kind> "<what>" <verdict> ["why"] | --list
                                     Tell Tewip it was wrong, about anything it decides: a diagnosis,
                                     a flaky verdict, a security finding, a design difference, a

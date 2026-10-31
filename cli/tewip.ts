@@ -239,6 +239,11 @@ async function main(): Promise<void> {
       runStart(process.cwd());
       return;
     }
+    case 'safety': {
+      const { runSafety } = await import('../engine/safety/safety-command.ts');
+      runSafety({ root: process.cwd(), out: flag(args, 'out') });
+      return;
+    }
     case '--help':
     case '-h':
     case 'help':

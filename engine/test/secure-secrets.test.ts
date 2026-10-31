@@ -7,7 +7,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { scanSecrets, scanSourceFiles, sourceFiles } from '../secure/secrets.ts';
+import { scanSecrets } from '../secure/secrets.ts';
+import { scanSourceFiles, sourceFiles } from '../walk.ts';
 import { triageSecret } from '../secure/triage.ts';
 import { runSecure } from '../secure/secure-command.ts';
 

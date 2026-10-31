@@ -18,7 +18,8 @@ import { join, resolve } from 'node:path';
 import { vouchAll } from '../engine/vouch/vouch-command.ts';
 import { findBarriers } from '../engine/access/access-command.ts';
 import { migrationsUnder, readMigration } from '../engine/schema/schema-command.ts';
-import { scanSecrets, sourceFiles } from '../engine/secure/secrets.ts';
+import { scanSecrets } from '../engine/secure/secrets.ts';
+import { sourceFiles } from '../engine/walk.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 
 interface Expectation { [key: string]: number }

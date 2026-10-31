@@ -430,3 +430,36 @@ describe('a click handler, in every framework spelling', () => {
     assert.deepEqual(rules('<tr (click)="expand()"><td>x</td></tr>', 'v.html'), ['click-without-keyboard']);
   });
 });
+
+// Phase 129: the accessibility check read none of the markup and reported no barriers.
+//
+// `findBarriers` walked the project with the secret scanner's budget - 5,000 *text* files - and
+// then filtered what came back down to markup. On a monorepo the budget is gone long before the
+// markup is reached. n8n has 1,456 markup files; 9 of them survived the cap, and none of those
+// survived the test-file filter, so `access` reported no barriers over a project it had never
+// opened. Zero findings and zero files read, which reads exactly like a clean bill of health.
+//
+// After: n8n reads 1,437 files and reports 391 findings; discourse 357 files and 340, up from
+// 109 and 64. The budget now counts the files the caller will actually read.
+describe('the budget counts the files the caller wants', () => {
+  const tree = (markup: number, other: number): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-access-'));
+    mkdirSync(join(root, 'src'), { recursive: true });
+    // The other files come first by name, so a cap over all text would be spent before any markup.
+    for (let i = 0; i < other; i += 1) writeFileSync(join(root, 'src', `aaa-${String(i).padStart(4, '0')}.ts`), `export const n = ${i};\n`, 'utf8');
+    for (let i = 0; i < markup; i += 1) writeFileSync(join(root, 'src', `zzz-${i}.html`), '<html><body><img src="a.png"></body></html>\n', 'utf8');
+    return root;
+  };
+
+  it('reads the markup even when far more text files come first', () => {
+    const root = tree(12, 300);
+    const { filesRead, findings } = findBarriers(root);
+    assert.equal(filesRead, 12, 'every markup file is read, however much else is in the repository');
+    assert.ok(findings.length > 0, 'and an <img> with no alt is still found');
+  });
+
+  it('counts nothing it did not read, so notRead is honest', () => {
+    const { notRead } = findBarriers(tree(5, 50));
+    assert.equal(notRead, 0, 'nothing was skipped here, and the report must not imply otherwise');
+  });
+});

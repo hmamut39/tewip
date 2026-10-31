@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { normalise } from '../quality/source-text.ts';
 import { dirname, join, relative, resolve } from 'node:path';
-import { sourceFiles } from '../secure/secrets.ts';
+import { scanSourceFiles } from '../walk.ts';
 import { readHandWritten } from '../../reporters/store.ts';
 import { JS_LIKE, MARKUP, tags } from './markup.ts';
 import { checkFile, type Finding } from './checks.ts';
@@ -85,9 +85,14 @@ export function keyOf(f: Finding): string {
  */
 const TEST_MARKUP = /(?:^|[\\/])(?:__tests__|__mocks__|tests?|spec|e2e|stories|fixtures?)[\\/]|\.(?:test|spec|stories|cy)\.[cm]?[jt]sx?$/i;
 
-export function findBarriers(root: string, only?: string): { findings: Finding[]; filesRead: number } {
+export function findBarriers(root: string, only?: string): { findings: Finding[]; filesRead: number; notRead: number } {
   const base = only ? resolve(root, only) : root;
-  const all = existsSync(base) && MARKUP.test(base) ? [base] : sourceFiles(base).filter((f) => MARKUP.test(f));
+  // The budget counts markup, not every text file in the repository. It used to borrow the secret
+  // scanner's 5,000-file cap over *all* text, which on n8n let 9 of 1,456 markup files through -
+  // and none survived the test-file filter, so `access` reported no barriers having opened
+  // nothing. A clean accessibility report is the one that must never be an artifact of a budget.
+  const scan = existsSync(base) && MARKUP.test(base) ? { files: [base], total: 1 } : scanSourceFiles(base, 20_000, (f) => MARKUP.test(f));
+  const all = scan.files;
   // Asking for a path by name overrides the exclusion: if you point at a fixture, you want it read.
   const files = only ? all : all.filter((f) => !TEST_MARKUP.test(relative(root, f)));
   const findings: Finding[] = [];
@@ -107,7 +112,7 @@ export function findBarriers(root: string, only?: string): { findings: Finding[]
     const isDocument = /\.html?$/i.test(path);
     findings.push(...checkFile(source, tags(source, jsLike), relative(root, path).replaceAll('\\', '/'), isDocument));
   }
-  return { findings, filesRead };
+  return { findings, filesRead, notRead: Math.max(0, scan.total - all.length) };
 }
 
 /**

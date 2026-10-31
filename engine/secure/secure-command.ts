@@ -6,7 +6,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { auditDependencies } from './deps.ts';
-import { scanSecrets, scanSourceFiles } from './secrets.ts';
+import { scanSecrets } from './secrets.ts';
+import { scanSourceFiles } from '../walk.ts';
 import { readAccepted, triageDependency, triageSecret, triageWeb, worstFirst, type SecurityItem } from './triage.ts';
 import { isLocal, scanWeb } from './web.ts';
 import { reconcile } from './reconcile.ts';

@@ -15,7 +15,7 @@ import { writerFromEnv } from '../quality/model.ts';
 import { usageLine } from '../llm/usage.ts';
 import { failingTests } from '../autofix/code-fix.ts';
 import { lineDiff, renderDiff } from '../autofix/line-diff.ts';
-import { sourceFiles } from '../secure/secrets.ts';
+import { sourceFiles } from '../walk.ts';
 import { applyEdits, Workspace } from './apply.ts';
 import { repairFeatureCode, writeFeatureCode, writeFeatureTest, type BuildContext, type CodeChange } from './build.ts';
 

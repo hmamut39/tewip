@@ -115,7 +115,12 @@ export function triageSecret(finding: SecretFinding, root: string, accepted: Set
       next: 'nothing to revoke, because nothing outside this machine accepts it. Worth replacing with a value read from the environment, on a normal schedule.',
     };
   }
-  if (finding.template) {
+  // A test resource is both, and "test file" is the truer half. Keycloak keeps 30-odd SD-JWT test
+  // vectors in core/src/test/resources/sdjwt/*.txt, and because `.txt` reads as documentation they
+  // were all explained as "the file is a template or documentation" - about files sitting under
+  // src/test/resources. Same verdict and same severity either way, so nothing here changes what a
+  // reader is told to do; it changes whether the sentence they check holds up.
+  if (finding.template && !IN_A_TEST.test(finding.file.split(String.fromCharCode(92)).join('/'))) {
     // Only the file's name says this is a template; the value itself looks like a real credential.
     // Dismissing it would hide the commonest accident there is - a working key pasted into an
     // example file - so it is shown, below the ones that need acting on now.

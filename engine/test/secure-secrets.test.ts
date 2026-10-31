@@ -272,3 +272,46 @@ describe('a credential that is a variable', () => {
     assert.match(triageSecret(finding, root, new Set<string>()).why, /example/);
   });
 });
+
+// Phase 132: a test resource explained as documentation.
+//
+// Keycloak keeps 30-odd SD-JWT test vectors in core/src/test/resources/sdjwt/*.txt. Because `.txt`
+// reads as documentation, every one of them was explained as "the file is a template or
+// documentation" - about files sitting under src/test/resources. The verdict and the severity are
+// the same either way, so nobody was told to do the wrong thing; what was wrong is the sentence a
+// reader checks before believing the verdict, which is the only part of a finding that can be
+// audited. Found by reading all 99 findings across the four unpinned repositories.
+describe('a file that is both a test and a document', () => {
+  const inTest = () => project({ 'core/src/test/resources/sdjwt/s20.1-kb.txt': `eyJhbGciOiJFUzI1NiJ9.eyJfc2QiOlsiQ3JRZTdTNWtxQkFIdC1uTVlYZ2M2YnB4NVlfNWVfTlVhIl19.c2lnbmF0dXJlX2xvbmdfZW5vdWdoX2hlcmU${String.fromCharCode(10)}` });
+
+  it('is explained as a test file, which is the truer half', () => {
+    const root = inTest();
+    const [finding] = scanSecrets(root, sourceFiles(root));
+    assert.ok(finding, 'the token is found');
+    const item = triageSecret(finding, root, new Set<string>());
+    assert.match(item.why, /this is a test file/);
+    assert.doesNotMatch(item.why, /template or documentation/, 'src/test/resources is not documentation');
+  });
+
+  it('does not change what the reader is told to do', () => {
+    // The reason improved; the verdict must not move, or this is a behaviour change wearing a
+    // wording change's clothes. Every verdict count across ten corpus repositories is unchanged.
+    const root = inTest();
+    const [finding] = scanSecrets(root, sourceFiles(root));
+    const item = triageSecret(finding, root, new Set<string>());
+    assert.equal(item.verdict, 'not-reachable');
+    assert.equal(item.severity, 'medium');
+  });
+
+  it('still calls a real template a template', () => {
+    // A JWT rather than a vendor-shaped key on purpose. The first version of this fixture used a
+    // realistic `sk_live_...`, and GitHub's push protection refused the commit - correctly, and it
+    // is the best review this file has had: a fixture written for a secret scanner was convincing
+    // enough to trip a real one. A token with no `typ` is indistinguishable from a credential, so
+    // it reaches the template branch, which is what this case is about.
+    const root = project({ 'docs/example.env.txt': `API_TOKEN=${jwt(undefined)}${String.fromCharCode(10)}` });
+    const [finding] = scanSecrets(root, sourceFiles(root));
+    assert.ok(finding, 'the value must look like a credential, or this tests nothing');
+    assert.match(triageSecret(finding, root, new Set<string>()).why, /template or documentation/);
+  });
+});

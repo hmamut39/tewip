@@ -42,6 +42,17 @@
             "ask-a-person": 8
           },
           "verified": "2026-10-31. filesRead 644 -> 650 and findings 13 -> 15. `access` used to borrow the secret scanner's 5,000-text-file budget, which on a large repository is spent before the markup is reached; the cap now counts markup. The 6 extra files brought 2 findings, both read by hand: 3p-cookies-step1.html and -step2.html declare `<html>` with no lang, a real WCAG 3.1.1 Level A failure. Both are hidden iframes that probe third-party cookie support and contain no text at all, so nobody is harmed in practice - kept as barriers because a missing lang is a missing lang, and downgrading a Level A criterion on my own judgement is not this corpus's job. 2026-10-12: all 5 barriers opened and read in the source. Two are real defects in Red Hat's production interface - an unlabelled <img src={application.logoUri}> in the account console users see, and a bare <input type=\"color\"> in the admin theme editor. The other three are a missing alt and two <html> elements with no lang."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 5000,
+            "findings": 43,
+            "needs-someone": 0,
+            "noise": 1,
+            "not-reachable": 42
+          },
+          "verified": "2026-10-31. 43 findings in 12 distinct classes, every class read. 40 are SD-JWT test vectors under core/src/test/resources/sdjwt/*.txt - deliberately committed conformance fixtures - plus a JWT literal in SkeletonKeyTokenTest.java, a documented JWT in an oid4vci .adoc, and a credentialled URL in an outgoinghttp .adoc example. needs-someone 0 is the number that matters: an identity server is where a false 'go revoke this' would be most expensive. filesRead 5000 is the scan's budget rather than the project, and the report says what it did not read."
         }
       ]
     },
@@ -405,6 +416,17 @@
             "destroys-data": 1
           },
           "verified": "read by hand on 2026-10-19. The single finding is real: nc_096_deprecate_unused.ts drops nc_shared_bases in its up(). Before this phase the same checkout gave 129 findings - 122 of them dropTable calls inside knex down() functions, which is what a reversible migration is, and 102 of those were Sakila sample-database dumps under packages/nocodb/tests/ that nobody will ever deploy."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 3730,
+            "findings": 14,
+            "needs-someone": 0,
+            "noise": 10,
+            "not-reachable": 4
+          },
+          "verified": "2026-10-31. 14 findings in 4 classes, every class read, and 12 of them are one file: swagger-v2.json, an OpenAPI schema whose whole job is to show the shape of a token. Eight are caught by the key above them saying example; the other four sit three levels deep under \"Example 1\" where a one-line lookback cannot see, and are caught because the file itself is a schema. The remaining two are a `${...}` variable and a value reading example. needs-someone 0. filesRead 3730 is the whole project - nothing was capped here."
         }
       ]
     },
@@ -435,6 +457,17 @@
             "slow": 27
           },
           "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations. | 2026-10-19, two more: OCRBigramsForCJK.ts runs truncate ${sql.table('ocr_search')}, now read as \"empties the table ocr_search\" rather than \"empties the table execute\" - the name pattern used to run past the end of the template literal into .execute. StandardizeNames.ts renames tables from a list, and the loop variable is reported as written because Tewip cannot resolve it. Both read by hand."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 3141,
+            "findings": 8,
+            "needs-someone": 0,
+            "noise": 3,
+            "not-reachable": 5
+          },
+          "verified": "2026-10-31. 8 findings in 6 classes, every class read: three Postgres connection strings in administration docs, a private key in packages/e2e-auth-server/test-keys.ts, two URLs pointing at example.com, and a `${...}` variable in a GitHub workflow. needs-someone 0. filesRead 3141 is the whole project."
         }
       ]
     },
@@ -519,6 +552,17 @@
             "barrier": 182
           },
           "verified": "2026-10-31. Pinned to hold Phase 129, where this read 0 files and reported 0 findings on a project with 1,456 markup files. filesRead is the number that matters here: if it falls back toward zero the budget bug has returned. Three barrier rules were opened and read - a <li @click> with no keyboard handler in TabItem.vue:34, an <html> with no lang in admin-consent-callback.handlebars, an <iframe> with no title in form-shell.handlebars:201 - all genuine. The other 388 findings were not read one by one and this note does not claim they were."
+        },
+        {
+          "command": "secrets",
+          "expect": {
+            "filesRead": 5000,
+            "findings": 34,
+            "needs-someone": 0,
+            "noise": 21,
+            "not-reachable": 13
+          },
+          "verified": "2026-10-31. 34 findings in 8 classes, every class read. The noise is a deliberate fixture file - evaluations/computer-use/fixtures/leaked-credentials.txt, which exists to hold fake credentials - plus values whose own text says example. The not-reachable are tokens inside __tests__ files and a documented example in an eslint rule's markdown. needs-someone 0."
         }
       ]
     }

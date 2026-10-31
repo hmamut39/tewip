@@ -114,9 +114,35 @@ export function migrationsUnder(root: string, limit = 20_000): string[] {
         continue;
       }
       if (dialectOf(rel, text) === 'unknown') continue;
+      if (isDump(text)) continue;
       found.push(rel);
     }
   };
   walk(root, 0);
   return found.sort();
+}
+
+/**
+ * Lines a dumping tool writes about itself, in the first few lines of its output.
+ *
+ * Unambiguous on purpose: these are produced by mysqldump, pg_dump and mariadb-dump and by
+ * nothing a person writes by hand.
+ */
+const DUMP_HEADER = /^--\s*(?:MySQL|MariaDB|PostgreSQL)[^\n]*dump\b|^--\s*Dumped from database version|^\/\*!40101 SET @OLD_CHARACTER_SET_CLIENT/im;
+
+/**
+ * Is this a dump of a database rather than a change to one?
+ *
+ * `SCHEMA_PATH` accepts any `.sql` file anywhere, which is right for a migration kept outside a
+ * migrations directory and wrong for everything else a project writes in SQL. OpenMRS keeps
+ * `initial_test_db.sql` at its root - a mysqldump whose first line says so - and `schema` read it
+ * as a migration and reported **116 findings**, every one of them a `DROP TABLE IF EXISTS`
+ * followed immediately by the `CREATE TABLE` that replaces it. That is not a risk; that is what a
+ * dump looks like. On a hospital system it read as 116 ways to destroy patient data.
+ *
+ * Only the head is examined, because a dump says what it is at the top and a migration that
+ * happens to mention mysqldump in a comment three hundred lines down is still a migration.
+ */
+export function isDump(text: string): boolean {
+  return DUMP_HEADER.test(text.slice(0, 2000));
 }

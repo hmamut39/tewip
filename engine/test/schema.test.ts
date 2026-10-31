@@ -7,11 +7,14 @@
 // Zulip taught the second lesson on the first real run: its data migrations already set `atomic = False`
 // and Tewip told them to do it anyway.
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
 import { schemaFiles } from '../schema/schema-command.ts';
-import { MIGRATION, SCHEMA_FILE } from '../schema/migration-files.ts';
+import { MIGRATION, SCHEMA_FILE, isDump, migrationsUnder } from '../schema/migration-files.ts';
 import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -918,5 +921,53 @@ describe('the SQLite rebuild is not a loss', () => {
   it('does not excuse a drop because some other table was renamed', () => {
     const other = ['DROP TABLE "audit";', 'ALTER TABLE "temp_x" RENAME TO "x";'].join(NL);
     assert.equal(droppingWhatIsNew(readSql(other), other).some((f) => f.table === 'audit'), true);
+  });
+});
+
+// Phase 130: a database dump read as a migration, on a hospital system.
+//
+// `SCHEMA_PATH` accepts any `.sql` file anywhere, which is right for a migration kept outside a
+// migrations directory and wrong for everything else a project writes in SQL. OpenMRS keeps
+// `initial_test_db.sql` at its root. Its first line is `-- MySQL dump 10.19`. `schema` read it as
+// a migration and reported **116 destroys-data findings** - every one a `DROP TABLE IF EXISTS`
+// followed immediately by the `CREATE TABLE` that replaces it, which is not a risk, it is what a
+// dump looks like. On a hospital system it read as 116 ways to destroy patient data.
+//
+// 406 findings became 290, and the other nine repositories with migrations did not move at all.
+describe('a dump is not a migration', () => {
+  const head = (tool: string) => `-- ${tool}\n--\n-- Host: localhost    Database: openmrs\n\nDROP TABLE IF EXISTS \`patient\`;\nCREATE TABLE \`patient\` (id int);\n`;
+
+  it('knows the tools that announce themselves', () => {
+    for (const tool of ['MySQL dump 10.19  Distrib 10.3.34-MariaDB', 'MariaDB dump 10.19', 'PostgreSQL database dump']) {
+      assert.equal(isDump(head(tool)), true, tool);
+    }
+    assert.equal(isDump('-- Dumped from database version 14.2\nDROP TABLE x;\n'), true);
+    assert.equal(isDump('/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n'), true, "mysqldump's preamble");
+  });
+
+  it('does not mistake a migration for one', () => {
+    assert.equal(isDump('-- add the audit column\nALTER TABLE patient ADD COLUMN audited_at timestamp;\n'), false);
+    assert.equal(isDump('DROP TABLE IF EXISTS old_patient;\n'), false, 'a real migration may drop a table, and that is the finding');
+  });
+
+  it('reads only the head, so a migration mentioning mysqldump later is still a migration', () => {
+    // The marker has to be one the pattern really matches, or this passes for the wrong reason -
+    // the first version used "-- restore with: MySQL dump", which the pattern never matched
+    // anywhere, so removing the head limit changed nothing and the test proved nothing.
+    const marker = '-- MySQL dump 10.19\n';
+    const late = `ALTER TABLE patient ADD COLUMN x int;\n${'-- filler\n'.repeat(300)}${marker}`;
+    assert.ok(late.indexOf(marker) > 2000, 'the marker must sit past the head, or there is nothing to test');
+    assert.equal(isDump(late), false, 'a migration that mentions a dump far below is still a migration');
+    assert.equal(isDump(marker + late), true, 'and the same marker at the top is still read');
+  });
+
+  it('leaves a dump out of the files a project is judged on', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-schema-'));
+    mkdirSync(join(root, 'db', 'migrate'), { recursive: true });
+    writeFileSync(join(root, 'initial_test_db.sql'), head('MySQL dump 10.19'), 'utf8');
+    writeFileSync(join(root, 'db', 'migrate', '001_real.sql'), 'ALTER TABLE patient DROP COLUMN nickname;\n', 'utf8');
+    const found = migrationsUnder(root).map((f) => f.split(String.fromCharCode(92)).join('/'));
+    assert.ok(found.some((f) => f.endsWith('001_real.sql')), 'the real migration is still read');
+    assert.ok(!found.some((f) => f.endsWith('initial_test_db.sql')), 'the dump is not');
   });
 });

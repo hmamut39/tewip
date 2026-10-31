@@ -1200,6 +1200,39 @@ With `--act` it carries the decision out, and this is where the refusals matter 
 - Everything it did or refused goes to `.tewip/actions.jsonl`, with the run that justified it.
 - It **will not repeat itself**: the same attempt is refused until a new run gives it new evidence.
 
+## What an IT department has to answer (Phases 133-137)
+
+Five commands that produce evidence rather than a judgement. All five are rules-only: no model is
+called, nothing leaves the machine, and every number is re-derivable by running the command again.
+
+```bash
+tewip sbom                  # what shipped, and which licences need a decision
+tewip infra                 # what the containers and compose files let in
+tewip portfolio ~/work      # the same page across every repository under a folder
+tewip audit                 # who ran what, when, and whether the record was edited
+tewip safety                # what Tewip itself refuses to do
+```
+
+- **`sbom`** writes a CycloneDX 1.6 inventory from the lockfile and classifies every licence as
+  permissive, weak or strong copyleft, source-available, **not stated**, or **not recorded**. The
+  last two are different on purpose: "the package declares none" and "this lockfile does not say"
+  are not the same fact, and only the first is the package's doing.
+- **`infra`** reads Dockerfiles and compose files for the settings that matter in what ships -
+  running as root, a privileged container, the docker socket mounted in - and separates them from
+  the devcontainer and test files, where the same setting is usually fine.
+- **`portfolio`** runs seven checks over every checkout under a folder and sorts the worst first.
+  The rule that keeps it honest: **a check that could not run prints a dash, never a 0.** At forty
+  rows, a zero meaning "nothing installed" looks exactly like a zero meaning "nothing wrong".
+- **`audit`** appends one line per run to `.tewip/audit.jsonl`, each carrying the hash of the line
+  before it, so an entry that was changed or removed from the middle is named by line number. Flags
+  whose value is a credential are recorded by name with the value dropped. `--gate` exits non-zero
+  when the chain does not hold, for a nightly check.
+- **`safety`** is the list of things Tewip will not do, printed by Tewip.
+
+What `audit` does **not** prove is in its own report, not in a footnote: it does not survive the
+file being deleted or lines being cut from the end, and it records what was run, not what was true.
+A tamper-evident log that oversells itself is worse than a plain one, because somebody relies on it.
+
 ## Where it has been tried
 
 | Project | How | Result |

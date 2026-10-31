@@ -7,16 +7,25 @@
 // somebody already knew their names.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { HELP } from '../../cli/help.ts';
 
-const cli = readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'tewip.ts'), 'utf8');
-const work = readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'verbs-work.ts'), 'utf8');
+const CLI_DIR = join(import.meta.dirname, '..', '..', 'cli');
+const cli = readFileSync(join(CLI_DIR, 'tewip.ts'), 'utf8');
+/** Every verb module, found by listing rather than by name. */
+const verbModules = readdirSync(CLI_DIR).filter((f) => /^verbs-.*\.ts$/.test(f));
 
-/** Every `case 'verb':` the command line dispatches, minus the flags and aliases. */
-const verbs = [...`${cli}${work}`.matchAll(/case '([a-z-]+)':/g)]
+/**
+ * Every `case 'verb':` the command line dispatches, minus the flags and aliases.
+ *
+ * Read from tewip.ts and every `cli/verbs-*.ts`. This used to name tewip.ts and verbs-work.ts,
+ * and so it never saw verbs-prove.ts: `done`, `vouch`, `a2a` and the rest could have been
+ * dispatched with no help text at all and the test below would have passed. A check that silently
+ * covers two thirds of what it claims to is worse than no check, because it is believed.
+ */
+const verbs = [...[cli, ...verbModules.map((f) => readFileSync(join(CLI_DIR, f), 'utf8'))].join('').matchAll(/case '([a-z0-9-]+)':/g)]
   .map((m) => m[1])
   .filter((v) => !['help', 'mcp'].includes(v) && !v.startsWith('-'));
 
@@ -27,7 +36,8 @@ describe('the command line and its help', () => {
   });
 
   it('answers at least the verbs this project has shipped', () => {
-    for (const verb of ['explain', 'plan', 'write', 'review', 'flaky', 'secure', 'attest', 'incident', 'recall', 'trace', 'pursue']) {
+    // At least one from each module, so a whole verb file going missing is caught, not just a verb.
+    for (const verb of ['explain', 'plan', 'write', 'review', 'flaky', 'secure', 'attest', 'incident', 'recall', 'trace', 'pursue', 'done', 'vouch', 'sbom', 'audit']) {
       assert.ok(verbs.includes(verb), `${verb} is no longer dispatched by the command line`);
     }
   });
@@ -100,9 +110,19 @@ describe('the cost line', () => {
 // invented verb is the version of this that wastes a reader's afternoon.
 describe('the README', () => {
   const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
-  /** Verbs the CLI really answers, read from its own switch and the two verb modules. */
+  /**
+   * Verbs the CLI really answers, read from its own switch and from every verb module.
+   *
+   * Found by listing `cli/verbs-*.ts` rather than by naming them. The first version named the two
+   * that existed, and the next split - the evidence verbs, in Phase 137 - moved `attest` into a
+   * third file and this test went red claiming the README had invented it. A guard against drift
+   * that itself needs editing whenever the code moves is a guard that will one day be edited the
+   * lazy way.
+   */
+  const cliDir = join(import.meta.dirname, '..', '..', 'cli');
+  const modules = readdirSync(cliDir).filter((f) => /^verbs-.*\.ts$/.test(f));
   const shipped = new Set(
-    [cli, readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'verbs-work.ts'), 'utf8'), readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'verbs-prove.ts'), 'utf8')]
+    [cli, ...modules.map((f) => readFileSync(join(cliDir, f), 'utf8'))]
       .flatMap((src) => [...src.matchAll(/case '([a-z][a-z0-9-]*)':/g)].map((m) => m[1])),
   );
 

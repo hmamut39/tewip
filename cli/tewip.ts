@@ -12,6 +12,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { flag } from './args.ts';
 import { HELP } from './help.ts';
+import { assureVerb } from './verbs-assure.ts';
 import { proveVerb } from './verbs-prove.ts';
 import { workVerb } from './verbs-work.ts';
 
@@ -24,8 +25,9 @@ async function main(): Promise<void> {
   const [verb, ...args] = process.argv.slice(2);
   // The verbs that reach into a tracker, a scan or a build live next door; the rest are here.
   if (await workVerb(verb, args)) return;
-  // The verbs that prove a change live next door too.
+  // The verbs that prove a change live next door too, and so do the ones that leave evidence.
   if (await proveVerb(verb, args)) return;
+  if (await assureVerb(verb, args)) return;
   switch (verb) {
     case 'explain': {
       // The explain script reads its arguments from process.argv, as when it is run directly.
@@ -206,19 +208,6 @@ async function main(): Promise<void> {
       if (!result.kept) process.exitCode = 1;
       return;
     }
-    case 'attest': {
-      const verify = flag(args, 'verify');
-      if (verify) {
-        const { verifyAttestation } = await import('../engine/attest/attest-command.ts');
-        const { ok, report } = verifyAttestation(verify, flag(args, 'key'));
-        console.log(report);
-        if (!ok) process.exitCode = 1;
-        return;
-      }
-      const { runAttest } = await import('../engine/attest/attest-command.ts');
-      runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });
-      return;
-    }
     case 'mcp':
       // An editor starts this from any folder, and an installed tool's own folder may be read-only:
       // the AI answer cache goes to the user's home folder, which is always writable.
@@ -237,26 +226,6 @@ async function main(): Promise<void> {
     case 'start': {
       const { runStart } = await import('../engine/start/start-command.ts');
       runStart(process.cwd());
-      return;
-    }
-    case 'portfolio': {
-      const { runPortfolio } = await import('../engine/portfolio/portfolio-command.ts');
-      runPortfolio({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), quick: args.includes('--quick') });
-      return;
-    }
-    case 'infra': {
-      const { runIac } = await import('../engine/iac/iac-command.ts');
-      runIac({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
-      return;
-    }
-    case 'sbom': {
-      const { runSbom } = await import('../engine/sbom/sbom-command.ts');
-      runSbom({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
-      return;
-    }
-    case 'safety': {
-      const { runSafety } = await import('../engine/safety/safety-command.ts');
-      runSafety({ root: process.cwd(), out: flag(args, 'out') });
       return;
     }
     case '--help':
@@ -285,6 +254,7 @@ async function main(): Promise<void> {
  * Not for `mcp`, which is a server speaking JSON-RPC and has no single answer to price, and not
  * for the verbs that only print text.
  */
+const startedAt = Date.now();
 const QUIET = new Set(['mcp', '--help', '-h', 'help', '--version', '-v', 'version', undefined as unknown as string]);
 
 try {
@@ -296,4 +266,28 @@ try {
 if (!QUIET.has(process.argv[2])) {
   const { usageLine } = await import('../engine/llm/usage.ts');
   console.error(usageLine());
+}
+
+/**
+ * Who ran what, appended once per run.
+ *
+ * Here for the same reason the cost line is here: one place cannot drift, and the next verb
+ * added gets it without anybody remembering. Reading the log is itself a command, and recording
+ * that would fill the log with itself, so `audit` is left out along with help and version.
+ *
+ * Never fails a command. A log that cannot be written - a read-only checkout, a full disk - is a
+ * reason to say so on stderr, not a reason for `tewip secure` to exit non-zero.
+ */
+if (!QUIET.has(process.argv[2]) && process.argv[2] !== 'audit') {
+  try {
+    const { record } = await import('../engine/audit/audit.ts');
+    record(process.cwd(), {
+      command: process.argv[2] ?? '',
+      arguments: process.argv.slice(3),
+      outcome: process.exitCode ? `exit ${process.exitCode}` : 'ok',
+      seconds: (Date.now() - startedAt) / 1000,
+    });
+  } catch (error) {
+    console.error(`tewip: the run was not recorded in .tewip/audit.jsonl (${error instanceof Error ? error.message.split(String.fromCharCode(10))[0] : 'unknown'})`);
+  }
 }

@@ -95,6 +95,11 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip audit [--all] [--gate]
+                                    Who ran Tewip here, when, and with what. Each entry carries
+                                    the hash of the one before it, so an entry changed or removed
+                                    from the middle is caught and named. It says what it cannot
+                                    prove, including that it does not survive being deleted.
   tewip portfolio <folder of checkouts> [--out page.md|page.json] [--quick]
                                     One page for many repositories: credentials, injection,
                                     containers, licences, accessibility, migrations and tests that

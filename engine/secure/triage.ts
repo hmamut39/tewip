@@ -19,6 +19,7 @@ import type { DepFinding } from './deps.ts';
 import type { SecretFinding } from './secrets.ts';
 import type { WebFinding } from './web.ts';
 import { readHandWritten } from '../../reporters/store.ts';
+import type { Flow } from '../taint/flow.ts';
 
 export type Verdict = 'real-risk' | 'not-reachable' | 'noise' | 'accepted';
 
@@ -254,3 +255,29 @@ const ORDER: Record<Verdict, number> = { 'real-risk': 0, 'not-reachable': 1, noi
 const SEV: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 export const worstFirst = (a: SecurityItem, b: SecurityItem): number => ORDER[a.verdict] - ORDER[b.verdict] || SEV[a.severity] - SEV[b.severity];
+
+/**
+ * Untrusted input reaching a query or a shell, where the path is visible in one function.
+ *
+ * Always `real-risk` when it is reported at all, and that is the point of how narrow the rule
+ * is: a scanner that reports maybes has to grade them, and the grades are what people learn to
+ * ignore. If Tewip can see the value go in, it says so plainly; if it cannot, it says nothing
+ * and the report records that it looked no further.
+ */
+export function triageFlow(flow: Flow, accepted: Set<string>): SecurityItem {
+  const where = `${flow.file}:${flow.line}`;
+  const base = {
+    kind: 'secret' as const,
+    title: `${flow.source} reaches ${flow.sink} in ${where}`,
+    severity: 'high' as const,
+    where,
+    source: 'tewip injection check',
+  };
+  if (accepted.has(`injection ${where}`)) return { ...base, verdict: 'accepted', why: 'a person marked this one accepted in .tewip/security-accepted.txt', next: 'nothing: it was reviewed' };
+  return {
+    ...base,
+    verdict: 'real-risk',
+    why: `the value arrives from the request and is put into the statement by ${flow.through}, so whatever the caller sends is parsed as part of it: ${flow.evidence}`,
+    next: 'bind it as a parameter instead of building the string. A bound value is never parsed as syntax, which is the whole difference.',
+  };
+}

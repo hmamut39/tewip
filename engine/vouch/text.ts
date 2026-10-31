@@ -109,6 +109,29 @@ export function firstRealLine(body: string): string {
 }
 
 
+/**
+ * A concise arrow body: `(a) => a.join(x)` has no braces, so it ends at the end of the statement.
+ *
+ * Without this, a scan for the next `{` walks past the arrow entirely and lands in whatever block
+ * comes next in the file. In a test file that is the next test, full of assertions, so every
+ * one-line helper looked as though it asserted and any test calling one was called sound.
+ */
+export const conciseBody = (text: string, start: number): string => {
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if ('([{'.includes(ch)) depth += 1;
+    else if (')]}'.includes(ch)) {
+      depth -= 1;
+      // A closing bracket we never opened belongs to whatever encloses this arrow: the body stops.
+      if (depth < 0) return text.slice(start, i);
+    } else if (depth === 0 && (ch === ';' || ch === String.fromCharCode(10) || ch === ',')) {
+      return text.slice(start, i);
+    }
+  }
+  return text.slice(start);
+};
+
 export const balanced = (text: string, open: number): string | null => {
   if (open === -1) return null;
   let depth = 0;

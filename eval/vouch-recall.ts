@@ -33,6 +33,7 @@ import { join, resolve } from 'node:path';
 import { mutantsFor, applyMutant } from '../engine/prove/mutants.ts';
 import { CANNOT_FAIL, vouchFile } from '../engine/vouch/vouch.ts';
 import { testsIn, languageOf } from '../engine/vouch/tests-in.ts';
+import { report, type Judged, type Says } from './vouch-report.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -134,8 +135,6 @@ function withLastStatementDropped(text: string, only: string[]): { text: string;
   return { text: lines.join(NL), touched };
 }
 
-export type Says = 'cannot-fail' | 'crash-only' | 'checks' | 'not-judged' | 'not-found';
-
 /** A line that stands alone: its brackets balance and it ends a statement. */
 function selfContained(line: string): boolean {
   const text = line.trim();
@@ -158,17 +157,6 @@ function parses(text: string): boolean {
   } finally {
     rmSync(tmp, { force: true });
   }
-}
-
-interface Judged {
-  /** The `it(...)` title, which is what vouch knows a test by. */
-  name: string;
-  /** Describe blocks plus title: the only thing that identifies a test uniquely. */
-  full: string;
-  /** The mutants this test failed for, by line and kind. */
-  caught: Set<string>;
-  /** What vouch says about it, by reading. */
-  says: Says;
 }
 
 function judge(root: string, sourceFile: string, testFile: string, mutantCount: number): Judged[] {
@@ -206,7 +194,7 @@ function judge(root: string, sourceFile: string, testFile: string, mutantCount: 
           : judgement.verdict === 'cannot-tell'
             ? 'not-judged'
             : 'checks';
-    return { name, full, caught: caught.get(full) ?? new Set<string>(), says };
+    return { name, full, caught: caught.get(full) ?? new Set<string>(), says, why: judgement?.why };
   });
 }
 
@@ -218,80 +206,46 @@ function main(): void {
 
   const testPath = resolve(root, testFile);
   const originalTests = readFileSync(testPath, 'utf8');
+  // Two budgets, because the label depends on them. `mutantsFor` spreads its picks across the file
+  // rather than taking the first n, so the small budget is not a subset of the large one and neither
+  // can be derived from the other's run - they are genuinely different mutants, which is what makes
+  // agreement between them worth something.
+  const high = number('mutants', 8);
+  const low = Math.max(2, Math.floor(high / 2));
   let hollowed: string[] = [];
   try {
     // First the file as its authors wrote it, then the same file with some checks removed by the
     // vocabulary-free rule, so the corpus holds both kinds.
-    const asWritten = judge(root, sourceFile, testFile, number('mutants', 8));
-    const proved = asWritten.filter((j) => j.caught.size > 0).map((j) => j.name);
+    const wholeHigh = judge(root, sourceFile, testFile, high);
+    const wholeLow = judge(root, sourceFile, testFile, low);
+    // Seeded once, from the high budget's evidence: the tests it proved check something. Seeding
+    // twice would give two different files, and nothing below would be comparable.
+    const proved = wholeHigh.filter((j) => j.caught.size > 0).map((j) => j.name);
     process.stderr.write(`${NL}${proved.length} test(s) proved they check something; removing their last statement${NL}`);
     const seeded = withLastStatementDropped(originalTests, proved);
     hollowed = seeded.touched;
     writeFileSync(testPath, seeded.text, 'utf8');
     process.stderr.write(`${NL}last statement dropped from ${hollowed.length} test(s)${NL}`);
-    const afterSeeding = judge(root, sourceFile, testFile, number('mutants', 8));
+    const seededHigh = judge(root, sourceFile, testFile, high);
+    const seededLow = judge(root, sourceFile, testFile, low);
     // The seeded file has to run the same tests. If it does not, the deletion broke something and every
     // comparison below would be an artifact rather than a finding.
-    if (afterSeeding.length !== asWritten.length) {
-      throw new Error(`the seeded file ran ${afterSeeding.length} test(s) where the original ran ${asWritten.length}, so the deletion broke it and nothing is reported`);
+    if (seededHigh.length !== wholeHigh.length) {
+      throw new Error(`the seeded file ran ${seededHigh.length} test(s) where the original ran ${wholeHigh.length}, so the deletion broke it and nothing is reported`);
     }
-    report(asWritten, afterSeeding, hollowed);
+    process.stdout.write(
+      report(
+        [
+          { budget: low, asWritten: wholeLow, afterSeeding: seededLow },
+          { budget: high, asWritten: wholeHigh, afterSeeding: seededHigh },
+        ],
+        hollowed,
+      ),
+    );
   } finally {
     writeFileSync(testPath, originalTests, 'utf8');
     if (readFileSync(testPath, 'utf8') !== originalTests) throw new Error(`${testPath} was not restored`);
   }
-}
-
-function report(asWritten: Judged[], afterSeeding: Judged[], hollowed: string[]): void {
-  const before = new Map(asWritten.map((j) => [j.full, j]));
-
-  // The sound label: this test caught something when whole, and catches nothing now. Its check is gone,
-  // by execution, with no assumption about what covers what.
-  const lostItsCheck = afterSeeding.filter((j) => {
-    const whole = before.get(j.full);
-    return hollowed.includes(j.name) && whole !== undefined && whole.caught.size > 0 && j.caught.size === 0;
-  });
-  // Seeded tests that still catch something: the deletion removed something other than the check, so
-  // they are not hollow - and vouch must not accuse them.
-  const stillSound = afterSeeding.filter((j) => j.caught.size > 0);
-
-  const named = lostItsCheck.filter((j) => j.says === 'cannot-fail' || j.says === 'crash-only');
-  const outright = lostItsCheck.filter((j) => j.says === 'cannot-fail');
-  const missed = lostItsCheck.filter((j) => j.says === 'checks');
-  const accused = stillSound.filter((j) => j.says === 'cannot-fail');
-  const pct = (n: number, of: number) => (of === 0 ? 'n/a' : `${((n / of) * 100).toFixed(1)}%`);
-
-  process.stdout.write(
-    [
-      '# vouch, judged by execution',
-      '',
-      `${asWritten.length} test(s) in the file. The last statement was dropped from ${hollowed.length}.`,
-      `**${lostItsCheck.length}** of those provably lost their check: each caught a mutation of the source before, and catches none now.`,
-      '',
-      '## Recall: of the tests that provably lost their check, how many does vouch name?',
-      '',
-      `Named at all (cannot fail, or compares no value): ${named.length} of ${lostItsCheck.length} (${pct(named.length, lostItsCheck.length)})`,
-      `Named as unable to fail outright:                 ${outright.length} of ${lostItsCheck.length} (${pct(outright.length, lostItsCheck.length)})`,
-      `Missed - vouch called them sound:                 ${missed.length}`,
-      `Refused to judge:                                ${lostItsCheck.filter((j) => j.says === 'not-judged').length}`,
-      '',
-      '## Precision: does it accuse a test that still catches things?',
-      '',
-      `Tests that still caught a mutation after the deletion: ${stillSound.length}`,
-      `Of those, wrongly called unable to fail:               ${accused.length}`,
-      '',
-      ...(missed.length > 0 ? ['## The ones it missed', '', ...missed.slice(0, 15).map((j) => `- ${j.name}`), ''] : []),
-      ...(accused.length > 0 ? ['## Wrongly accused', '', ...accused.slice(0, 10).map((j) => `- ${j.name}`), ''] : []),
-      '---',
-      '',
-      'What the labels rest on: a test counted as having lost its check is one that failed for at least',
-      'one mutation of the source before the deletion and for none afterwards. That is execution, not',
-      "reading, and the deletion rule knows nothing about vouch's vocabulary - which is what stops this",
-      'being a measurement of its own seeding. It is still a floor rather than an estimate: the mutants',
-      'are few, and a test whose check survives in a form no mutant here reaches is simply not counted.',
-      '',
-    ].join(NL),
-  );
 }
 
 main();

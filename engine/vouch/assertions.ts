@@ -21,8 +21,19 @@ const CHECKS: RegExp[] = [
   // Tewip condemn all 59 tests in chalk - a third repeat of the Phase 8 lesson, so the pattern here
   // is deliberately generous about what an assertion on `t` can be called.
   /\bt\s*\.\s*(is|not|deepEqual|notDeepEqual|like|true|false|truthy|falsy|throws(Async)?|notThrows(Async)?|regex|notRegex|snapshot|pass|equal|same|strictSame|ok|notOk|match|type|has|hasStrict|rejects|resolves)\b/,
-  // Mocking libraries: verifying a call is a real check.
-  /\b(verify|verifyNoMoreInteractions|toHaveBeenCalled)\b/,
+  // Mocking libraries: verifying a call is a real check - but only when it is a call. This was a
+  // bare word match, so a fixture that *defines* a stub named `verify` matched it:
+  //   verify: async () => ({ passed: outcomes[run++], detail: 'run' }),
+  // asserts nothing, and five of this project's own autofix fixtures have exactly that line. A test
+  // whose last statement was removed and whose only remaining call was `deps(...)` was then told
+  // "it checks through deps(), which asserts" - a hollow test reported as sound. Mockito's
+  // `verify(mock)` and `Mockito.verify(mock)` both still match; a property key does not, because
+  // `: async` is not `(`. Found by measuring recall against execution, not by reading this list.
+  /\bverify(NoMoreInteractions)?\s*\(/,
+  // Kept deliberately, though `expect(fn).toHaveBeenCalled()` is already read by the `expect(`
+  // pattern above: this one is what reads the bare `spy.toHaveBeenCalled()` form. Narrowing it from
+  // a bare word to a property access is enough to stop a fixture that *defines* such a key.
+  /\.\s*toHaveBeenCalled/,
   /\bsinon\s*\.\s*assert\b/,
   // Python: pytest, unittest, hypothesis.
   /(^|[^\w.])assert\s+[^=]/m,

@@ -1173,9 +1173,25 @@ Two things it refuses to do, which is why the list is worth reading:
 **Recall, measured by execution** (`eval/vouch-recall.ts`): mutate a source file, record which tests
 catch which mutation, remove the last statement of the ones that provably caught something, and run it
 all again. A test that caught a mutation before and catches nothing now has provably lost its check -
-a label that owes nothing to vouch's own patterns. On 17 such cases across seven source/test pairs in
-two projects, **vouch named 12 (70.6%)**, and the five it did not name still hold a real assertion, so
-it is right about those too. Nothing that still caught a mutation was wrongly accused.
+a label that owes nothing to vouch's own patterns.
+
+Run across all 48 source/test pairs in this project (Phase 138): 28 produce labelled cases, 22 of
+those settle, and across them **vouch names 48 of 64 (75.0%)**, with **0 of 157 sound tests wrongly
+accused**. Precision is the strong half, and it is the half that matters: it did not once accuse a
+test that still catches something.
+
+A rate is printed only when two different mutant budgets label the same tests. They often do not,
+and that is the point: the first run of this reported "2 of 4 (50.0%)" at 8 mutants and **0 of 0** at
+14 mutants of the same file, because "caught nothing after the deletion" is evidence of hollowness
+only to the degree that the mutants are many. Six pairs still do not settle and are left out; they
+were the favourable ones, so 75.0% is a floor.
+
+Measuring it this way found **two real defects in vouch**, both reporting a hollow test as sound, and
+neither visible by reading the code: a one-line arrow helper was credited with assertions from the
+next block in the file, and a test fixture that merely *defines* a stub named `verify` was read as
+asserting. Fixing them took recall from 58.7% to 70.3% to 75.0%. The figure is measured on this
+project's own suite rather than on strangers' code, which is weaker evidence than the triage numbers
+above, and is the next thing to fix. See [eval/README.md](eval/README.md).
 
 ## A goal instead of a verb (Phases 19 and 21)
 

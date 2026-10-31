@@ -9,7 +9,7 @@
 // their time and their trust, and a reviewer who is wrong once is ignored afterwards. So a body whose
 // checking happens somewhere this cannot follow is reported as undecided, by name, and never as
 // vacuous.
-import { balanced, firstRealLine, stripLines, withoutComments } from './text.ts';
+import { balanced, conciseBody, firstRealLine, stripLines, withoutComments } from './text.ts';
 import { swallowsFailure } from './swallowed.ts';
 import { checksSomething, tautologies, unfinishedExpectations } from './assertions.ts';
 import { languageOf, looksLikeTests, testsIn, textRanges, type FoundTest, type Language } from './tests-in.ts';
@@ -177,10 +177,31 @@ function helpersThatCheck(text: string, language: Language): Set<string> {
     const name = hit[1] ?? hit[2] ?? hit[3];
     if (!name) continue;
     const from = (hit.index ?? 0) + hit[0].length;
-    const body = language === 'python' ? indentedFrom(text, from) : balanced(text, text.indexOf('{', from - 1));
+    const body = language === 'python' ? indentedFrom(text, from) : jsHelperBody(text, from, hit[0].trimEnd().endsWith('=>'));
     if (body && checksSomething(body)) names.add(name);
   }
   return names;
+}
+
+/**
+ * The body of a helper declared in JavaScript or TypeScript.
+ *
+ * An arrow's body begins where the match ends: `{` for a block, otherwise a single expression. The
+ * distinction is the whole point. This used to look for the next `{` from here regardless, which
+ * for `const file = (...lines) => lines.join(NL)` is not this helper's brace at all but the start
+ * of whatever block follows in the file. In a test file that is the next `describe` or `it`, so
+ * `checksSomething` saw its assertions and credited them to the helper - and then any test whose
+ * only remaining call was `file(...)` was told it checks something. A hollow test reported as
+ * sound, which is the one direction Tewip must never fail in.
+ *
+ * Found by measuring vouch's recall against execution: engine/test/line-diff.test.ts has exactly
+ * this helper, and a test stripped of its only assertion came back as "it checks through file(),
+ * which asserts".
+ */
+function jsHelperBody(text: string, from: number, isArrow: boolean): string | null {
+  if (!isArrow) return balanced(text, text.indexOf('{', from - 1));
+  const start = from + (/^\s*/.exec(text.slice(from))?.[0].length ?? 0);
+  return text[start] === '{' ? balanced(text, start) : conciseBody(text, start);
 }
 
 /** Python's block after an offset: every line indented further than the line the offset is on. */

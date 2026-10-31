@@ -84,6 +84,73 @@ describe('what it must not accuse', () => {
     assert.match(last?.why ?? '', /through expectTotals\(\)/);
   });
 
+  it('does not credit a one-line helper that asserts nothing', () => {
+    // Phase 138. `helpersThatCheck` looked for the next `{` after the declaration, which for an
+    // arrow with no braces is not the helper's body but the start of whatever block follows - here
+    // the `it` below, full of assertions. So `file` was recorded as a helper that asserts, and a
+    // test whose only remaining call was `file(...)` came back as "it checks through file(), which
+    // asserts". A hollow test reported as sound.
+    //
+    // Found by measuring vouch against execution rather than by reading it, on this project's own
+    // engine/test/line-diff.test.ts, which has exactly this helper.
+    const text = `const file = (...lines) => lines.join('\n');
+
+it('builds a file', () => {
+  const before = file('a', 'b');
+});
+
+it('asserts plenty', () => {
+  expect(1).toBe(1);
+  expect(2).toBe(2);
+});`;
+    const first = vouchFile('line.test.js', text).judgements[0];
+    assert.equal(first.verdict, 'crash-only', 'it compares no value, and the helper does not compare one for it');
+    assert.doesNotMatch(first.why, /through file\(\)/);
+  });
+
+  it('does not read a stub named verify as an assertion', () => {
+    // Phase 138, and the second defect the recall measurement turned up. `verify` was matched as a
+    // bare word, so a dependency-injection fixture that *defines* a stub called `verify` counted as
+    // asserting - and then the fixture builder itself counted as a helper that checks, and every
+    // test calling it was cleared. Five of this project's own autofix fixtures have this exact line.
+    const text = `function deps(outcomes) {
+  return {
+    readFile: (p) => '',
+    verify: async () => ({ passed: outcomes[0], detail: 'run' }),
+  };
+}
+
+it('builds the deps', () => {
+  const d = deps([true]);
+});`;
+    const first = vouchFile('fix.test.js', text).judgements[0];
+    assert.equal(first.verdict, 'crash-only', 'defining a stub named verify is not checking anything');
+    assert.doesNotMatch(first.why, /through deps\(\)/);
+  });
+
+  it('still reads a real mocking assertion as one', () => {
+    // The narrowing must not cost the thing the pattern was added for: Mockito both ways, and the
+    // bare `spy.toHaveBeenCalled()`. The usual `expect(fn).toHaveBeenCalled()` is deliberately not
+    // in this list - it is read by the `expect(` pattern, so it would pass even with the
+    // toHaveBeenCalled pattern deleted, and a case that cannot fail guards nothing.
+    for (const line of ['verify(mockedList).add("one");', 'Mockito.verify(mockedList).add("one");', 'spy.toHaveBeenCalled();']) {
+      const text = `it('t', () => {\n  ${line}\n});`;
+      assert.equal(vouchFile('a.test.js', text).judgements[0].verdict, 'checks', line);
+    }
+  });
+
+  it('still credits a one-line helper that does assert', () => {
+    // The fix must not go the other way: a concise arrow that asserts is a real helper.
+    const text = `const expectOne = (v) => expect(v).toBe(1);
+
+it('totals the order', () => {
+  expectOne(cart.total);
+});`;
+    const first = vouchFile('cart.test.js', text).judgements[0];
+    assert.equal(first.verdict, 'checks');
+    assert.match(first.why, /through expectOne\(\)/);
+  });
+
   it('refuses to judge a test whose helper is imported from somewhere else', () => {
     const text = `import { verifyTotals } from './helpers.js';\n\nit('totals the order', () => {\n  const cart = build();\n  verifyTotals(cart, 2);\n});`;
     const vouched = vouchFile('cart.test.js', text);

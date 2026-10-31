@@ -104,6 +104,67 @@ One finding worth keeping: an earlier wording of that rule's decline note ("a fl
 - TEST_DATA has no labelled cases, and LOCATOR_DRIFT has almost none.
 - "Outdated test after an intended UI change" occurs in real data but has no category in the taxonomy.
 
+## vouch's recall, judged by execution (Phase 138)
+
+`tewip vouch` reads a test and says whether it could ever fail. Until now its **precision** was
+measured and its **recall** was not: the report admitted it did not know how many hollow tests it
+walks past. `eval/vouch-recall.ts` measures it without asking a developer or a commit message.
+
+The method, and why it is not circular:
+
+1. Take a real source file and the test file that covers it.
+2. Make hollow tests **by a rule that knows nothing of vouch's vocabulary**: drop the last
+   statement of a test. Sometimes that removes the only check; sometimes it removes something else.
+3. Decide **by execution**. Mutate the source and record which tests fail, with the test file whole
+   and again with the statement dropped. A test that caught mutant M before and catches nothing now
+   has provably lost its check. That is the label.
+4. Only then ask `vouch`, by reading, and compare.
+
+Run it with `node eval/vouch-recall.ts <project> <source> <test> [--mutants 24]`.
+
+**The figure, on this project's own 48 (source, test) pairs.** 28 pairs produce labelled cases. 22
+of those settle - see below - and across them:
+
+| | |
+|---|---|
+| Tests that provably lost their check | 64 |
+| Named by vouch (cannot fail, or compares no value) | **48 (75.0%)** |
+| Missed - vouch called them sound | 12 |
+| Named as unable to fail *outright* | 0 |
+| Sound tests wrongly accused | **0 of 157** |
+
+Precision is the strong half, and it is the half that matters most: vouch did not once accuse a
+test that still catches something.
+
+**Why a rate is sometimes withheld.** The label rests on "caught nothing after the deletion", which
+is evidence of hollowness only to the degree that the mutants are many. The first run of this
+printed "named 2 of 4 (50.0%)" for `engine/audit/audit.ts` at 8 mutants; at 14 mutants of the same
+file the denominator fell to **zero** - every test it had labelled had caught something after all,
+and the two "misses" still held a real assertion. The 50% measured the mutant budget, not vouch. So
+the harness now judges at two budgets (n and n/2, which share no mutants, because `mutantsFor`
+spreads its picks rather than taking the first n) and prints a rate only when both label the same
+tests. Six of the 28 pairs do not settle and are excluded from the table; they were the favourable
+ones, so 75.0% is a floor, not a best case.
+
+**What the measurement found.** Two real defects in `vouch`, both in the direction that matters -
+a hollow test reported as sound - and neither findable by reading it:
+
+- **A one-line helper was credited with assertions it does not contain.** `helpersThatCheck`
+  scanned forward for the next `{` after a declaration. A concise arrow has none, so the scan
+  landed in the next `describe`/`it` block and read *its* assertions. `const file = (...lines) =>
+  lines.join(NL)` became a helper that asserts, and a stripped test calling it was told "it checks
+  through `file()`, which asserts". Recall 58.7% to 70.3%.
+- **A stub named `verify` was read as an assertion.** `verify` was matched as a bare word, so a
+  fixture *defining* `verify: async () => ({ passed, detail })` counted as checking - and then the
+  fixture builder itself counted as an asserting helper. Five of this project's own autofix
+  fixtures have that line. Recall 70.3% to 75.0%.
+
+**What this figure is not.** It is measured on this project's own test suite, not on strangers'
+code, which is weaker evidence than the triage numbers above and is the next thing to fix. The
+tests here are mostly written with several assertions each, so dropping the last statement often
+leaves a real check behind - which is why 12 of the 64 "misses" need reading before they are
+believed, and why several that were read turned out to be the label's fault rather than vouch's.
+
 ## Label format
 
 Each line of the file is one JSON object:

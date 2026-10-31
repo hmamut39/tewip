@@ -239,6 +239,11 @@ async function main(): Promise<void> {
       runStart(process.cwd());
       return;
     }
+    case 'infra': {
+      const { runIac } = await import('../engine/iac/iac-command.ts');
+      runIac({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      return;
+    }
     case 'sbom': {
       const { runSbom } = await import('../engine/sbom/sbom-command.ts');
       runSbom({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });

@@ -95,6 +95,12 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip infra [--out infra.md] [--gate]
+                                    What the containers let in: images that run as root, an
+                                    unpinned base, a download piped into a shell, the Docker socket
+                                    mounted, a privileged container. Reads Dockerfiles and compose
+                                    files only, and says what it did not check - no image CVEs, no
+                                    cluster, no cloud account. No model, no network.
   tewip sbom [--out sbom.json] [--gate]
                                     What this project ships and under what licence: a CycloneDX 1.6
                                     bill of materials, plus the licences that need a person to look

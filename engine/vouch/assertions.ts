@@ -134,6 +134,18 @@ export function unfinishedExpectations(body: string): string[] {
       const finished = new RegExp('(^|[^\\w$.])' + named?.[1] + '\\s*\\.\\s*(to|not_to|to_not)\\b');
       if (named && finished.test(body)) continue;
     }
+    // A chain continued on the next line, which is how Prettier formats every expectation long
+    // enough to wrap, and how Jasmine's `.withContext` is always written:
+    //
+    //     expect(buttonElement.classList.length)
+    //       .withContext('button should not have focus classes')
+    //       .toBe(0);
+    //
+    // The matcher is called; it is two lines further down. Reading only the `expect` line called
+    // 525 of Angular Components' 8,267 tests unfinished - six per cent of Google's own component
+    // library accused of comparing nothing, in the check whose headline is that it does not make
+    // false accusations. A terminating `;` is not this case: that statement really did end.
+    if (rest === '' && finishesBelow(lines, i)) continue;
     if (rest === '' || rest === ';') found.push(text);
     // A matcher named but not called: `.toBeVisible;` or `.toBeVisible` at the end of a statement.
     else if (/^\.\s*[A-Za-z$_][\w$]*\s*;?$/.test(rest)) found.push(text);
@@ -200,4 +212,56 @@ export function tautologies(body: string): string[] {
 function same(a: string, b: string): boolean {
   const clean = (v: string) => v.trim().replace(/^['"]|['"]$/g, '');
   return clean(a) === clean(b);
+}
+
+/**
+ * Methods that continue an expectation without comparing anything, so finding one called is not
+ * evidence that the expectation was finished. `expect(x).withContext('why');` still checks nothing.
+ */
+const NOT_A_MATCHER = new Set(['withContext', 'not', 'resolves', 'rejects', 'soft', 'to', 'that', 'and']);
+
+/**
+ * Does the chain started on `lines[i]` call a matcher on a later line?
+ *
+ * Only lines that begin with `.` are followed, so this reads a continued chain and stops at the
+ * next statement. It asks for a matcher that is *called* - `.toBe(0)`, not `.toBeTruthy` named and
+ * forgotten - which is the distinction the whole check exists to make.
+ */
+function finishesBelow(lines: string[], i: number): boolean {
+  // Depth matters because an argument can span lines of its own, and Angular writes exactly that:
+  //
+  //     expect(checker.isVisible(input))
+  //       .withContext(
+  //         'Expected element with `visibility: hidden` ancestor and closer ' +
+  //           '`visibility: visible` ancestor to be visible',
+  //       )
+  //       .toBe(true);
+  //
+  // Line three does not begin with a dot, and stopping there left 14 of these still accused.
+  let depth = 0;
+  // A matcher named on one line and called on a later one. Angular Material writes it with the
+  // argument commented out in between, which parses as `.toThrow()` and really does assert a
+  // throw: `expect(fn)` / `.toThrow` / `/* ... */` / `();`
+  let awaitingCall = '';
+  for (let n = i + 1; n < lines.length; n += 1) {
+    const next = bare(lines[n]).trim();
+    if (next === '' || next.startsWith('//')) continue;
+    if (awaitingCall && next.startsWith('(')) return !NOT_A_MATCHER.has(awaitingCall);
+    if (depth === 0 && !next.startsWith('.')) return false; // a new statement: it really did end
+    for (const call of next.matchAll(/\.\s*([A-Za-z$_][\w$]*)\s*\(/g)) {
+      if (!NOT_A_MATCHER.has(call[1])) return true;
+    }
+    awaitingCall = /^\.\s*([A-Za-z$_][\w$]*)\s*$/.exec(next)?.[1] ?? '';
+    depth = Math.max(0, depth + (next.match(/[([]/g)?.length ?? 0) - (next.match(/[)\]]/g)?.length ?? 0));
+    if (depth === 0 && /;\s*$/.test(next)) return false; // chain over, and nothing in it compared
+  }
+  return false;
+}
+
+/**
+ * The line with the inside of its string literals removed, so a bracket or a `.toBe(` written in a
+ * message cannot be read as code. The context strings this walks past are full of prose.
+ */
+function bare(line: string): string {
+  return line.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''").replace(/\/\*.*?\*\//g, '');
 }

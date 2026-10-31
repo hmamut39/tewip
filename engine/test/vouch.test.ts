@@ -664,3 +664,55 @@ describe('a slash-star that is not a comment', () => {
     assert.notEqual(verdictOf('thing_test.go', source), 'checks', 'a commented-out assertion is not an assertion');
   });
 });
+
+// Phase 128: 525 of Angular Components' 8,267 tests accused of comparing nothing.
+//
+// `vouch` read only the line the `expect(` was on, so every expectation whose chain continues
+// below it looked unfinished - which is how Prettier formats anything long enough to wrap, and
+// how Jasmine's `.withContext` is always written. Six per cent of Google's own component library
+// was called a test that cannot fail, by the check whose headline claim is that it does not make
+// false accusations. The 18,457 tests behind that claim were Python and Java; this shape does not
+// occur in either.
+//
+// All three forms below are verbatim in shape from src/cdk and src/material. After the fix
+// Angular reports 0, and every pinned corpus number is unchanged - including govuk-frontend's one
+// genuine unfinished expectation, which is the half that matters: not losing the real ones.
+describe('an expectation whose chain continues on the next line', () => {
+  const lines = (...parts: string[]) => parts.join(String.fromCharCode(10));
+
+  it('is finished when the matcher is below a withContext', () => {
+    const body = lines("it('removes classes', () => {", '  expect(buttonElement.classList.length)', "    .withContext('button should not have focus classes')", '    .toBe(0);', '});');
+    assert.notEqual(verdictOf('focus.spec.ts', body), 'unfinished-expectation');
+  });
+
+  it('is finished when the context message itself spans lines', () => {
+    const body = lines(
+      "it('is visible', () => {",
+      '  expect(checker.isVisible(input))',
+      '    .withContext(',
+      "      'Expected element with hidden ancestor and closer ' +",
+      "        'visible ancestor to be visible',",
+      '    )',
+      '    .toBe(true);',
+      '});',
+    );
+    assert.notEqual(verdictOf('checker.spec.ts', body), 'unfinished-expectation');
+  });
+
+  it('is finished when the matcher is called around a comment', () => {
+    // Parses as `.toThrow()`, so it really does assert a throw.
+    const body = lines("it('validates the type', () => {", '  expect(() => fixture.detectChanges())', '    .toThrow', "    /* new MatInputUnsupportedTypeError('file') */", '    ();', '});');
+    assert.notEqual(verdictOf('input.spec.ts', body), 'unfinished-expectation');
+  });
+
+  it('still catches one that truly ends with no matcher', () => {
+    // The guard above must not be bought by waving every chain through.
+    const body = lines("it('has a total', () => {", '  expect(cart.total)', "    .withContext('a total');", '  doSomethingElse();', '});');
+    assert.equal(verdictOf('cart.test.js', body), 'unfinished-expectation');
+  });
+
+  it('still catches one followed by an unrelated statement', () => {
+    const body = lines("it('has a total', () => {", '  expect(cart.total)', '  cart.save();', '});');
+    assert.equal(verdictOf('cart.test.js', body), 'unfinished-expectation');
+  });
+});

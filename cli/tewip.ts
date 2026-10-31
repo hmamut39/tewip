@@ -239,6 +239,11 @@ async function main(): Promise<void> {
       runStart(process.cwd());
       return;
     }
+    case 'portfolio': {
+      const { runPortfolio } = await import('../engine/portfolio/portfolio-command.ts');
+      runPortfolio({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), quick: args.includes('--quick') });
+      return;
+    }
     case 'infra': {
       const { runIac } = await import('../engine/iac/iac-command.ts');
       runIac({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });

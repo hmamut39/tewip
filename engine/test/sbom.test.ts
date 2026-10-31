@@ -77,6 +77,17 @@ describe('reading what the project wrote down', () => {
     assert.equal(inv.components[1].dev, true);
   });
 
+  it('does not read a missing licence in an npm lockfile as a package that has none', () => {
+    // npm omits the field for packages that do have a licence: govuk-frontend's lockfile leaves
+    // it off 1,088 of 2,632, among them @babel/plugin-syntax-bigint, which is MIT. Reading that
+    // absence as a finding asked for a lawyer on 1,088 dependencies. Tewip's own lockfile happens
+    // to be complete, which is why the assumption survived until a second project was measured.
+    const root = project({ 'package.json': '{"name":"app"}', 'package-lock.json': npmLock({ 'node_modules/quiet': { version: '1.0.0' } }) });
+    const [c] = inventory(root).components;
+    assert.equal(c.licence.standing, 'not-recorded', 'a gap in the lockfile, not a finding about the package');
+    assert.ok(!NEEDS_A_LOOK.includes(c.licence.standing), 'and so it does not ask for a person');
+  });
+
   it('reads a pnpm lockfile, and says the licences are not in it', () => {
     const root = project({
       'package.json': '{"name":"app"}',
@@ -117,7 +128,9 @@ describe('the documents it hands over', () => {
     inventory(
       project({
         'package.json': '{"name":"app"}',
-        'package-lock.json': npmLock({ 'node_modules/good': { version: '1.0.0', license: 'MIT' }, 'node_modules/silent': { version: '2.0.0' } }),
+        // `silent` declares a licence nobody recognises, which is a finding about the package.
+        // A package with no `license` key at all is a gap in the lockfile and is covered above.
+        'package-lock.json': npmLock({ 'node_modules/good': { version: '1.0.0', license: 'MIT' }, 'node_modules/silent': { version: '2.0.0', license: 'Weird-Vendor-Licence-4.1' } }),
       }),
     );
 
@@ -126,6 +139,7 @@ describe('the documents it hands over', () => {
     const silent = doc.components.find((c) => c.name === 'silent');
     const good = doc.components.find((c) => c.name === 'good');
     assert.equal(silent?.licenses, undefined, 'no licenses field at all beats a NOASSERTION nobody reads');
+    assert.equal(doc.components.length, 2);
     assert.deepEqual(good?.licenses, [{ expression: 'MIT' }]);
     assert.equal(good?.purl, 'pkg:npm/good@1.0.0');
   });

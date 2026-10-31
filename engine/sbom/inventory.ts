@@ -53,14 +53,16 @@ function fromNpm(root: string): { components: Component[]; note: string | null }
     if (path === '') continue; // the project itself, not a component of its own bill
     const name = path.replace(/^(?:.*node_modules\/)/, '');
     if (!name || !entry.version) continue;
-    components.push({
-      name,
-      version: entry.version,
-      ecosystem: 'npm',
-      licence: classify(entry.license),
-      dev: Boolean(entry.dev),
-      from: 'package-lock.json',
-    });
+    // npm does not always write a licence, even in lockfile v3. govuk-frontend's lockfile omits
+    // one for 1,088 of its 2,632 packages, among them @babel/plugin-syntax-bigint, which is MIT
+    // and has been for years. Reading that absence as "this package declares no licence" turned
+    // a gap in the file into 1,088 dependencies needing a lawyer - the same mistake pnpm forced
+    // me to see, hiding in the format I had assumed was complete because Tewip's own lockfile
+    // happens to be. `node_modules` settles it when it is there; nothing else can.
+    const licence = entry.license
+      ? classify(entry.license)
+      : { declared: '(none)', standing: 'not-recorded' as const, means: 'this lockfile does not record a licence for it, which is not the same as the package not having one' };
+    components.push({ name, version: entry.version, ecosystem: 'npm', licence, dev: Boolean(entry.dev), from: 'package-lock.json' });
   }
   return { components, note: null };
 }
@@ -174,6 +176,12 @@ export function inventory(root: string): Inventory {
   const filled = fillFromNodeModules(root, components);
   if (filled > 0) read.push(`${filled} licence(s) read from node_modules`);
   if (pnpm.note && components.some((c) => c.licence.standing === 'not-recorded')) notRead.push(pnpm.note);
+  const unrecordedNpm = components.filter((c) => c.licence.standing === 'not-recorded' && c.from.startsWith('package-lock')).length;
+  if (unrecordedNpm > 0) {
+    notRead.push(
+      `npm: ${unrecordedNpm} package(s) have no licence in package-lock.json. npm omits the field for some packages that do have one, so this is a gap in the lockfile rather than a finding about them. Run \`npm install\` and scan again to read them from node_modules.`,
+    );
+  }
   for (const [file, says] of OTHER_ECOSYSTEMS) if (existsSync(join(root, file))) notRead.push(says);
   return { components: components.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version)), notRead, read };
 }

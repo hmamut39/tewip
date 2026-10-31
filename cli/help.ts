@@ -95,6 +95,12 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip portfolio <folder of checkouts> [--out page.md|page.json] [--quick]
+                                    One page for many repositories: credentials, injection,
+                                    containers, licences, accessibility, migrations and tests that
+                                    cannot fail, counted per repository. A dash is never a zero - a
+                                    check that could not run says so and why. No server, no agent,
+                                    no model, nothing leaves the machine.
   tewip infra [--out infra.md] [--gate]
                                     What the containers let in: images that run as root, an
                                     unpinned base, a download piped into a shell, the Docker socket

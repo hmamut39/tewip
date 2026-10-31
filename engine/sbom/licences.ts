@@ -33,8 +33,14 @@ const FAMILIES: Array<[RegExp, Standing, string]> = [
   [/^(lgpl|gnu lesser)/i, 'weak-copyleft', 'changes to this library must be published; your own code usually need not be'],
   [/^(mpl|mozilla public)/i, 'weak-copyleft', 'changes to its own files must be published; your other files need not be'],
   [/^(epl|eclipse public|cddl|cpl)/i, 'weak-copyleft', 'changes to its own files must be published'],
+  // Creative Commons is three different answers wearing one prefix, and the order here is the
+  // whole point: NC forbids commercial use outright and SA is share-alike, so both must be
+  // matched before plain CC-BY, which is attribution and nothing more. Met on real code -
+  // govuk-frontend ships one CC-BY-4.0 package.
+  [/^cc-by-nc/i, 'source-available', 'non-commercial only: it may not be used in something you sell'],
+  [/^cc-by-sa/i, 'weak-copyleft', 'share-alike: what you build on it carries the same licence'],
   [/^(busl|bsl|sspl|elastic|commons.clause|polyform)/i, 'source-available', 'not open source: the terms restrict how you may run or resell it'],
-  [/^(mit|apache|bsd|isc|0bsd|unlicense|cc0|zlib|python-2|psf|wtfpl|artistic|postgresql|openssl)/i, 'permissive', 'use it and keep the notice'],
+  [/^(mit|apache|bsd|isc|0bsd|unlicense|cc0|cc-by|blueoak|zlib|python-2|psf|wtfpl|artistic|postgresql|openssl|ofl|sil open font|public.domain)/i, 'permissive', 'use it and keep the notice'],
 ];
 
 const NOT_STATED = /^(unlicensed|noassertion|none|unknown|see licen[cs]e|proprietary|custom)$/i;

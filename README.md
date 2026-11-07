@@ -1252,6 +1252,14 @@ offline, in CI, before anything runs.
   because that is the difference between a wrong answer and a tool call somebody else chose. On
   1,691 files of real agent code: **zero findings**, which is the precision claim; recall is
   measured against planted examples and said to be.
+- **Which of these tools anybody wrote a test about.** Not "does this project have tests" - every
+  project has tests - but whether *this* tool is mentioned in any of them, and especially the ones
+  that cannot be undone. A name too short or too common to look for is reported as undecidable
+  rather than counted as covered. And the statement is made precisely in both directions: a tool
+  missing from the list is not a tool whose behaviour is untested, it is a tool nothing tests **by
+  that name** - the wiring between the name the model sees and the code behind it. Tewip finds 8 of
+  its own 17 that way. Also names which eval framework the project uses, and which it looked for
+  when it finds none.
 - **What the coding agent installed here was permitted to do.** `.claude/settings.json` and
   `.mcp.json` are committed, anybody with write access can change them, and neither turns up in a
   review the way a source file does. Tewip names the approval gate switched off

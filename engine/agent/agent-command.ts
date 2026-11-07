@@ -1,27 +1,16 @@
 // `tewip agent`: what this agent is allowed to do, and what stands between it and the real world.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { relative } from 'node:path';
-import { scanSourceFiles } from '../walk.ts';
-import { CAPABILITY_MEANS, FRAMEWORKS_READ, IRREVERSIBLE, toolsIn, trifectaIn, type AgentTool, type Capability, type Reach } from './tools.ts';
-import { promptFlows, type PromptFlow } from './prompt-flow.ts';
-import { configSection, scanConfig, type ConfigScan } from './claude-config.ts';
-import { budgetSetToNothing, guardsIn, GUARD_MEANS, GUARD_PREVENTS, type Guard, type GuardKind } from './guards.ts';
+import { writeFileSync } from 'node:fs';
 
-const NL = String.fromCharCode(10);
-const AGENT_FILE = /\.(?:py|[cm]?[jt]sx?)$/i;
-/**
- * What is not the shipped agent.
- *
- * The first version of this named the directory `tests` and the file `*.test.ts`, which is what the
- * documentation of every project says and not what projects do. Run against the OpenAI Agents SDK,
- * all 24 "tools" it reported were fixtures in `integration_tests/` and `test_*.py` - a directory
- * whose name ends in `tests` rather than being `tests`, and a Python convention that puts the word
- * at the front of the file. A list of an agent's tools that is actually a list of test doubles is
- * worse than no list.
- *
- * `[\w-]+[_-]tests?` and not `[\w-]*tests?`, because the second one also excludes `latest/`.
- */
-const NOT_SHIPPED = /(?:^|[\\/])(?:tests?|[\w-]+[_-]tests?|__tests__|spec|e2e|examples?|samples?|docs?|fixtures?|node_modules|\.venv|venv)[\\/]|\.(?:test|spec)\.[cm]?[jt]sx?$|_test\.py$|(?:^|[\\/])test_[^\\/]*\.py$/i;
+
+import { CAPABILITY_MEANS, FRAMEWORKS_READ, IRREVERSIBLE, trifectaIn, type AgentTool, type Capability, type Reach } from './tools.ts';
+import { type PromptFlow } from './prompt-flow.ts';
+import { configSection, type ConfigScan } from './claude-config.ts';
+import { coverageSection, type EvalEvidence, type ToolCoverage } from './tool-tests.ts';
+import { GUARD_MEANS, GUARD_PREVENTS, type Guard, type GuardKind } from './guards.ts';
+
+import { scanAgent, type AgentScan } from './scan.ts';
+
+export { scanAgent, type AgentScan };
 
 export interface AgentCommand {
   root: string;
@@ -30,45 +19,7 @@ export interface AgentCommand {
   gate?: boolean;
 }
 
-export interface AgentScan {
-  tools: AgentTool[];
-  /** Untrusted text glued into a prompt, in the same function. */
-  injections: PromptFlow[];
-  guards: Guard[];
-  filesRead: number;
-  /** What the installed coding agent was permitted to do here. */
-  config: ConfigScan;
-  /** A ceiling that exists in name only. */
-  emptyBudget: { file: string; text: string } | null;
-}
-
-export function scanAgent(root: string): AgentScan {
-  const scan = scanSourceFiles(root, 20_000, (f) => AGENT_FILE.test(f));
-  const tools: AgentTool[] = [];
-  const injections: PromptFlow[] = [];
-  const guards: Guard[] = [];
-  let emptyBudget: AgentScan['emptyBudget'] = null;
-  let filesRead = 0;
-  for (const path of scan.files) {
-    const where = relative(root, path).replace(/\\/g, '/');
-    if (NOT_SHIPPED.test(where)) continue;
-    let text: string;
-    try {
-      text = readFileSync(path, 'utf8');
-    } catch {
-      continue;
-    }
-    filesRead += 1;
-    tools.push(...toolsIn(where, text));
-    injections.push(...promptFlows(where, text));
-    guards.push(...guardsIn(where, text));
-    if (!emptyBudget) {
-      const empty = budgetSetToNothing(text);
-      if (empty) emptyBudget = { file: where, text: empty };
-    }
-  }
-  return { tools, injections, guards, filesRead, emptyBudget, config: scanConfig(root) };
-}
+const NL = String.fromCharCode(10);
 
 const REACH_READS: Record<Reach, string> = {
   destructive: 'cannot be undone',
@@ -84,7 +35,7 @@ const REACH_READS: Record<Reach, string> = {
 
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, guards, filesRead, emptyBudget, config } = scan;
+  const { tools, injections, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -214,6 +165,8 @@ export function renderAgent(scan: AgentScan, root: string): string {
     );
   }
   lines.push('');
+
+  lines.push(...coverageSection(coverage, tools, evals));
 
   lines.push(...configSection(config));
 

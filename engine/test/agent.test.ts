@@ -19,6 +19,7 @@ import { guardsIn } from '../agent/guards.ts';
 import { blank } from '../agent/source-text.ts';
 import { promptFlows } from '../agent/prompt-flow.ts';
 import { scanConfig } from '../agent/claude-config.ts';
+import { coverageOf, evalEvidence } from '../agent/tool-tests.ts';
 import { renderAgent, scanAgent } from '../agent/agent-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -216,7 +217,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false } }, '.');
+    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);
@@ -420,5 +421,70 @@ describe('what the coding agent here is permitted to do', () => {
     const page = renderAgent(scanAgent(root), root);
     assert.match(page, /No tool definitions were found/);
     assert.match(page, /permissions-bypassed/);
+  });
+});
+
+// Phase 142: which of these tools anybody wrote a test about.
+//
+// "No eval set" is on every list of what separates a demo from a product, and it is usually
+// offered as something to feel bad about. The checkable version is narrower and more useful: not
+// "does this project have tests" - every project has tests - but **is this particular tool
+// mentioned in any of them**, and especially the ones that cannot be undone.
+describe('which tools anybody wrote a test about', () => {
+  const tests = (text: string) => [{ file: 'a.test.ts', text }];
+
+  it('finds a tool nobody mentions', () => {
+    const c = coverageOf(['refund_payment', 'list_orders'], tests('it("lists", () => list_orders());'));
+    assert.deepEqual(c.find((x) => x.name === 'refund_payment')?.mentionedIn, []);
+    assert.deepEqual(c.find((x) => x.name === 'list_orders')?.mentionedIn, ['a.test.ts']);
+  });
+
+  it('does not let a longer name cover a shorter one', () => {
+    // `delete_user_profile` being tested says nothing about `delete_user`, which is a different
+    // tool and may be the dangerous one.
+    const c = coverageOf(['delete_user'], tests('it("x", () => delete_user_profile());'));
+    assert.deepEqual(c[0].mentionedIn, []);
+  });
+
+  it('refuses to decide on a name too common to look for', () => {
+    // A tool called `get` appears in every file, so finding it in a test proves nothing. Counting
+    // it as covered is the comfortable direction and the wrong one.
+    const c = coverageOf(['get', 'fetch_customer_ledger'], tests('const x = get(1);'));
+    assert.equal(c[0].tooCommon, true);
+    assert.deepEqual(c[0].mentionedIn, [], 'and it is not quietly counted as covered');
+    assert.equal(c[1].tooCommon, false);
+  });
+
+  it('names the eval frameworks it looked for, so silence can be read', () => {
+    const none = evalEvidence([{ file: 'a.test.ts', text: 'assert(1);' }], ['{"devDependencies":{}}']);
+    assert.deepEqual(none.frameworks, []);
+    const some = evalEvidence([], ['{"devDependencies":{"promptfoo":"^0.1.0"}}']);
+    assert.deepEqual(some.frameworks, ['promptfoo']);
+  });
+
+  it('spots an eval set by where it lives', () => {
+    const e = evalEvidence([{ file: 'evals/checkout.yaml', text: 'x' }, { file: 'src/a.test.ts', text: 'y' }], []);
+    assert.deepEqual(e.files, ['evals/checkout.yaml']);
+  });
+
+  it('reads test files rather than skipping them, which is the whole check', () => {
+    // The first version excluded test files from the scan and then asked which tools appeared in
+    // them. Nothing did, so every tool in every project came back untested - including the
+    // official MCP servers, which test all of theirs.
+    const root = project({
+      'src/a.ts': `server.registerTool("refund_payment", { description: "Refunds." });` + NL + `server.registerTool("list_orders", { description: "Lists orders." });`,
+      'src/__tests__/a.test.ts': 'it("lists", () => list_orders());',
+    });
+    const scan = scanAgent(root);
+    assert.equal(scan.coverage.find((c) => c.name === 'list_orders')?.mentionedIn.length, 1);
+    assert.equal(scan.coverage.find((c) => c.name === 'refund_payment')?.mentionedIn.length, 0);
+  });
+
+  it('says what a missing name does and does not mean', () => {
+    const root = project({ 'src/a.ts': `server.registerTool("refund_payment", { description: "Refunds a payment." });` });
+    const page = renderAgent(scanAgent(root), root);
+    assert.match(page, /appear in no test file/);
+    assert.match(page, /not a tool whose\s+behaviour is untested/);
+    assert.match(page, /by that name/);
   });
 });

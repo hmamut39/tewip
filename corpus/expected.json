@@ -439,12 +439,12 @@
         {
           "command": "access",
           "expect": {
-            "filesRead": 425,
-            "findings": 111,
-            "barrier": 25,
+            "filesRead": 489,
+            "findings": 114,
+            "barrier": 28,
             "ask-a-person": 86
           },
-          "verified": "2026-10-17. 25 barriers across 425 SvelteKit files, the lowest rate of the three frontends. Svelte needed no fix at all: both its spellings, on:click and Svelte 5's onclick, were already read, which is why this gap only appeared when a third framework was pointed at."
+          "verified": "2026-10-17. 25 barriers across 425 SvelteKit files, the lowest rate of the three frontends. Svelte needed no fix at all: both its spellings, on:click and Svelte 5's onclick, were already read, which is why this gap only appeared when a third framework was pointed at. | 2026-11-07: filesRead 425 -> 489, findings 111 -> 114, barrier 25 -> 28. access now reads SwiftUI and Compose beside web markup, so immich mobile/ios is in scope for the first time. All three new findings read by hand in mobile/ios/WidgetExtension/ImageWidgetView.swift: Image(\"LaunchImage\") at :50 and Image(uiImage:) at :67 carry no accessibilityLabel and nothing marking them decoration, and Text(subtitle).font(.system(size: 16)) at :80 is a genuine fixed size on real text, not on a glyph."
         },
         {
           "command": "schema",

@@ -14,7 +14,7 @@
 // from its name and description is reported as undecided, never as safe. "No approval gate found"
 // is a fact about this source, not a verdict about the running system, and the report says which
 // it is.
-import { blank } from './source-text.ts';
+import { blank, type Blanked } from './source-text.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -220,9 +220,14 @@ function describedNear(text: string, from: number): string {
   return (described?.[1] ?? '').trim().replace(/\s+/g, ' ');
 }
 
-export function toolsIn(file: string, text: string): AgentTool[] {
+/**
+ * `blanked` is the caller's copy of the scan, because `blank` already computes both answers in one
+ * pass and `guardsIn` needs the other one. Computed separately in each, the same file was scanned
+ * twice - twelve seconds of duplicate work on a twenty-thousand-file project.
+ */
+export function toolsIn(file: string, text: string, blanked?: Blanked): AgentTool[] {
   const python = /\.py$/i.test(file);
-  const source = blank(text, python).code;
+  const source = (blanked ?? blank(text, python)).code;
   const found = new Map<string, AgentTool>();
   for (const { framework, re } of python ? PYTHON_SHAPES : JS_SHAPES) {
     for (const m of source.matchAll(re)) {

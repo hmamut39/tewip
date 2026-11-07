@@ -10,7 +10,7 @@
 // that issues refunds is a question about the running graph, and this does not answer it - the
 // report says so in those words. The useful half is the other direction: when nothing anywhere in
 // a project asks a person anything, and the agent can delete and pay, that is not a maybe.
-import { blank } from './source-text.ts';
+import { blank, type Blanked } from './source-text.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -63,9 +63,9 @@ const PATTERNS: Array<{ kind: GuardKind; re: RegExp }> = [
 const lineOf = (text: string, index: number): number => text.slice(0, index).split(NL).length;
 
 
-export function guardsIn(file: string, text: string): Guard[] {
+export function guardsIn(file: string, text: string, blanked?: Blanked): Guard[] {
   const out: Guard[] = [];
-  const code = blank(text, /\.py$/i.test(file)).calls;
+  const code = (blanked ?? blank(text, /\.py$/i.test(file))).calls;
   for (const { kind, re } of PATTERNS) {
     const m = re.exec(code);
     re.lastIndex = 0;

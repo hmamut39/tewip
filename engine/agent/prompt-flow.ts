@@ -99,7 +99,18 @@ function statementAt(text: string, at: number): string {
   return text.slice(start, end);
 }
 
+/** Every source as one pattern, for the cheap question asked first. */
+const ANY_SOURCE = new RegExp(SOURCES.map((s) => `(?:${s.re})`).join('|'));
+
 export function promptFlows(file: string, text: string): PromptFlow[] {
+  // Nothing untrusted in this file means nothing to find, and asking that once is far cheaper than
+  // the work it skips. `PROMPT` matches `content`, `input`, `template` and `.create(` - words that
+  // appear constantly in ordinary code - and each match costs a statement scan plus eight source
+  // patterns over it. On n8n that made `tewip agent` take 68 seconds against 5 for `infra`, which
+  // is the kind of number that quietly gets a check removed from CI. The taint engine opens with
+  // the same question for the same reason.
+  if (!ANY_SOURCE.test(text)) return [];
+
   const found: PromptFlow[] = [];
   const seen = new Set<string>();
   const assigned: Array<{ name: string; at: number; source: string; origin: string }> = [];

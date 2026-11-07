@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { scanSourceFiles } from '../walk.ts';
 import { toolsIn, type AgentTool } from './tools.ts';
+import { blank } from './source-text.ts';
 import { promptFlows, type PromptFlow } from './prompt-flow.ts';
 import { budgetSetToNothing, guardsIn, type Guard } from './guards.ts';
 import { scanConfig, type ConfigScan } from './claude-config.ts';
@@ -70,9 +71,11 @@ export function scanAgent(root: string): AgentScan {
       continue;
     }
     filesRead += 1;
-    tools.push(...toolsIn(where, text));
+    // One blanking per file, shared by both readers.
+    const blanked = blank(text, /\.py$/i.test(where));
+    tools.push(...toolsIn(where, text, blanked));
     injections.push(...promptFlows(where, text));
-    guards.push(...guardsIn(where, text));
+    guards.push(...guardsIn(where, text, blanked));
     if (!emptyBudget) {
       const empty = budgetSetToNothing(text);
       if (empty) emptyBudget = { file: where, text: empty };

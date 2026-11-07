@@ -114,12 +114,14 @@ Usage:
                                     cannot fail, counted per repository. A dash is never a zero - a
                                     check that could not run says so and why. No server, no agent,
                                     no model, nothing leaves the machine.
-  tewip infra [--out infra.md] [--gate]
-                                    What the containers let in: images that run as root, an
-                                    unpinned base, a download piped into a shell, the Docker socket
-                                    mounted, a privileged container. Reads Dockerfiles and compose
-                                    files only, and says what it did not check - no image CVEs, no
-                                    cluster, no cloud account. No model, no network.
+  tewip infra [<folder>] [--out infra.md] [--gate]
+                                    What the infrastructure lets in, from the files: Dockerfiles
+                                    and compose, Terraform, and Kubernetes manifests. A login port
+                                    open to 0.0.0.0/0, a public bucket, a policy granting every
+                                    action on every resource, a privileged pod, a capability added
+                                    that undoes the sandbox. Says what it did not read - a value
+                                    from a variable, a module, a Helm value, the running cluster.
+                                    No cloud account, no registry, no model.
   tewip sbom [--out sbom.json] [--gate]
                                     What this project ships and under what licence: a CycloneDX 1.6
                                     bill of materials, plus the licences that need a person to look

@@ -1249,6 +1249,45 @@ isowords, a shipped SwiftUI game: 20 barriers, 62 to settle. Both found this che
   the reason the sample exists. A pattern wanting `semantics(` walked past the trailing-lambda form
   everybody writes, and accused the reference implementation of the barrier it demonstrates fixing.
 
+## What does your infrastructure let in? (Phase 144)
+
+```bash
+tewip infra              # this project
+tewip infra ~/work/api   # another one
+tewip infra --gate       # non-zero when something that ships is high risk
+```
+
+`infra` read Dockerfiles and stopped one layer below where companies actually get hurt. A container
+running as root is a problem for whoever is already inside the container. A bucket with a public
+ACL, or a security group holding 0.0.0.0/0 open on port 22, is a problem for the whole internet -
+and it is written down in a file in the repository.
+
+It now reads **Terraform** and **Kubernetes manifests** beside Dockerfiles and compose:
+
+- **A login port open to everybody.** SSH, RDP, Postgres, MySQL, Mongo, Redis and the rest, named
+  by what they are rather than by their number, and only when the CIDR really is the whole internet.
+- **Storage anybody can read**, and a public-access block switched off - reported apart, because
+  one is a setting and the other is a guard rail being removed.
+- **A policy granting every action on every resource**, and only when both halves are there.
+- **A privileged pod**, a host namespace, an added capability that undoes the sandbox, a node
+  directory mounted in, a workload with no ceiling, an image that does not say what version runs.
+
+**Measured on three real infrastructure repositories**, and it was wrong on all three first - every
+time by reporting the *correct* practice as the danger:
+
+- `capabilities: drop: - ALL` is the strongest hardening a pod spec can state. It was reported **57
+  times** on Google's microservices-demo as a capability that undoes the sandbox, each one pointing
+  at the thing the file does right. A list item carries no meaning without the key above it.
+- `kind: ServiceAccount` was reported as a workload with no resource limits, because the check
+  asked about the whole file instead of each YAML document in it.
+- `resources:` filled from a Helm value is a ceiling this cannot see, not a missing one.
+
+After those: terraform-aws-vpc, 77 Terraform files, **0 findings**. microservices-demo went from 106
+to 39, and the survivors were read by hand.
+
+Also fixed on the way: `tewip infra <folder>` silently ignored the folder and read the current
+directory - the kind of wrong answer that looks exactly like a right one.
+
 ## What is your AI agent allowed to do? (Phase 139)
 
 ```bash

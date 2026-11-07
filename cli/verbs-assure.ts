@@ -40,7 +40,10 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
     }
     case 'infra': {
       const { runIac } = await import('../engine/iac/iac-command.ts');
-      runIac({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      // A folder argument, like `portfolio` and `agent` take. Without this, `tewip infra ~/work/api`
+      // silently read the current directory and reported on the wrong repository - the kind of
+      // wrong answer that looks exactly like a right one.
+      runIac({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'sbom': {

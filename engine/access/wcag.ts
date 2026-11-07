@@ -30,6 +30,31 @@ export interface Rule {
 }
 
 export const RULES: Record<string, Rule> = {
+  // Phase 143: the mobile screens, which nobody checks because there is no page to point at.
+  'mobile-image-label': {
+    criterion: '1.1.1 Non-text Content',
+    level: 'A',
+    severity: 'blocker',
+    stops: 'VoiceOver or TalkBack announces "button" and stops, or reads out an asset file name',
+  },
+  'mobile-text-not-scalable': {
+    criterion: '1.4.4 Resize Text',
+    level: 'AA',
+    severity: 'blocker',
+    stops: 'somebody who turns their font size up gets the same small text, because the app opted out',
+  },
+  'mobile-tap-target': {
+    criterion: '2.5.8 Target Size (Minimum)',
+    level: 'AA',
+    severity: 'serious',
+    stops: 'anybody whose hands are unsteady, on a moving bus, or using one thumb',
+  },
+  'mobile-control-unnamed': {
+    criterion: '4.1.2 Name, Role, Value',
+    level: 'A',
+    severity: 'serious',
+    stops: 'a screen reader never says this is something you can press',
+  },
   'image-alt': {
     criterion: '1.1.1 Non-text Content',
     level: 'A',

@@ -1216,6 +1216,39 @@ With `--act` it carries the decision out, and this is where the refusals matter 
 - Everything it did or refused goes to `.tewip/actions.jsonl`, with the run that justified it.
 - It **will not repeat itself**: the same attempt is refused until a new run gives it new evidence.
 
+## Can everybody use the phone app? (Phase 143)
+
+```bash
+tewip access            # web markup and mobile screens, in one command
+```
+
+Every accessibility tool worth having points at a rendered page. A phone app has no page to point
+at without a simulator, a device farm or a build, so in practice nobody checks the mobile half -
+and the mobile half is where the two barriers that matter most are invisible by design. A fixed
+text size and a missing label both look perfect on the reviewer's screen. They appear when somebody
+turns their font size up, or turns VoiceOver on, which is after shipping.
+
+`tewip access` now reads **SwiftUI** and **Jetpack Compose** source alongside web markup:
+
+- **An image with no name.** SwiftUI: no `.accessibilityLabel` and nothing marking it decoration.
+  Compose: `contentDescription = null` inside something tappable, or a description that names
+  nothing - `"image"`, `"icon"`, `""`. An SF Symbol is left to a person, because VoiceOver reads
+  the symbol name and sometimes that is good enough.
+- **Text that will not grow.** `fontSize = 14.dp` in Compose ignores the font scale entirely; `sp`
+  honours it. `.font(.system(size: 13))` in SwiftUI opts out of Dynamic Type unless it carries
+  `relativeTo:`.
+- **A tap target smaller than a finger**, and only where something is actually tappable.
+- **Something made clickable with no role**, so TalkBack never says it is a control.
+
+**Measured on two real apps.** Google's Compose samples: **0 barriers**, 5 for a person to settle.
+isowords, a shipped SwiftUI game: 20 barriers, 62 to settle. Both found this check wrong first:
+
+- isowords has `Image(systemName: "xmark.circle.fill").font(.system(size: 24))`, where `.font` sets
+  the size of a glyph. Ten findings claimed text would not grow about something that is not text.
+- Google's JetNews has a `Row` with `.semantics { customActions = … }` - the correct handling, and
+  the reason the sample exists. A pattern wanting `semantics(` walked past the trailing-lambda form
+  everybody writes, and accused the reference implementation of the barrier it demonstrates fixing.
+
 ## What is your AI agent allowed to do? (Phase 139)
 
 ```bash

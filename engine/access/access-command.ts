@@ -14,6 +14,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { scanSourceFiles } from '../walk.ts';
 import { readHandWritten } from '../../reporters/store.ts';
 import { JS_LIKE, MARKUP, tags } from './markup.ts';
+import { MOBILE, mobileBarriers } from './mobile.ts';
 import { checkFile, type Finding } from './checks.ts';
 import { readAxeReport, type AxeRun, type BrowserFinding } from './reports.ts';
 import { isLighthouseFile, readLighthouse } from '../perf/lighthouse.ts';
@@ -91,7 +92,8 @@ export function findBarriers(root: string, only?: string): { findings: Finding[]
   // scanner's 5,000-file cap over *all* text, which on n8n let 9 of 1,456 markup files through -
   // and none survived the test-file filter, so `access` reported no barriers having opened
   // nothing. A clean accessibility report is the one that must never be an artifact of a budget.
-  const scan = existsSync(base) && MARKUP.test(base) ? { files: [base], total: 1 } : scanSourceFiles(base, 20_000, (f) => MARKUP.test(f));
+  const reads = (f: string) => MARKUP.test(f) || MOBILE.test(f);
+  const scan = existsSync(base) && reads(base) ? { files: [base], total: 1 } : scanSourceFiles(base, 20_000, reads);
   const all = scan.files;
   // Asking for a path by name overrides the exclusion: if you point at a fixture, you want it read.
   const files = only ? all : all.filter((f) => !TEST_MARKUP.test(relative(root, f)));
@@ -107,6 +109,13 @@ export function findBarriers(root: string, only?: string): { findings: Finding[]
     // A file too large to be hand-written is generated or minified, and accusing it helps nobody.
     if (source.length > 400_000) continue;
     filesRead++;
+    const where = relative(root, path).replaceAll('\\', '/');
+    // A phone screen is markup too, and the same question - can everybody use this - but it is not
+    // written in tags, so it goes through its own reader rather than the tag extractor.
+    if (MOBILE.test(path)) {
+      findings.push(...mobileBarriers(where, source));
+      continue;
+    }
     const jsLike = JS_LIKE.test(path);
     // One page, rather than a file of components: only then do repeated ids land in one document.
     const isDocument = /\.html?$/i.test(path);

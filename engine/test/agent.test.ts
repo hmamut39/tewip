@@ -18,6 +18,7 @@ import { reachOf, toolsIn, trifectaIn, type AgentTool } from '../agent/tools.ts'
 import { guardsIn } from '../agent/guards.ts';
 import { blank } from '../agent/source-text.ts';
 import { promptFlows } from '../agent/prompt-flow.ts';
+import { scanConfig } from '../agent/claude-config.ts';
 import { renderAgent, scanAgent } from '../agent/agent-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -215,7 +216,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null }, '.');
+    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);
@@ -351,5 +352,73 @@ describe('text somebody else wrote, reaching a prompt', () => {
       '    )',
     ));
     assert.equal(found.length, 1);
+  });
+});
+
+// Phase 141: the permissions an installed coding agent was given in this repository.
+//
+// A rule written in a markdown file is a request to the model. A permission in settings.json is
+// enforced by the harness on every tool call. They look equally like configuration and they are
+// not the same kind of thing, and only one of them is a control an auditor can rely on.
+//
+// All of these files are committed, and anybody with write access can change them without it
+// looking like a code change.
+describe('what the coding agent here is permitted to do', () => {
+  const settings = (json: unknown) => ({ '.claude/settings.json': JSON.stringify(json, null, 2) });
+
+  it('names the gate being switched off', () => {
+    const scan = scanConfig(project(settings({ permissions: { defaultMode: 'bypassPermissions' } })));
+    assert.deepEqual(scan.findings.map((f) => f.rule), ['permissions-bypassed']);
+    assert.match(scan.findings[0].why, /without asking/);
+  });
+
+  it('tells an unconstrained shell from a named command', () => {
+    const open = scanConfig(project(settings({ permissions: { allow: ['Bash'] } })));
+    assert.deepEqual(open.findings.map((f) => f.rule), ['shell-unconstrained']);
+    const chosen = scanConfig(project(settings({ permissions: { allow: ['Bash(npm run test:*)', 'Read(./src)'] } })));
+    assert.deepEqual(chosen.findings, [], 'a named command is a decision somebody made');
+    assert.equal(chosen.hasAllowList, true, 'and the list itself is an allow-list');
+  });
+
+  it('locates a committed credential without printing it', () => {
+    // The standing rule everywhere in Tewip: a secret is located, never quoted.
+    const scan = scanConfig(project(settings({ env: { GITHUB_TOKEN: 'ghp_averyrealsecret' } })));
+    assert.deepEqual(scan.findings.map((f) => f.rule), ['secret-in-settings']);
+    const page = scan.findings.map((f) => f.what + f.why).join(' ');
+    assert.doesNotMatch(page, /averyrealsecret/);
+  });
+
+  it('does not call a reference to a variable a committed credential', () => {
+    assert.deepEqual(scanConfig(project(settings({ env: { API_KEY: '$MY_KEY' } }))).findings, []);
+  });
+
+  it('reads the tool servers, and says which are somebody else’s machine', () => {
+    const root = project({
+      '.mcp.json': JSON.stringify({ mcpServers: { local: { command: 'npx', args: ['-y', 'x'] }, vendor: { url: 'https://tools.example.com/mcp' } } }),
+    });
+    const scan = scanConfig(root);
+    assert.deepEqual(scan.servers.map((s) => [s.name, s.where]), [['local', 'this machine'], ['vendor', 'somewhere else']]);
+  });
+
+  it('counts a PreToolUse hook as a gate, because the harness enforces it', () => {
+    const withHook = scanConfig(project(settings({ hooks: { PreToolUse: [{ matcher: 'Bash' }] } })));
+    assert.equal(withHook.hasEnforcedHook, true);
+    const after = scanConfig(project(settings({ hooks: { PostToolUse: [{ matcher: 'Bash' }] } })));
+    assert.equal(after.hasEnforcedHook, false, 'a hook that runs afterwards observes, it does not refuse');
+  });
+
+  it('says nothing about files that are not there', () => {
+    const scan = scanConfig(project({ 'src/a.ts': 'export const a = 1;' }));
+    assert.deepEqual(scan.read, []);
+    assert.deepEqual(scan.findings, []);
+  });
+
+  it('reports a permission problem even when the project has no agent tools of its own', () => {
+    // The two are independent. A repository with no agent code can still hand a coding agent a
+    // shell with no constraint on the command, and that is a finding about this repository.
+    const root = project({ ...settings({ permissions: { defaultMode: 'bypassPermissions' } }), 'src/a.ts': 'export const a = 1;' });
+    const page = renderAgent(scanAgent(root), root);
+    assert.match(page, /No tool definitions were found/);
+    assert.match(page, /permissions-bypassed/);
   });
 });

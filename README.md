@@ -1252,6 +1252,14 @@ offline, in CI, before anything runs.
   because that is the difference between a wrong answer and a tool call somebody else chose. On
   1,691 files of real agent code: **zero findings**, which is the precision claim; recall is
   measured against planted examples and said to be.
+- **What the coding agent installed here was permitted to do.** `.claude/settings.json` and
+  `.mcp.json` are committed, anybody with write access can change them, and neither turns up in a
+  review the way a source file does. Tewip names the approval gate switched off
+  (`"defaultMode": "bypassPermissions"`), an allow entry that grants a shell with no constraint on
+  the command, every tool server trusted without approval, a credential written into a committed
+  file - located, never printed - and a boundary widened past the project. A `PreToolUse` hook
+  counts as a real gate, because the harness enforces it on every call; a rule in a markdown file
+  is a request to the model and does not.
 - **What stands in the way**: a human approval gate, a dry run, a step budget, a tool allow-list -
   and says plainly when nothing anywhere in the project has one. A ceiling written as
   `max_iterations=None` is reported apart from no ceiling at all, because it reads as deliberate.

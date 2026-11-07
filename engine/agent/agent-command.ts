@@ -4,6 +4,7 @@ import { relative } from 'node:path';
 import { scanSourceFiles } from '../walk.ts';
 import { CAPABILITY_MEANS, FRAMEWORKS_READ, IRREVERSIBLE, toolsIn, trifectaIn, type AgentTool, type Capability, type Reach } from './tools.ts';
 import { promptFlows, type PromptFlow } from './prompt-flow.ts';
+import { configSection, scanConfig, type ConfigScan } from './claude-config.ts';
 import { budgetSetToNothing, guardsIn, GUARD_MEANS, GUARD_PREVENTS, type Guard, type GuardKind } from './guards.ts';
 
 const NL = String.fromCharCode(10);
@@ -35,6 +36,8 @@ export interface AgentScan {
   injections: PromptFlow[];
   guards: Guard[];
   filesRead: number;
+  /** What the installed coding agent was permitted to do here. */
+  config: ConfigScan;
   /** A ceiling that exists in name only. */
   emptyBudget: { file: string; text: string } | null;
 }
@@ -64,7 +67,7 @@ export function scanAgent(root: string): AgentScan {
       if (empty) emptyBudget = { file: where, text: empty };
     }
   }
-  return { tools, injections, guards, filesRead, emptyBudget };
+  return { tools, injections, guards, filesRead, emptyBudget, config: scanConfig(root) };
 }
 
 const REACH_READS: Record<Reach, string> = {
@@ -78,14 +81,17 @@ const REACH_READS: Record<Reach, string> = {
   'not-sure': '**not decided**',
 };
 
+
+
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, guards, filesRead, emptyBudget } = scan;
+  const { tools, injections, guards, filesRead, emptyBudget, config } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
     return [
       '# What this agent is allowed to do',
       '',
+      ...configSection(config),
       `No tool definitions were found in ${filesRead} file(s).`,
       '',
       'That is a fact about what was looked for, not a finding that this agent has no tools. These',
@@ -100,6 +106,10 @@ export function renderAgent(scan: AgentScan, root: string): string {
   }
 
   const kinds = new Set(guards.map((g) => g.kind));
+  // A permission list is an allow-list, and a PreToolUse hook is enforced on every call - both are
+  // the real thing rather than a pattern someone wrote in a prompt.
+  if (config.hasAllowList) kinds.add('tool-allow-list');
+  if (config.hasEnforcedHook) kinds.add('asks-a-person');
   const risky = tools.filter((t) => IRREVERSIBLE.includes(t.reach));
   const undecided = tools.filter((t) => t.reach === 'not-sure');
 
@@ -204,6 +214,8 @@ export function renderAgent(scan: AgentScan, root: string): string {
     );
   }
   lines.push('');
+
+  lines.push(...configSection(config));
 
   lines.push('## What stands between them and the real world', '');
   for (const kind of ['asks-a-person', 'dry-run', 'step-budget', 'tool-allow-list'] as GuardKind[]) {

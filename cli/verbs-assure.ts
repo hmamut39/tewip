@@ -28,6 +28,11 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
       runAgent({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
+    case 'contract': {
+      const { runContract } = await import('../engine/contract/contract-command.ts');
+      runContract({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), since: flag(args, 'since'), out: flag(args, 'out'), gate: args.includes('--gate') });
+      return true;
+    }
     case 'audit': {
       const { runAudit } = await import('../engine/audit/audit-command.ts');
       runAudit({ root: process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });

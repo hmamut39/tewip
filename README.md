@@ -1249,6 +1249,44 @@ isowords, a shipped SwiftUI game: 20 barriers, 62 to settle. Both found this che
   the reason the sample exists. A pattern wanting `semantics(` walked past the trailing-lambda form
   everybody writes, and accused the reference implementation of the barrier it demonstrates fixing.
 
+## What does this change break for your callers? (Phase 145)
+
+```bash
+tewip contract                  # against HEAD
+tewip contract --since main     # against a branch
+tewip contract --gate           # non-zero when anything breaks a caller
+```
+
+`schema` answers this for a database: what does this migration do to the version still running. An
+API description is the same question asked of a contract - somebody else's code is built against
+the shape you published, and they will not redeploy because you did.
+
+Compared against the previous version **in git**, so the answer is the same every time and nothing
+is fetched: an endpoint or a method gone, a parameter that became required or arrived required, a
+response field removed, a type changed, a response no longer described, an enum value a caller can
+no longer send.
+
+**Reading the descriptions turned out to be the work.** JSON is parsed exactly. YAML goes through a
+small reader written here rather than a dependency - Tewip has two, and a tool that reports on
+other people's dependency trees should stand on its own. Five fixes went into that reader against
+real specs, every one a case where it refused a file it should have read:
+
+| what it refused | what was actually there |
+|---|---|
+| "an anchor or an alias" × 185 | `{&page,per_page}` inside a URL |
+| "a folded or literal block scalar" × 104 | a `description`, which this comparison never reads |
+| "nests in a way this reader does not follow" | a list at the same indent as its key - valid YAML |
+| the same again | a sentence wrapping onto a line beginning `on: creating a trigger` |
+
+After all five: 5 of 8 on the OpenAPI specification's own examples, and **0 of 192** on GitHub's
+REST API description - half of those use real anchors, which are refused on purpose because
+guessing at one is how a reader invents a removed field.
+
+That last number sounds worse than it is, and the reason is the useful part: GitHub publishes the
+same 192 descriptions as JSON, and those parse exactly - **121,566 paths**, no reader of mine
+involved. A published description is nearly always available as JSON, and the report says so when
+it cannot read the YAML.
+
 ## What does your infrastructure let in? (Phase 144)
 
 ```bash

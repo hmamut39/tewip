@@ -103,6 +103,13 @@ Usage:
                                     input, private data and a way to send data out, in one loop.
                                     Reads LangChain, LangGraph, the MCP SDKs, CrewAI, the OpenAI
                                     Agents SDK and the Vercel AI SDK. No model, no cost.
+  tewip contract [<folder>] [--since <ref>] [--out contract.md] [--gate]
+                                    What this change breaks for the clients already calling your
+                                    API. Compares every OpenAPI description against its previous
+                                    version in git: an endpoint gone, a parameter now required, a
+                                    response field removed, a type changed, an enum value a caller
+                                    can no longer send. JSON is read exactly; YAML through a small
+                                    reader that refuses rather than half-reads. No service called.
   tewip audit [--all] [--gate]
                                     Who ran Tewip here, when, and with what. Each entry carries
                                     the hash of the one before it, so an entry changed or removed

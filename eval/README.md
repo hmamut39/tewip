@@ -251,6 +251,48 @@ new-table rule now suppresses it where it used to be called `breaks-old-code`.
 context is what a file does not carry. The corpus covers that side, holding the false positive
 count at zero across 14 real projects.
 
+## access and agent, measured against their published ground truth (Phase 149)
+
+Two more, finishing the set. Each one is planted from a source outside Tewip: for `access` the
+W3C's own numbered failure techniques, for `agent` the shape each framework's quickstart shows.
+
+`node eval/access-recall.ts` · `node eval/agent-recall.ts`
+
+| | noticed | wrongly accused |
+|---|---|---|
+| `access` — 11 WCAG documented failures | **11 (100%)** | **0** of 11 documented fixes |
+| `agent` — 10 framework tool declarations | **10 (100%)** | **0** of 4 decoys |
+
+For `access`, every failure is planted **twice**: once as the markup the W3C describes as failing,
+once as the markup the same page gives as the sufficient technique. A check that cannot tell the
+documented fix from the documented failure teaches people to switch it off, and that half found a
+real bug.
+
+**The rule reported the fix it asked for.** `aria-hidden-focusable` tells you to *"remove it from
+the tab order with `tabindex="-1"`"* - and doing exactly that did not clear the finding, because a
+`<button>` was flagged for being interactive whatever its tabindex said. It had been that way since
+the rule was written, and no real repository caught it: real code does not usually contain the
+textbook fix.
+
+For `agent`, the decoys are the four shapes that were found being reported as real tools on real
+repositories while that command was being built - an example inside a docstring, a commented-out
+registration, a usage block in JSDoc, and a fixture in a test folder. They are measured rather than
+assumed, because each one was a live defect once.
+
+**Where the set now stands:**
+
+| check | precision | recall |
+|---|---|---|
+| `vouch` | 0 of 157 sound tests accused | 75.0%, measured by execution |
+| `secure` | 0 findings on 18,617 real files | 100% of 20 published credential shapes |
+| `schema` | 0 false positives on 14 projects | 100% of 15 documented harms |
+| `access` | 0 barriers on Google's Compose samples | 100% of 11 WCAG failures |
+| `agent` | 0 findings on 1,691 real files | 100% of 10 framework shapes |
+
+Every recall number above was measured against something published by somebody else - the W3C, the
+database manuals, the providers' token formats, the frameworks' quickstarts - and not against
+Tewip's own rules. That is the only reason any of them means anything.
+
 ## Label format
 
 Each line of the file is one JSON object:

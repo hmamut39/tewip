@@ -73,6 +73,18 @@ describe('what the markup can prove', () => {
     assert.deepEqual(rules('<a href="/x" aria-hidden="true">Hidden</a>').includes('aria-hidden-focusable'), true);
   });
 
+  it('accepts the fix this rule itself recommends', () => {
+    // Phase 149. The rule's `next` line says to remove it from the tab order with tabindex="-1",
+    // and doing exactly that did not clear the finding: a <button> was flagged for being
+    // interactive whatever its tabindex said. A check that reports the fix it asked for is the
+    // fastest way to teach somebody to switch it off. Found by planting the W3C's sufficient
+    // technique beside its documented failure in eval/access-recall.ts.
+    assert.deepEqual(rules('<button aria-hidden="true" tabindex="-1">Save</button>').includes('aria-hidden-focusable'), false);
+    assert.deepEqual(rules('<a href="/x" aria-hidden="true" tabindex="-1">Hidden</a>').includes('aria-hidden-focusable'), false);
+    // And still a barrier without it, so the fix is what cleared it rather than the rule going quiet.
+    assert.deepEqual(rules('<button aria-hidden="true">Save</button>').includes('aria-hidden-focusable'), true);
+  });
+
   it('every rule it reports carries a WCAG criterion and says who it stops', () => {
     for (const [name, rule] of Object.entries(RULES)) {
       assert.match(rule.criterion, /^\d\.\d/, `${name} has no criterion number`);

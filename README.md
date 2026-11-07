@@ -1170,6 +1170,24 @@ Two things it refuses to do, which is why the list is worth reading:
   test that compiles a TypeScript fixture and runs it asserts nothing *on purpose*. Those are reported
   separately as "compares no value", not as broken, and they do not trip `--strict`.
 
+**Every check now has a recall number, each measured against somebody else's published ground
+truth** - the W3C's numbered failure techniques, the database manuals, the providers' token
+formats, the frameworks' quickstarts. Not against Tewip's own rules, which is the only reason any
+of them means anything:
+
+| check | precision | recall |
+|---|---|---|
+| `vouch` | 0 of 157 sound tests accused | 75.0%, judged by execution |
+| `secure` | 0 findings on 18,617 real files | 100% of 20 published credential shapes |
+| `schema` | 0 false positives on 14 projects | 100% of 15 documented harms |
+| `access` | 0 barriers on Google's Compose samples | 100% of 11 WCAG failures, 0 of 11 documented fixes accused |
+| `agent` | 0 findings on 1,691 real files | 100% of 10 framework shapes, 0 of 4 decoys invented |
+
+Each number came with a defect. The `access` one is the clearest: `aria-hidden-focusable` told you
+to take the element out of the tab order with `tabindex="-1"` and then reported it anyway - so
+Angular Material's carousel arrows, written exactly that way, were called barriers. Real code does
+not usually contain the textbook fix, which is why no repository had caught it.
+
 **`secure`'s recall, measured by planting** (`eval/secure-recall.ts`): 20 credential shapes, each
 written from the format its provider publishes rather than from Tewip's patterns, planted in a
 throwaway repository. **20 of 20 found and kept by triage, and 0 of 5 decoys wrongly accused** - a

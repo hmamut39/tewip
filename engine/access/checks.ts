@@ -97,7 +97,13 @@ function perElement(t: Tag, file: string, labelFor: Set<string>, openLabels: num
   // hides nothing that was reachable. GOV.UK's service-navigation toggle is written
   // `<button ... hidden aria-hidden="true">` and uncovered by JavaScript when the menu is enabled -
   // progressive enhancement done properly, reported as a barrier.
-  if (t.attrs['aria-hidden'] === 'true' && !notRendered(t) && (INTERACTIVE.has(t.name) || (tabindex !== null && tabindex >= 0))) {
+  // `tabindex` below zero takes it out of the tab order, which is the remedy this rule's own
+  // `next` line recommends - and until the recall measurement planted the fixed form beside the
+  // broken one, taking that advice did not clear the finding, because a `<button>` was flagged for
+  // being interactive whatever its tabindex said. A check that reports the fix it asked for is
+  // the fastest way to teach somebody to ignore it.
+  const outOfTabOrder = tabindex !== null && tabindex < 0;
+  if (t.attrs['aria-hidden'] === 'true' && !notRendered(t) && !outOfTabOrder && (INTERACTIVE.has(t.name) || (tabindex !== null && tabindex >= 0))) {
     out.push({ rule: 'aria-hidden-focusable', confidence: 'barrier', ...place,
       why: 'hidden from screen readers but still reachable by the tab key',
       next: 'also remove it from the tab order with tabindex="-1", or stop hiding it' });

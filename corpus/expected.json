@@ -31,7 +31,7 @@
             "destroys-data": 25,
             "locks-writes": 162
           },
-          "verified": "2026-10-12. 293 findings. The destructive ones were counted independently with grep across the 83 changelogs and match exactly: 67 dropColumn + 39 renameColumn = 106 breaks-old-code, 25 dropTable = destroys-data. filesRead is 89 rather than the 83 changelogs because six real .sql init scripts are read too, correctly reporting nothing. locks-writes was 196 and is 162: the 34 that went were indexes built on tables created in the same changeSet, which hold no rows, and a script confirmed none of the 162 that remain is on a table created in its own file. That suppression existed from Phase 33 and had never worked for Liquibase, because it knew only SQL's CREATE TABLE and not <createTable tableName=\"...\">. | 2026-10-19: 6 files fewer, all test fixtures - a db-compatibility verifier's own src/test/resources/META-INF/jpa-changelog-*.xml and quarkus/tests/integration/.../init-mysql.sql bootstrap scripts. Nobody deploys them."
+          "verified": "2026-10-12. 293 findings. The destructive ones were counted independently with grep across the 83 changelogs and match exactly: 67 dropColumn + 39 renameColumn = 106 breaks-old-code, 25 dropTable = destroys-data. filesRead is 89 rather than the 83 changelogs because six real .sql init scripts are read too, correctly reporting nothing. locks-writes was 196 and is 162: the 34 that went were indexes built on tables created in the same changeSet, which hold no rows, and a script confirmed none of the 162 that remain is on a table created in its own file. That suppression existed from Phase 33 and had never worked for Liquibase, because it knew only SQL's CREATE TABLE and not <createTable tableName=\"...\">. | 2026-10-19: 6 files fewer, all test fixtures - a db-compatibility verifier's own src/test/resources/META-INF/jpa-changelog-*.xml and quarkus/tests/integration/.../init-mysql.sql bootstrap scripts. Nobody deploys them. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "access",
@@ -86,7 +86,7 @@
             "destroys-data": 22,
             "locks-writes": 207
           },
-          "verified": "2026-10-31. 48 files, 290 findings, reconciled against an independent grep. destroys-data 22 matches exactly: 11 <dropTable> plus 11 raw DROP TABLE. breaks-old-code 61 = 29 column drops + 29 <renameColumn> + 3 columns added NOT NULL with no default; the renames match exactly. A raw grep finds 30 column drops, not 29, and the extra one is line 1836 of update-to-1.4.2.01-db.mysqldiff.sql - a `#` comment reading \"First drop column and then re-add it maybe?\" - which Tewip is right to ignore and my grep was wrong to count. locks-writes 207 is the Liquibase index and constraint work and was not counted by hand. The file this check first read and no longer does is initial_test_db.sql, a mysqldump that produced 116 destroys-data findings, every one a DROP TABLE IF EXISTS followed by the CREATE TABLE replacing it."
+          "verified": "2026-10-31. 48 files, 290 findings, reconciled against an independent grep. destroys-data 22 matches exactly: 11 <dropTable> plus 11 raw DROP TABLE. breaks-old-code 61 = 29 column drops + 29 <renameColumn> + 3 columns added NOT NULL with no default; the renames match exactly. A raw grep finds 30 column drops, not 29, and the extra one is line 1836 of update-to-1.4.2.01-db.mysqldiff.sql - a `#` comment reading \"First drop column and then re-add it maybe?\" - which Tewip is right to ignore and my grep was wrong to count. locks-writes 207 is the Liquibase index and constraint work and was not counted by hand. The file this check first read and no longer does is initial_test_db.sql, a mysqldump that produced 116 destroys-data findings, every one a DROP TABLE IF EXISTS followed by the CREATE TABLE replacing it. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -118,10 +118,10 @@
             "findings": 556,
             "slow": 38,
             "destroys-data": 18,
-            "breaks-old-code": 147,
-            "locks-writes": 353
+            "breaks-old-code": 146,
+            "locks-writes": 354
           },
-          "verified": "2026-10-12. 558 findings, down from 919, with 361 false positives removed and every survivor checked. locks-writes was 714: no table was recognised as freshly created, because the pattern read PostgreSQL's \"quoted\" form but not SQL Server's [dbo].[Grant], and knew no framework's way of saying it - so EF Core's CreateTable followed by CreateIndex, which is what Prisma does, counted every index as blocking writes. All 339 EF Core locks-writes that remain were confirmed by script to be on tables not created in the same migration, and the src/Sql/dbo/Tables definitions now report none at all. | 2026-10-19: 2 fewer destroys-data, both `DROP TABLE \"Old_Grant\"` in the SQLite rebuild helper scripts. That file renames Grant to Old_Grant, builds a new Grant, copies every row across (INSERT INTO ... SELECT, lines 19 and 33) and drops the husk at line 46. Nothing is lost. Checked the file, not just the pattern."
+          "verified": "2026-10-12. 558 findings, down from 919, with 361 false positives removed and every survivor checked. locks-writes was 714: no table was recognised as freshly created, because the pattern read PostgreSQL's \"quoted\" form but not SQL Server's [dbo].[Grant], and knew no framework's way of saying it - so EF Core's CreateTable followed by CreateIndex, which is what Prisma does, counted every index as blocking writes. All 339 EF Core locks-writes that remain were confirmed by script to be on tables not created in the same migration, and the src/Sql/dbo/Tables definitions now report none at all. | 2026-10-19: 2 fewer destroys-data, both `DROP TABLE \"Old_Grant\"` in the SQLite rebuild helper scripts. That file renames Grant to Old_Grant, builds a new Grant, copies every row across (INSERT INTO ... SELECT, lines 19 and 33) and drops the husk at line 46. Nothing is lost. Checked the file, not just the pattern. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "access",
@@ -177,7 +177,7 @@
             "destroys-data": 37,
             "locks-writes": 98
           },
-          "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep. | 2026-10-19: one file fewer. saleor/tests/migrations/0001_initial.py is a Django migration belonging to a test-only app, and this command answers what a migration will do to a live database."
+          "verified": "2026-10-15. 1,433 Django migrations, every one read, none unreadable. 743 findings: 285 RunPython data migrations (slow, which is what they are - application code run against every row inside a migration), 323 RemoveField, 37 DeleteModel, 98 index or constraint builds. locks-writes was 112 until Django's CreateModel was registered as a create form - the only dialect whose create had never been - and the 14 that went are indexes on models created in the same migration, 0055_create_checkout_metadata_model.py among them, which hold no rows and so hold nobody up. All 110 AddIndex/AddConstraint calls in the project name their model, counted independently with grep. | 2026-10-19: one file fewer. saleor/tests/migrations/0001_initial.py is a Django migration belonging to a test-only app, and this command answers what a migration will do to a live database. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "secrets",
@@ -234,7 +234,7 @@
             "filesRead": 0,
             "findings": 0
           },
-          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file anywhere in the repository. A design system has no database."
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file anywhere in the repository. A design system has no database. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -253,7 +253,7 @@
             "locks-writes": 16,
             "destroys-data": 8
           },
-          "verified": "2026-10-12. 61 migrations read, which is the number Phase 41 established by hand after Laravel was added as a dialect - it had been 0. This entry exists to hold that: Laravel is the only PHP dialect in the corpus, and its rollback is commonly written above the forward path, which is the shape that made it worth testing at all."
+          "verified": "2026-10-12. 61 migrations read, which is the number Phase 41 established by hand after Laravel was added as a dialect - it had been 0. This entry exists to hold that: Laravel is the only PHP dialect in the corpus, and its rollback is commonly written above the forward path, which is the shape that made it worth testing at all. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "vouch",
@@ -310,7 +310,7 @@
             "destroys-data": 48,
             "slow": 1
           },
-          "verified": "2026-10-15. 2,545 Rails migrations, every one read. 1,005 locks-writes confirmed by script to be on tables not created in the same migration; the 61 migrations that use `algorithm: :concurrently` correctly report nothing, which is Tewip recommending the thing discourse already did and then not complaining about it. 550 files were previously reported as migrations Tewip could not read and were library modules, a class, and a locale YAML file sitting under a directory called migrations/. | 2026-10-19: 44 files fewer, all db/fixtures/*.rb - Rails seed data for groups, flags and badge types. Seed data is not a migration."
+          "verified": "2026-10-15. 2,545 Rails migrations, every one read. 1,005 locks-writes confirmed by script to be on tables not created in the same migration; the 61 migrations that use `algorithm: :concurrently` correctly report nothing, which is Tewip recommending the thing discourse already did and then not complaining about it. 550 files were previously reported as migrations Tewip could not read and were library modules, a class, and a locale YAML file sitting under a directory called migrations/. | 2026-10-19: 44 files fewer, all db/fixtures/*.rb - Rails seed data for groups, flags and badge types. Seed data is not a migration. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -350,7 +350,7 @@
             "filesRead": 0,
             "findings": 0
           },
-          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file. A command-line search tool has no database."
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file. A command-line search tool has no database. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -388,7 +388,7 @@
             "filesRead": 0,
             "findings": 0
           },
-          "verified": "2026-10-31. A genuine zero, and the interesting kind. The repository does hold a directory called `migrations` - src/cdk/schematics/ng-update/migrations - which is TypeScript that rewrites a user's project on `ng update`, not database work. Reading it as schema changes is the mistake this 0 holds in place."
+          "verified": "2026-10-31. A genuine zero, and the interesting kind. The repository does hold a directory called `migrations` - src/cdk/schematics/ng-update/migrations - which is TypeScript that rewrites a user's project on `ng update`, not database work. Reading it as schema changes is the mistake this 0 holds in place. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -415,7 +415,7 @@
             "findings": 1,
             "destroys-data": 1
           },
-          "verified": "read by hand on 2026-10-19. The single finding is real: nc_096_deprecate_unused.ts drops nc_shared_bases in its up(). Before this phase the same checkout gave 129 findings - 122 of them dropTable calls inside knex down() functions, which is what a reversible migration is, and 102 of those were Sakila sample-database dumps under packages/nocodb/tests/ that nobody will ever deploy."
+          "verified": "read by hand on 2026-10-19. The single finding is real: nc_096_deprecate_unused.ts drops nc_shared_bases in its up(). Before this phase the same checkout gave 129 findings - 122 of them dropTable calls inside knex down() functions, which is what a reversible migration is, and 102 of those were Sakila sample-database dumps under packages/nocodb/tests/ that nobody will ever deploy. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "secrets",
@@ -451,12 +451,12 @@
           "expect": {
             "filesRead": 134,
             "findings": 117,
-            "breaks-old-code": 30,
+            "breaks-old-code": 29,
             "destroys-data": 9,
-            "locks-writes": 51,
+            "locks-writes": 52,
             "slow": 27
           },
-          "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations. | 2026-10-19, two more: OCRBigramsForCJK.ts runs truncate ${sql.table('ocr_search')}, now read as \"empties the table ocr_search\" rather than \"empties the table execute\" - the name pattern used to run past the end of the template literal into .execute. StandardizeNames.ts renames tables from a list, and the loop variable is reported as written because Tewip cannot resolve it. Both read by hand."
+          "verified": "read by hand on 2026-10-19. 97 of the files are Kysely and 37 are generated .sql under src/queries. AddAssetVisibilityColumn.ts is the one that proves it: its up() drops isVisible and isArchived from assets and updates every row, and all three findings are reported, while its down() adds the columns back and is correctly ignored. DropAuditTable.ts drops audit in up() and recreates it in down(); UpdateWorkflowTables.ts drops six tables in up(). Before this phase Tewip found 37 files here, every one of them a generated query file, and none of the 100 migrations. | 2026-10-19, two more: OCRBigramsForCJK.ts runs truncate ${sql.table('ocr_search')}, now read as \"empties the table ocr_search\" rather than \"empties the table execute\" - the name pattern used to run past the end of the template literal into .execute. StandardizeNames.ts renames tables from a list, and the loop variable is reported as written because Tewip cannot resolve it. Both read by hand. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "secrets",
@@ -493,7 +493,7 @@
             "filesRead": 0,
             "findings": 0
           },
-          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file in a Go HTTP router."
+          "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file in a Go HTTP router. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "access",
@@ -521,7 +521,7 @@
             "breaks-old-code": 32,
             "slow": 2
           },
-          "verified": "read by hand on 2026-10-19 against the migrations themselves. op.drop_table(\"document_terms\") and five siblings in 2021-06-15_8a558baeef05.py are the destroys-data findings; op.alter_column(..., nullable=False) twice in 2021-06-15_0ab4f8f54bfa.py is locks-writes; op.drop_column is breaks-old-code; an index built without postgresql_concurrently is locks-writes. 74 of the destroys-data findings come from multi-tenant-migration.sql, which really does drop that many tables. search/fulltext/expressions.sql is read and yields 0, which is right - it drops a type, not a table. Before this phase Tewip found 2 migration files in this repository and read none of its 138 Alembic revisions."
+          "verified": "read by hand on 2026-10-19 against the migrations themselves. op.drop_table(\"document_terms\") and five siblings in 2021-06-15_8a558baeef05.py are the destroys-data findings; op.alter_column(..., nullable=False) twice in 2021-06-15_0ab4f8f54bfa.py is locks-writes; op.drop_column is breaks-old-code; an index built without postgresql_concurrently is locks-writes. 74 of the destroys-data findings come from multi-tenant-migration.sql, which really does drop that many tables. search/fulltext/expressions.sql is read and yields 0, which is right - it drops a type, not a table. Before this phase Tewip found 2 migration files in this repository and read none of its 138 Alembic revisions. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         }
       ]
     },
@@ -535,13 +535,13 @@
           "command": "schema",
           "expect": {
             "filesRead": 106,
-            "findings": 196,
+            "findings": 197,
             "breaks-old-code": 58,
             "destroys-data": 6,
-            "locks-writes": 112,
+            "locks-writes": 113,
             "slow": 20
           },
-          "verified": "read by hand on 2026-10-19. The six destroys-data: CleanEvaluations drops test_definition twice, two RemoveCredentialUsageTable migrations drop credential_usage, and two drop a leftover temporary_execution_entity with IF EXISTS before rebuilding it - that last pair is scaffolding rather than loss, reported because it is true and a reader recognises it on sight. Before this phase the same checkout gave 33 findings: one said \"drops the table IF\", several said \"drops the table \" with nothing where the name goes, and 22 were SQLite table rebuilds - create a copy, move every row into it, drop the original, rename the copy back - reported as destroying data."
+          "verified": "read by hand on 2026-10-19. The six destroys-data: CleanEvaluations drops test_definition twice, two RemoveCredentialUsageTable migrations drop credential_usage, and two drop a leftover temporary_execution_entity with IF EXISTS before rebuilding it - that last pair is scaffolding rather than loss, reported because it is true and a reader recognises it on sight. Before this phase the same checkout gave 33 findings: one said \"drops the table IF\", several said \"drops the table \" with nothing where the name goes, and 22 were SQLite table rebuilds - create a copy, move every row into it, drop the original, rename the copy back - reported as destroying data. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
         },
         {
           "command": "access",

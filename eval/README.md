@@ -212,6 +212,45 @@ right.** They are worth listing, because they are what hand-checking a miss is f
 password in a config file with no recognisable form. No pattern-based scanner finds those, and
 this does not pretend to cover them.
 
+## schema's recall, measured against what the databases document (Phase 148)
+
+The corpus pins what `schema` reports on real projects, which holds it steady but cannot say what
+it walks past: a migration nobody wrote is a migration nobody measures.
+
+`eval/schema-recall.ts` plants one migration per case. The ground truth is the databases' own
+documentation - PostgreSQL and MySQL publish which statements take which lock and which rewrite or
+discard data - and each case is labelled with what the manual says rather than with what Tewip's
+rules say. Dialects: raw SQL, Django, Rails, Alembic.
+
+Run it with `node eval/schema-recall.ts`.
+
+| | |
+|---|---|
+| Migrations planted that the manual calls harmful | 15 |
+| Named with a harm the manual names | **15 (100%)** |
+| Safe migrations planted beside them | 4 |
+| Given the harm they avoid | **0** |
+
+The four safe ones matter more than the count suggests: a nullable column, a new table, an index
+built `CONCURRENTLY`, and a constraint added `NOT VALID`. The last two are the documented way to do
+the dangerous thing safely, and a check that cannot tell them from the dangerous form teaches
+people to switch it off.
+
+**It started at 60%, and most of that was the measurement being wrong.** Four `DROP COLUMN` cases
+scored as misses because Tewip called them `breaks-old-code` where the label said `destroys-data` -
+and dropping a column does both. A statement usually does more than one thing, so each case now
+carries every harm its manual describes and any of them counts.
+
+**One real gap, and it was the constraint.** `ALTER TABLE ... ADD CONSTRAINT` without `NOT VALID`
+had no raw-SQL rule at all; only the Laravel foreign-key shape did. On the corpus that added one
+true finding and removed one false one - immich's initial migration adds a CHECK to a table the
+same file creates, which locks nothing because the table is new and empty, and the existing
+new-table rule now suppresses it where it used to be called `breaks-old-code`.
+
+**What this cannot measure:** a migration that looks dangerous and is safe in context, because
+context is what a file does not carry. The corpus covers that side, holding the false positive
+count at zero across 14 real projects.
+
 ## Label format
 
 Each line of the file is one JSON object:

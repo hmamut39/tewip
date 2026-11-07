@@ -104,6 +104,18 @@ const RULES: Rule[] = [
     table: (m) => bare(m[2]),
   },
   {
+    // A constraint added without NOT VALID scans every existing row under an ACCESS EXCLUSIVE
+    // lock, which PostgreSQL documents and which the recall measurement in eval/schema-recall.ts
+    // found had no rule at all - only the Laravel foreign-key shape did. The negative lookahead
+    // matters as much as the match: `NOT VALID` is the documented way to do this safely, and a
+    // check that cannot tell the safe form from the dangerous one teaches people to ignore it.
+    find: new RegExp(String.raw`\bALTER\s+TABLE\s+(${NAME})\s+ADD\s+CONSTRAINT\s+(${NAME})\s+(?:CHECK|FOREIGN\s+KEY|UNIQUE)(?![\s\S]{0,400}?\bNOT\s+VALID\b)`, 'i'),
+    risk: 'locks-writes',
+    what: (m) => `adds a constraint to ${bare(m[1])}, which reads every existing row under a lock that blocks writes`,
+    instead: 'add it NOT VALID, then VALIDATE CONSTRAINT afterwards - the second step takes a weaker lock and lets writes through',
+    table: (m) => bare(m[1]),
+  },
+  {
     find: new RegExp(String.raw`\bALTER\s+TABLE\s+(${NAME})\s+(?:ALTER|MODIFY)\s+(?:COLUMN\s+)?(${NAME})[\s\S]*?\bSET\s+NOT\s+NULL`, 'i'),
     risk: 'locks-writes',
     what: (m) => `makes ${bare(m[1])}.${bare(m[2])} NOT NULL, which reads every existing row under a lock`,

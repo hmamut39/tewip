@@ -971,3 +971,32 @@ describe('a dump is not a migration', () => {
     assert.ok(!found.some((f) => f.endsWith('initial_test_db.sql')), 'the dump is not');
   });
 });
+
+// Phase 148: the constraint rule the recall measurement found missing.
+//
+// eval/schema-recall.ts plants one migration per case, each labelled with what PostgreSQL, MySQL
+// or the framework's own manual says it does rather than with what these rules say. Adding a
+// constraint was documented, dangerous, and had no raw-SQL rule at all - only the Laravel
+// foreign-key shape did.
+describe('a constraint added without NOT VALID', () => {
+  const risks = (sql: string) => readSql(sql).map((f) => f.risk);
+
+  it('is named, because it reads every row under a lock', () => {
+    assert.ok(risks('ALTER TABLE orders ADD CONSTRAINT total_positive CHECK (total > 0);').includes('locks-writes'));
+    assert.ok(risks('ALTER TABLE orders ADD CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers (id);').includes('locks-writes'));
+  });
+
+  it('is not named when it is added the safe way', () => {
+    // The whole point of the rule. NOT VALID is the documented way to do this without the scan,
+    // and a check that cannot tell the two apart teaches people to switch it off.
+    assert.deepEqual(risks('ALTER TABLE orders ADD CONSTRAINT total_positive CHECK (total > 0) NOT VALID;'), []);
+    assert.deepEqual(risks('ALTER TABLE orders ADD CONSTRAINT fk_c FOREIGN KEY (customer_id) REFERENCES customers (id) NOT VALID;'), []);
+  });
+
+  it('says what to do instead', () => {
+    const found = readSql('ALTER TABLE orders ADD CONSTRAINT total_positive CHECK (total > 0);');
+    assert.match(found[0].instead, /NOT VALID/);
+    assert.match(found[0].instead, /VALIDATE CONSTRAINT/);
+    assert.equal(found[0].table, 'orders');
+  });
+});

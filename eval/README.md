@@ -165,6 +165,53 @@ tests here are mostly written with several assertions each, so dropping the last
 leaves a real check behind - which is why 12 of the 64 "misses" need reading before they are
 believed, and why several that were read turned out to be the label's fault rather than vouch's.
 
+## secure's recall, measured by planting what the providers document (Phase 147)
+
+`tewip secure` had a precision number - zero findings across 18,617 files of real code - and no
+recall number. On its own that is the weaker half of a pair: a check that finds nothing scores
+perfect precision.
+
+`eval/secure-recall.ts` plants one credential per shape in a throwaway git repository and asks what
+comes back. The shapes are written from **what each provider documents about its own tokens** - the
+prefix and length AWS, GitHub, Stripe, Shopify and the rest publish - and not from Tewip's
+patterns, which is what stops the measurement being circular. Nothing in that file is a credential:
+every value is assembled at run time from a seeded generator, so the file holds formats and no
+secrets.
+
+Run it with `node eval/secure-recall.ts`.
+
+| | |
+|---|---|
+| Credential shapes planted | 20 |
+| Matched by some pattern | **20 (100%)** |
+| Kept by triage as needing action | **20 (100%)** |
+| Decoys planted beside them | 5 |
+| Decoys wrongly called a credential | **0** |
+
+The decoys are a UUID, a commit hash, an encoded image, an ordinary sentence and an obvious
+placeholder. A recall number with no precision beside it can be bought by reporting everything.
+
+**It started at 70%.** Four shapes had no pattern at all - Shopify, Mailgun, Azure storage and
+Datadog - and those were added, because each is a format its provider publishes. A pattern added
+to satisfy its own measurement would make the measurement worthless; these were added because the
+provider documents them and Tewip had nothing. Datadog's is 32 hexadecimal characters and nothing
+else, which is also an md5 and half the entries in a lockfile, so it requires the key name beside
+it and is the one shape here that is context-dependent.
+
+**Three of the first run's misses were the harness being wrong, and each one was Tewip being
+right.** They are worth listing, because they are what hand-checking a miss is for:
+
+- Every finding came back `not-reachable`. The planted files were in a directory git did not
+  track, and a credential that was never committed never left the machine. Tewip said so.
+- The JWT missed because the generator wrote a random payload. A real JWT's second segment always
+  begins `eyJ`, because it is base64url of an object and `{"` encodes to exactly that.
+- The basic-auth URL missed because the generator pointed it at `example.com`, a domain reserved
+  by RFC 2606 so that it cannot be anybody's system. Tewip declines to raise those and says why.
+
+**What it does not measure:** a credential in a shape nobody publishes - an internal token, a
+password in a config file with no recognisable form. No pattern-based scanner finds those, and
+this does not pretend to cover them.
+
 ## Label format
 
 Each line of the file is one JSON object:

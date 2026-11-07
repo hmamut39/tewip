@@ -315,3 +315,40 @@ describe('a file that is both a test and a document', () => {
     assert.match(triageSecret(finding, root, new Set<string>()).why, /template or documentation/);
   });
 });
+
+// Phase 147: the four shapes the recall measurement found missing.
+//
+// `secure` had a precision number and no recall number, which is the weaker half of a pair: a
+// check that finds nothing scores perfect precision. eval/secure-recall.ts plants one credential
+// per shape, each written from the format its provider publishes rather than from the patterns
+// here, and reports what is missed.
+//
+// These four were missed. Each is added because its provider documents it, not because the eval
+// asked - a pattern added to satisfy its own measurement makes the measurement worthless.
+describe('shapes the recall measurement found missing', () => {
+  const fake = (alphabet: string, n: number) => Array.from({ length: n }, (_, i) => alphabet[(i * 7 + 3) % alphabet.length]).join('');
+  const hex = (n: number) => fake('0123456789abcdef', n);
+  const b64 = (n: number) => fake('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', n);
+  const kinds = (line: string) => scanSecrets(project({ 'src/config.ts': line })).map((f) => f.kind);
+
+  it('finds a Shopify access token, in each of its prefixes', () => {
+    for (const prefix of ['shpat_', 'shpca_', 'shppa_', 'shpss_']) {
+      assert.ok(kinds(`const t = "${prefix}${hex(32)}";`).includes('shopify-token'), prefix);
+    }
+  });
+
+  it('finds a Mailgun key', () => {
+    assert.ok(kinds(`const mg = "key-${hex(32)}";`).includes('mailgun-key'));
+  });
+
+  it('finds an Azure storage key inside a connection string', () => {
+    assert.ok(kinds(`const cs = "AccountName=orders;AccountKey=${b64(86)}==;Endpoint=x";`).includes('azure-storage-key'));
+  });
+
+  it('wants the name beside a Datadog key, because the shape alone is an md5', () => {
+    // 32 hexadecimal characters is also a hash, a short object id, and half the entries in a
+    // lockfile. On its own it is not a pattern, it is a false positive generator.
+    assert.ok(kinds(`const c = { dd_api_key: "${hex(32)}" };`).includes('datadog-api-key'));
+    assert.deepEqual(kinds(`const integrity = "${hex(32)}";`).filter((k) => k === 'datadog-api-key'), []);
+  });
+});

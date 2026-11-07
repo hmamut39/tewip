@@ -56,6 +56,18 @@ const PATTERNS: Array<{ kind: string; what: string; re: RegExp; minEntropy?: num
   { kind: 'npm-token', what: 'an npm token', re: /\b(npm_[A-Za-z0-9]{36})\b/g },
   { kind: 'pypi-token', what: 'a PyPI token', re: /\b(pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,})\b/g },
   { kind: 'sendgrid-key', what: 'a SendGrid key', re: /\b(SG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
+  // Four shapes the recall measurement in eval/secure-recall.ts found missing. Each one is the
+  // format its provider publishes, which is where that list comes from - a pattern added because
+  // the eval asked for it would make the eval circular, and these were added because the provider
+  // documents them and Tewip had nothing.
+  { kind: 'shopify-token', what: 'a Shopify access token', re: /\b(shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32})\b/g },
+  { kind: 'mailgun-key', what: 'a Mailgun API key', re: /\b(key-[a-f0-9]{32})\b/g },
+  { kind: 'azure-storage-key', what: 'an Azure storage account key', re: /AccountKey\s*=\s*([A-Za-z0-9+/]{86}==)/g },
+  // Datadog's key is 32 hexadecimal characters and nothing else, which is also an md5, a short
+  // object id and half the hashes in a lockfile. On its own it is not a pattern, it is a false
+  // positive generator - so this one requires the name beside it, and is reported as a lower
+  // confidence than a token that carries its own prefix.
+  { kind: 'datadog-api-key', what: 'a Datadog API key', re: /\b(?:dd|datadog)[_-]?(?:api|app)[_-]?key\s*[=:]\s*['"]?([a-f0-9]{32})\b/gi },
   { kind: 'twilio-key', what: 'a Twilio key', re: /\b(SK[a-f0-9]{32})\b/g },
   { kind: 'digitalocean-token', what: 'a DigitalOcean token', re: /\b(dop_v1_[a-f0-9]{64})\b/g },
   // The header *and* some key after it. Matching the header alone made a constant that merely

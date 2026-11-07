@@ -1170,6 +1170,15 @@ Two things it refuses to do, which is why the list is worth reading:
   test that compiles a TypeScript fixture and runs it asserts nothing *on purpose*. Those are reported
   separately as "compares no value", not as broken, and they do not trip `--strict`.
 
+**`secure`'s recall, measured by planting** (`eval/secure-recall.ts`): 20 credential shapes, each
+written from the format its provider publishes rather than from Tewip's patterns, planted in a
+throwaway repository. **20 of 20 found and kept by triage, and 0 of 5 decoys wrongly accused** - a
+UUID, a commit hash, an encoded image, a sentence and an obvious placeholder. It began at 70%, and
+the four shapes with no pattern at all were added. Three further misses turned out to be the
+harness being wrong and Tewip being right: files git did not track, a JWT payload that did not
+begin `eyJ`, and a URL pointing at a domain reserved so it cannot be anybody's system. See
+[eval/README.md](eval/README.md).
+
 **Recall, measured by execution** (`eval/vouch-recall.ts`): mutate a source file, record which tests
 catch which mutation, remove the last statement of the ones that provably caught something, and run it
 all again. A test that caught a mutation before and catches nothing now has provably lost its check -

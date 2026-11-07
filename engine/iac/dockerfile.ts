@@ -8,6 +8,21 @@
 // The rule that keeps it honest: every finding quotes the line it came from, and an absence is
 // only reported when the absence is the finding - a Dockerfile with no USER really does run as
 // root, and that is a fact about the file rather than a guess about the image.
+/**
+ * A Dockerfile, which is not a source file about Dockerfiles.
+ *
+ * `^dockerfile($|[.-])` matches `dockerfile.ts` - `.` is in that class - so Tewip read its own
+ * `engine/iac/dockerfile.ts` as a Dockerfile and reported "1 Dockerfile" on a repository that has
+ * none. Any project with a module named after the thing it handles had the same problem, and the
+ * instructions parser would then find whatever a source file happened to contain.
+ *
+ * A real one is `Dockerfile`, `Dockerfile.prod`, or `something.dockerfile`. None of those ends in
+ * a code extension.
+ */
+const CODE = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|php|swift|md|txt|snap)$/i;
+export const isDockerfile = (name: string): boolean =>
+  !CODE.test(name) && (/^dockerfile($|[.-])/i.test(name) || /\.dockerfile$/i.test(name));
+
 export interface IacFinding {
   file: string;
   line: number;

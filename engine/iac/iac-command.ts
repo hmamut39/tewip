@@ -10,7 +10,7 @@
 // the same shape as a credential in a test file.
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { readDockerfile, type IacFinding } from './dockerfile.ts';
+import { isDockerfile, readDockerfile, type IacFinding } from './dockerfile.ts';
 import { readCompose } from './compose.ts';
 import { readTerraform, TERRAFORM_NOT_CHECKED } from './terraform.ts';
 import { KUBERNETES_NOT_CHECKED, looksKubernetes, readKubernetes } from './kubernetes.ts';
@@ -23,7 +23,7 @@ export interface IacCommand {
 }
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'target', 'vendor', '__pycache__', '.venv', 'venv', '.next', '.cache']);
-const DOCKERFILE = /^dockerfile($|[.-])/i;
+
 const COMPOSE = /^(docker-)?compose.*\.ya?ml$/i;
 const TERRAFORM = /\.tf$/i;
 // Any YAML may be a Kubernetes object; the file decides, not its name - a manifest is as likely to
@@ -67,12 +67,12 @@ export function scanIac(root: string): IacScan {
         walk(full);
         continue;
       }
-      const isDockerfile = DOCKERFILE.test(entry);
+      const isDocker = isDockerfile(entry);
       const isCompose = COMPOSE.test(entry);
       const isTerraform = TERRAFORM.test(entry);
       // A compose file is also YAML, so it is claimed first and never read twice.
       const maybeManifest = !isCompose && YAML.test(entry);
-      if (!isDockerfile && !isCompose && !isTerraform && !maybeManifest) continue;
+      if (!isDocker && !isCompose && !isTerraform && !maybeManifest) continue;
       if (info.size > 1_000_000) continue;
       let source: string;
       try {

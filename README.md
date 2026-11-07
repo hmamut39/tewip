@@ -1249,6 +1249,36 @@ isowords, a shipped SwiftUI game: 20 barriers, 62 to settle. Both found this che
   the reason the sample exists. A pattern wanting `semantics(` walked past the trailing-lambda form
   everybody writes, and accused the reference implementation of the barrier it demonstrates fixing.
 
+## What the image installs, which no lockfile records (Phase 146)
+
+A bill of materials built from `package-lock.json` lists what your *application* depends on. It
+says nothing about the operating system under it, and that is where most published container
+vulnerabilities actually are. A team that generates CycloneDX from a lockfile and files it as
+"our SBOM" has a document that is accurate and answers a different question than the one asked.
+
+Reading the image needs a registry, a pull and a layer walk, which Tewip will not do. But a
+Dockerfile **states** what it installs, and that is readable offline:
+
+```bash
+tewip sbom ~/work/api
+```
+
+`apt`, `apk`, `yum`, `pip`, a global `npm` and `gem`, with the version where one is pinned and
+**not pinned** where none is - because a package with no version is whatever the registry served
+the day the image was built, so two builds of one commit are two different images.
+
+On the corpus: immich, **24 packages across 5 Dockerfiles, 23 of them unpinned**; n8n, 61 across
+11, 60 unpinned. Verified by hand against `machine-learning/Dockerfile:13`.
+
+The base images are named and explicitly **not** read - `FROM node:20-slim` brings a whole Debian
+with it, and what is already inside it is in no lockfile and no list here either.
+
+**A bug this surfaced, which had been there since `infra` was written:** `^dockerfile($|[.-])`
+matches `dockerfile.ts`, because `.` is in that class. Tewip read its own
+`engine/iac/dockerfile.ts` as a Dockerfile and reported "1 Dockerfile" on a repository that has
+none. Any project with a module named after the thing it handles had the same problem. Also fixed:
+`tewip sbom <folder>` and `tewip audit <folder>` ignored the folder, like `infra` did.
+
 ## What does this change break for your callers? (Phase 145)
 
 ```bash

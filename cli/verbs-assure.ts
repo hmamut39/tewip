@@ -35,7 +35,7 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
     }
     case 'audit': {
       const { runAudit } = await import('../engine/audit/audit-command.ts');
-      runAudit({ root: process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });
+      runAudit({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });
       return true;
     }
     case 'portfolio': {
@@ -53,7 +53,7 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
     }
     case 'sbom': {
       const { runSbom } = await import('../engine/sbom/sbom-command.ts');
-      runSbom({ root: process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      runSbom({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'safety': {

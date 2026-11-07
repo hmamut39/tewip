@@ -12,6 +12,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { inventory, type Component, type Inventory } from './inventory.ts';
 import { NEEDS_A_LOOK, type Standing } from './licences.ts';
+import { baseImages, imagePackages, renderImagePackages, type ImagePackage } from './image-packages.ts';
+import { isDockerfile } from '../iac/dockerfile.ts';
+import { readFileSync } from 'node:fs';
+import { relative } from 'node:path';
+import { scanSourceFiles } from '../walk.ts';
 
 export interface SbomCommand {
   root: string;
@@ -65,7 +70,38 @@ export function cycloneDx(inv: Inventory, project: string): Record<string, unkno
   };
 }
 
-export function renderSbom(inv: Inventory, wrote: string | null): string {
+/**
+ * Every Dockerfile in the project, and what it installs.
+ *
+ * Separate from `inventory` because it answers a different question: the lockfile says what the
+ * application depends on, and the Dockerfile says what the operating system under it was given.
+ * Most published container vulnerabilities are in the second list.
+ */
+export function imageContents(root: string): { packages: ImagePackage[]; bases: string[]; dockerfiles: number } {
+  const packages: ImagePackage[] = [];
+  const bases: string[] = [];
+  let dockerfiles = 0;
+  // The basename, split on both separators: a path regex written with one of them matches nothing
+  // on the other platform, and a scan that silently finds no Dockerfiles looks exactly like a
+  // project that has none.
+  const basename = (f: string) => f.split(/[\\/]/).pop() ?? '';
+  const found = scanSourceFiles(root, 20_000, (f) => isDockerfile(basename(f)));
+  for (const path of found.files) {
+    let text: string;
+    try {
+      text = readFileSync(path, 'utf8');
+    } catch {
+      continue;
+    }
+    dockerfiles += 1;
+    const where = relative(root, path).split(String.fromCharCode(92)).join('/');
+    packages.push(...imagePackages(where, text));
+    for (const b of baseImages(text)) if (!bases.includes(b)) bases.push(b);
+  }
+  return { packages, bases, dockerfiles };
+}
+
+export function renderSbom(inv: Inventory, wrote: string | null, image: { packages: ImagePackage[]; bases: string[]; dockerfiles: number } = { packages: [], bases: [], dockerfiles: 0 }): string {
   const shipped = inv.components.filter((c) => !c.dev);
   const byStanding = new Map<Standing, Component[]>();
   for (const c of inv.components) byStanding.set(c.licence.standing, [...(byStanding.get(c.licence.standing) ?? []), c]);
@@ -108,6 +144,8 @@ export function renderSbom(inv: Inventory, wrote: string | null): string {
     lines.push('');
   }
 
+  lines.push(...renderImagePackages(image.packages, image.bases, image.dockerfiles));
+
   lines.push('## What is not in this list', '');
   if (inv.notRead.length === 0) {
     lines.push('Nothing found that Tewip could not read.', '');
@@ -137,7 +175,7 @@ export function runSbom(cmd: SbomCommand): { report: string; flagged: number } {
     writeFileSync(path, `${JSON.stringify(cycloneDx(inv, root.split(/[\\/]/).pop() ?? 'project'), null, 2)}\n`, 'utf8');
     wrote = cmd.out;
   }
-  const report = renderSbom(inv, wrote);
+  const report = renderSbom(inv, wrote, imageContents(cmd.root));
   console.log(report);
   const flagged = inv.components.filter((c) => NEEDS_A_LOOK.includes(c.licence.standing)).length;
   if (cmd.gate && flagged > 0) process.exitCode = 1;

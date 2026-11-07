@@ -1244,6 +1244,14 @@ offline, in CI, before anything runs.
   text the agent did not write can tell it to read the private thing and post it somewhere, and
   every step is a tool it was given on purpose. A system prompt is not a defence, because whoever
   writes the untrusted text writes the other half of the prompt. Tewip names the tools in each leg.
+- **Text somebody else wrote, glued into a prompt.** The trifecta above is an argument about what
+  *could* happen, from the tool list. This is what the code does: a value off a web page, a ticket,
+  an inbox or a retriever, written **into** the prompt string rather than passed beside it. A prompt
+  has no parameter binding to fall back on, so once the text is in the string the model cannot tell
+  your instruction from theirs. Reported apart when the same function also hands the model tools,
+  because that is the difference between a wrong answer and a tool call somebody else chose. On
+  1,691 files of real agent code: **zero findings**, which is the precision claim; recall is
+  measured against planted examples and said to be.
 - **What stands in the way**: a human approval gate, a dry run, a step budget, a tool allow-list -
   and says plainly when nothing anywhere in the project has one. A ceiling written as
   `max_iterations=None` is reported apart from no ceiling at all, because it reads as deliberate.

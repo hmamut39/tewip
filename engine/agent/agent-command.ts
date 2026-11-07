@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { scanSourceFiles } from '../walk.ts';
 import { CAPABILITY_MEANS, FRAMEWORKS_READ, IRREVERSIBLE, toolsIn, trifectaIn, type AgentTool, type Capability, type Reach } from './tools.ts';
+import { promptFlows, type PromptFlow } from './prompt-flow.ts';
 import { budgetSetToNothing, guardsIn, GUARD_MEANS, GUARD_PREVENTS, type Guard, type GuardKind } from './guards.ts';
 
 const NL = String.fromCharCode(10);
@@ -30,6 +31,8 @@ export interface AgentCommand {
 
 export interface AgentScan {
   tools: AgentTool[];
+  /** Untrusted text glued into a prompt, in the same function. */
+  injections: PromptFlow[];
   guards: Guard[];
   filesRead: number;
   /** A ceiling that exists in name only. */
@@ -39,6 +42,7 @@ export interface AgentScan {
 export function scanAgent(root: string): AgentScan {
   const scan = scanSourceFiles(root, 20_000, (f) => AGENT_FILE.test(f));
   const tools: AgentTool[] = [];
+  const injections: PromptFlow[] = [];
   const guards: Guard[] = [];
   let emptyBudget: AgentScan['emptyBudget'] = null;
   let filesRead = 0;
@@ -53,13 +57,14 @@ export function scanAgent(root: string): AgentScan {
     }
     filesRead += 1;
     tools.push(...toolsIn(where, text));
+    injections.push(...promptFlows(where, text));
     guards.push(...guardsIn(where, text));
     if (!emptyBudget) {
       const empty = budgetSetToNothing(text);
       if (empty) emptyBudget = { file: where, text: empty };
     }
   }
-  return { tools, guards, filesRead, emptyBudget };
+  return { tools, injections, guards, filesRead, emptyBudget };
 }
 
 const REACH_READS: Record<Reach, string> = {
@@ -74,7 +79,7 @@ const REACH_READS: Record<Reach, string> = {
 };
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, guards, filesRead, emptyBudget } = scan;
+  const { tools, injections, guards, filesRead, emptyBudget } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -159,6 +164,24 @@ export function renderAgent(scan: AgentScan, root: string): string {
     );
   }
 
+  if (injections.length > 0) {
+    const armed = injections.filter((i) => i.withTools);
+    lines.push(
+      '## Text somebody else wrote, glued into a prompt',
+      '',
+      armed.length > 0
+        ? `${injections.length} place(s), and ${armed.length} of them in a function that also hands the model tools. A prompt has no parameter binding: once the text is in the string, the model cannot tell your instruction from theirs.`
+        : `${injections.length} place(s). None is in a function that also hands the model tools, so the worst case here is a wrong answer rather than a tool call somebody else chose.`,
+      '',
+    );
+    for (const i of injections.slice(0, 20)) {
+      lines.push(`- ${i.file}:${i.line} — ${i.origin}, in by ${i.through}${i.withTools ? ' — **and this function has tools**' : ''}`);
+      lines.push(`  \`${i.evidence}\``);
+    }
+    if (injections.length > 20) lines.push(`…and ${injections.length - 20} more`);
+    lines.push('');
+  }
+
   lines.push('## The lethal trifecta', '');
   if (trifecta.complete) {
     lines.push('All three legs are present. Breaking any one of them breaks the attack:', '');
@@ -212,6 +235,8 @@ export function renderAgent(scan: AgentScan, root: string): string {
     '- **Whether the agent is ever given these tools.** A tool can be defined and never passed to a',
     '  model. This lists what exists, not what is wired up.',
     '- **What the model will actually do with them.** No prompt was judged and nothing was run.',
+    '- **Untrusted text reaching a prompt through more than one step.** A value that passes through',
+    '  two variables, another function or a different file is not followed, and is not reported.',
     '- **Tools assembled at run time**, from a registry, a plugin folder or a config file.',
     '- **Frameworks not in the list above.** Silence about a framework is silence, not approval.',
     '',

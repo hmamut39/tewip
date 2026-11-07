@@ -17,6 +17,7 @@ import { describe, it } from 'node:test';
 import { reachOf, toolsIn, trifectaIn, type AgentTool } from '../agent/tools.ts';
 import { guardsIn } from '../agent/guards.ts';
 import { blank } from '../agent/source-text.ts';
+import { promptFlows } from '../agent/prompt-flow.ts';
 import { renderAgent, scanAgent } from '../agent/agent-command.ts';
 
 const NL = String.fromCharCode(10);
@@ -214,7 +215,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], guards: [], filesRead: 9, emptyBudget: null }, '.');
+    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);
@@ -262,5 +263,93 @@ describe('the source scanner', () => {
     assert.equal(code.length, text.length);
     assert.equal(calls.length, text.length);
     assert.equal(code.split(NL).length, text.split(NL).length);
+  });
+});
+
+// Phase 140: the same question one level down.
+//
+// The trifecta is an argument about what *could* happen, from the tool list. This is about what the
+// code does: is text from a web page, a ticket, an inbox or a retriever glued into the prompt
+// string itself. Glued, not passed beside it - the distinction matters more here than it does in
+// SQL, because a prompt has no parameter binding to fall back on.
+//
+// On 1,691 files of real agent code - the official MCP servers, the OpenAI Agents SDK, CrewAI and
+// Tewip's own server - this finds nothing, which is the precision claim. Those projects pass the
+// outside text beside the prompt rather than into it. So recall is measured here, against planted
+// examples, and said to be measured that way.
+describe('text somebody else wrote, reaching a prompt', () => {
+  const py = (...lines: string[]) => lines.join(NL);
+
+  it('catches a fetched page glued in with an f-string', () => {
+    const found = promptFlows('a.py', py(
+      'def summarise(url):',
+      '    page = requests.get(url).text',
+      '    return client.messages.create(tools=TOOLS, messages=[{"content": f"Read: {page}"}])',
+    ));
+    assert.equal(found.length, 1);
+    assert.equal(found[0].origin, 'a web page this agent fetched');
+    assert.match(found[0].through, /f-string/);
+    assert.equal(found[0].withTools, true);
+  });
+
+  it('catches a template literal in JavaScript', () => {
+    const found = promptFlows('a.ts', py(
+      'async function run(url) {',
+      '  const html = await fetch(url).then((r) => r.text());',
+      '  return client.messages.create({ tools, messages: [{ content: `Read: ${html}` }] });',
+      '}',
+    ));
+    assert.equal(found.length, 1);
+    assert.match(found[0].through, /template literal/);
+    assert.equal(found[0].withTools, true, '{ tools, messages } is the shorthand both SDKs use');
+  });
+
+  it('catches a retrieved document and a ticket body', () => {
+    const docs = promptFlows('a.py', py('def f(q):', '    hits = retriever.invoke(q)', '    return llm.invoke(f"Context: {hits}")'));
+    assert.equal(docs[0]?.origin, 'a document this agent retrieved');
+    const ticket = promptFlows('b.py', py('def f(issue):', '    body = issue.body', '    return llm.invoke(f"Fix: {body}")'));
+    assert.equal(ticket[0]?.origin, 'a ticket or comment somebody else wrote');
+  });
+
+  it('says nothing when the text is passed beside the prompt instead of into it', () => {
+    // The whole distinction. This is what every real project in the corpus does, and why the
+    // precision number is zero rather than a page of findings somebody would switch off.
+    assert.deepEqual(promptFlows('a.py', py(
+      'def summarise(url):',
+      '    page = requests.get(url).text',
+      '    return client.messages.create(messages=[{"role": "user", "content": page}])',
+    )), []);
+  });
+
+  it('does not join a source and a prompt in different functions', () => {
+    assert.deepEqual(promptFlows('a.ts', py(
+      'function a(url) { const html = fetch(url).then((r) => r.text()); }',
+      'function b() { return client.create({ tools, messages: [{ content: `x ${html}` }] }); }',
+    )), []);
+  });
+
+  it('separates exposure from reach', () => {
+    const noTools = promptFlows('a.ts', py(
+      'async function run(url) {',
+      '  const html = await fetch(url).then((r) => r.text());',
+      '  return client.messages.create({ messages: [{ content: `Read: ${html}` }] });',
+      '}',
+    ));
+    assert.equal(noTools.length, 1);
+    assert.equal(noTools[0].withTools, false, 'a wrong answer is not the same as a tool call somebody else chose');
+  });
+
+  it('reports one finding per untrusted value, not per mention of a prompt', () => {
+    // `messages=` and `.create(` both match the same statement; reporting it twice reads as two
+    // separate problems in a report somebody is deciding what to fix from.
+    const found = promptFlows('a.py', py(
+      'def f(url):',
+      '    page = requests.get(url).text',
+      '    return client.messages.create(',
+      '        tools=TOOLS,',
+      '        messages=[{"content": f"Read: {page}"}],',
+      '    )',
+    ));
+    assert.equal(found.length, 1);
   });
 });

@@ -41,12 +41,22 @@ const SINKS: Array<{ kind: Flow['kind']; re: RegExp; sink: string }> = [
  */
 const MADE_SAFE = /\b(?:parseInt|parseFloat|Number|encodeURIComponent|escape|escapeId|sqlstring\.escape)\s*\(/;
 
-/** A value is only dangerous here if it is glued into the string, not passed beside it. */
-function gluedIn(argument: string, expression: string): string | null {
+/**
+ * A value is only dangerous here if it is glued into the string, not passed beside it.
+ *
+ * Exported because the agent checks need exactly this question about a different kind of string: a
+ * prompt. The Python shapes are here rather than in a second copy for the same reason - an f-string
+ * glues a value in exactly as a template literal does, and the difference is only spelling.
+ */
+export function gluedIn(argument: string, expression: string): string | null {
   const e = expression.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (new RegExp(String.raw`\$\{[^}]*` + e, 's').test(argument)) return 'a template literal';
   if (new RegExp(e + String.raw`\s*\+|\+\s*` + e).test(argument)) return 'string concatenation';
   if (new RegExp(String.raw`\.concat\s*\([^)]*` + e).test(argument)) return 'concat()';
+  // Python: an f-string, old-style %, and .format(), which glue a value in just as firmly.
+  if (new RegExp(String.raw`f["'][^"']*\{[^}]*` + e, 's').test(argument)) return 'an f-string';
+  if (new RegExp(String.raw`%\s*\(?[^)]*` + e).test(argument)) return '% formatting';
+  if (new RegExp(String.raw`\.format\s*\([^)]*` + e).test(argument)) return '.format()';
   return null;
 }
 
@@ -71,7 +81,7 @@ function firstArgument(text: string, from: number): string {
  * joined. Crude - it finds the enclosing braces - and crude in the safe direction: a body it
  * cannot determine yields no finding at all.
  */
-function sameBody(text: string, a: number, b: number): boolean {
+export function sameBody(text: string, a: number, b: number): boolean {
   if (a > b) return false;
   let depth = 0;
   for (let i = a; i < b; i += 1) {

@@ -95,6 +95,14 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
+  tewip agent [<folder>] [--out agent.md] [--gate]
+                                    What an AI agent in this project is allowed to do, read from
+                                    its source before it runs: every tool it can call, which of
+                                    them cannot be undone, and whether anything asks a person
+                                    first. Names the lethal trifecta when it is there - untrusted
+                                    input, private data and a way to send data out, in one loop.
+                                    Reads LangChain, LangGraph, the MCP SDKs, CrewAI, the OpenAI
+                                    Agents SDK and the Vercel AI SDK. No model, no cost.
   tewip audit [--all] [--gate]
                                     Who ran Tewip here, when, and with what. Each entry carries
                                     the hash of the one before it, so an entry changed or removed

@@ -19,7 +19,7 @@ export interface RepoRow {
 
 export type Cell = { ran: true; count: number; detail: string } | { ran: false; why: string };
 
-export const CHECKS = ['secrets', 'injection', 'containers', 'licences', 'access', 'migrations', 'hollow tests'] as const;
+export const CHECKS = ['secrets', 'injection', 'agent tools', 'containers', 'licences', 'access', 'migrations', 'hollow tests'] as const;
 export type Check = (typeof CHECKS)[number];
 
 /** What each column counts, so the header is not seven words a reader has to guess at. */
@@ -30,6 +30,7 @@ export const COUNTS: Record<Check, string> = {
   licences: 'dependencies whose licence needs a decision',
   access: 'accessibility barriers, not warnings',
   migrations: 'migrations that destroy data or break the running version',
+  'agent tools': 'tools an AI agent can call that cannot be undone',
   'hollow tests': 'tests that cannot fail',
 };
 

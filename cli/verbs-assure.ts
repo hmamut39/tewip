@@ -23,6 +23,11 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
       runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });
       return true;
     }
+    case 'agent': {
+      const { runAgent } = await import('../engine/agent/agent-command.ts');
+      runAgent({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      return true;
+    }
     case 'audit': {
       const { runAudit } = await import('../engine/audit/audit-command.ts');
       runAudit({ root: process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });

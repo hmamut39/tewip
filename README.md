@@ -1216,6 +1216,47 @@ With `--act` it carries the decision out, and this is where the refusals matter 
 - Everything it did or refused goes to `.tewip/actions.jsonl`, with the run that justified it.
 - It **will not repeat itself**: the same attempt is refused until a new run gives it new evidence.
 
+## What is your AI agent allowed to do? (Phase 139)
+
+```bash
+tewip agent                 # this project
+tewip agent ~/work/bot      # another one
+tewip agent --gate          # non-zero when nothing stands in the way
+```
+
+Every tool in this market evaluates an agent by **running** it - Langfuse, Phoenix, RAGAS, TruLens,
+DeepEval, Promptfoo, Giskard, garak. They need a runtime, a token budget and usually an account, and
+most judge with another model, so the same agent scores differently on Tuesday. They answer *is this
+agent any good*.
+
+Nobody answers the question an IT department has to sign off on: **what is this agent allowed to do,
+and what stands between it and the real world?** That one is decidable by reading, for free,
+offline, in CI, before anything runs.
+
+- **Every tool it can call**, with the file and line. Reads LangChain and LangGraph, the MCP SDKs in
+  Python and TypeScript, CrewAI, the OpenAI Agents SDK, the Vercel AI SDK and Anthropic's tool
+  shape. A framework it does not read is reported as silence, never as approval.
+- **Which of them cannot be undone.** When a tool declares `destructiveHint` or `readOnlyHint`, that
+  is believed over any guess - the author said it. Otherwise the name decides, then the opening
+  clause of the description, and a tool that says neither is printed as **undecided**, never folded
+  into "reads".
+- **The lethal trifecta.** Untrusted input, private data and a way to send data out, in one loop:
+  text the agent did not write can tell it to read the private thing and post it somewhere, and
+  every step is a tool it was given on purpose. A system prompt is not a defence, because whoever
+  writes the untrusted text writes the other half of the prompt. Tewip names the tools in each leg.
+- **What stands in the way**: a human approval gate, a dry run, a step budget, a tool allow-list -
+  and says plainly when nothing anywhere in the project has one. A ceiling written as
+  `max_iterations=None` is reported apart from no ceiling at all, because it reads as deliberate.
+
+It will not tell you that a gate which exists stands in front of these particular tools - that is a
+question about the running graph - and it says so in those words rather than letting you assume it.
+
+**Measured on real agents.** The official MCP servers: 27 tools, 6 that cannot be undone, every one
+of those confirmed by its own `destructiveHint: true`. The OpenAI Agents SDK and CrewAI: no tools,
+correctly - they are frameworks, and every candidate in them was a test fixture or a docstring
+example. Each of those three repositories broke an earlier version of this check, in the same two
+ways every time: prose read as code, or code read as prose.
+
 ## What an IT department has to answer (Phases 133-137)
 
 Five commands that produce evidence rather than a judgement. All five are rules-only: no model is

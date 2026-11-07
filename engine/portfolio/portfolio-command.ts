@@ -17,6 +17,8 @@ import { NEEDS_A_LOOK } from '../sbom/licences.ts';
 import { findBarriers } from '../access/access-command.ts';
 import { migrationsUnder, readMigration } from '../schema/schema-command.ts';
 import { vouchAll } from '../vouch/vouch-command.ts';
+import { scanAgent } from '../agent/agent-command.ts';
+import { IRREVERSIBLE } from '../agent/tools.ts';
 import { CHECKS, renderPortfolio, type Cell, type Check, type RepoRow } from './portfolio.ts';
 
 export interface PortfolioCommand {
@@ -70,6 +72,16 @@ export function examine(path: string, quick = false): RepoRow {
     const found = scanSecrets(path, files);
     const risky = found.filter((f) => triageSecret(f, path, new Set<string>()).verdict === 'real-risk');
     return ran(risky.length, `${found.length} shape(s) matched, ${risky.length} need action`);
+  });
+
+  // An agent's irreversible tools belong on this page for the same reason the rest do: at forty
+  // repositories nobody opens each one, and "which of these can delete things on its own" is the
+  // question that now gets asked first.
+  cells['agent tools'] = attempt(() => {
+    const scan = scanAgent(path);
+    if (scan.tools.length === 0) return { ran: false, why: 'no agent tool definitions found, in the frameworks this reads' };
+    const risky = scan.tools.filter((t) => IRREVERSIBLE.includes(t.reach));
+    return ran(risky.length, `${scan.tools.length} tool(s), ${risky.length} that cannot be undone`);
   });
 
   cells.injection = attempt(() => {

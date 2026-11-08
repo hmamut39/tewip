@@ -53,6 +53,17 @@
             "not-reachable": 42
           },
           "verified": "2026-10-31. 43 findings in 12 distinct classes, every class read. 40 are SD-JWT test vectors under core/src/test/resources/sdjwt/*.txt - deliberately committed conformance fixtures - plus a JWT literal in SkeletonKeyTokenTest.java, a documented JWT in an oid4vci .adoc, and a credentialled URL in an outgoinghttp .adoc example. needs-someone 0 is the number that matters: an identity server is where a false 'go revoke this' would be most expensive. filesRead 5000 is the scan's budget rather than the project, and the report says what it did not read. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
+        },
+        {
+          "command": "infra",
+          "expect": {
+            "filesRead": 38,
+            "findings": 11,
+            "ships": 5,
+            "medium": 8,
+            "high": 3
+          },
+          "verified": "2026-11-08. 38 infrastructure files, the most in the corpus: 11 findings of which 5 are in files that ship. Pins the ships/does-not-ship split, which is the distinction the report leads with."
         }
       ]
     },
@@ -143,6 +154,29 @@
             "not-reachable": 1
           },
           "verified": "2026-10-31. Pinned to hold Phase 127. All three findings read by hand: a Slack token in a README markdown table (documentation), `xoxb-test-token` in SlackIntegrationControllerTests.cs (a fixture), and the Duende IdentityServer product licence in GlobalSettings.cs:532, whose own header declares \"typ\":\"license+jwt\". That last one was the single real-risk verdict across ten repositories and it was wrong; needs-someone 0 is the number guarding it. filesRead 5000 is the scan's budget, not the project: bitwarden has more text files than that, and the report now says how many it did not read."
+        },
+        {
+          "command": "infra",
+          "expect": {
+            "filesRead": 23,
+            "findings": 20,
+            "ships": 20,
+            "high": 20
+          },
+          "verified": "2026-11-08. 20 Dockerfiles, 20 findings, every one in a file that ships, all high. The richest infra case in the corpus and the one that catches this check going quiet."
+        },
+        {
+          "command": "sbom",
+          "expect": {
+            "components": 0,
+            "flagged": 0,
+            "dev-unknown": 0,
+            "notRead": 3,
+            "dockerfiles": 20,
+            "bases": 8,
+            "imagePackages": 60
+          },
+          "verified": "2026-11-08. Pinning sbom found it reporting \"0 package(s)\" over \"Nothing found that Tewip could not read\" on bitwarden-server, a large C# server with a .csproj in every project - a complete, confident, empty bill of materials that denied having gaps. Two causes: .NET was never in the ecosystem list though the comment above it claimed .NET since the file was written, and the check was existsSync at the repository root only, so no monorepo subdirectory manifest was ever seen. notRead is the number that guards it. Three gaps read by hand: packages.lock.json and .csproj for NuGet, and util/RustSdk/rust/Cargo.lock, which is a real Rust SDK this repository ships and whose dependencies are not in the bill of materials. components 0 with notRead 3 is the exact property that was broken - nothing readable, and it says so."
         }
       ]
     },
@@ -286,6 +320,19 @@
             "needs-someone": 0
           },
           "verified": "read by hand on 2026-10-18. Zero is the whole point: firefly-iii ships .env.example and .env.testing, which is the classic way a secret scanner embarrasses itself, and the scanner read all of its files and accused none of them."
+        },
+        {
+          "command": "sbom",
+          "expect": {
+            "components": 262,
+            "flagged": 1,
+            "dev-unknown": 0,
+            "notRead": 1,
+            "dockerfiles": 0,
+            "bases": 0,
+            "imagePackages": 0
+          },
+          "verified": "2026-11-08. One licence needing a decision from a person, which is the only non-zero flagged count in the corpus - it pins the path a reader actually acts on. PHP composer.lock named as a gap beside it."
         }
       ]
     },
@@ -451,6 +498,16 @@
             "reach-not-sure": 1
           },
           "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does."
+        },
+        {
+          "command": "contract",
+          "expect": {
+            "checked": 6,
+            "unreadable": 0,
+            "breaks": 0,
+            "isNew": 0
+          },
+          "verified": "2026-11-08. Six OpenAPI descriptions, all read. The largest contract case in the corpus, and the number that would move if the YAML reader lost a shape - which is the gap confidence.ts names for this command."
         }
       ]
     },
@@ -503,6 +560,39 @@
             "dry-run": 1
           },
           "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. One guard, the dryRun flag on the immich CLI, which is all that file declares. Pinned as the smallest non-zero case."
+        },
+        {
+          "command": "infra",
+          "expect": {
+            "filesRead": 22,
+            "findings": 5,
+            "ships": 5,
+            "high": 5
+          },
+          "verified": "2026-11-08. Five Dockerfiles with no USER, all shipping. Read by hand in Phase 151."
+        },
+        {
+          "command": "sbom",
+          "expect": {
+            "components": 2705,
+            "flagged": 0,
+            "dev-unknown": 2705,
+            "notRead": 5,
+            "dockerfiles": 5,
+            "bases": 9,
+            "imagePackages": 24
+          },
+          "verified": "2026-11-08. Pinning sbom found it reporting \"0 package(s)\" over \"Nothing found that Tewip could not read\" on bitwarden-server, a large C# server with a .csproj in every project - a complete, confident, empty bill of materials that denied having gaps. Two causes: .NET was never in the ecosystem list though the comment above it claimed .NET since the file was written, and the check was existsSync at the repository root only, so no monorepo subdirectory manifest was ever seen. notRead is the number that guards it. immich went from one gap to five, every one verified on disk: mobile/android/Gemfile.lock, mobile/android/app/build.gradle, native/Cargo.lock and machine-learning/pyproject.toml. It ships Rust, Java, Ruby and Python whose dependencies were absent from the SBOM with nothing saying so. dev-unknown 2705 pins the Phase 151 fix: a pnpm lockfile does not record which packages are build-only, so the pack must not claim all 2,705 ship with the product. bases 9 pins the Phase 151 stage-name fix - 7 of its 18 base images were its own build stages."
+        },
+        {
+          "command": "contract",
+          "expect": {
+            "checked": 1,
+            "unreadable": 0,
+            "breaks": 0,
+            "isNew": 0
+          },
+          "verified": "2026-11-08. One OpenAPI description, read. Against HEAD on a clean pinned tree every description is compared with itself, so breaks are trivially nought - checked and unreadable are the measurement, and they are what engine/evidence/confidence.ts admits is unmeasured about this command."
         }
       ]
     },
@@ -547,6 +637,28 @@
             "guards": 0
           },
           "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. Zero files read, because this check opens .py, .ts, .js, .tsx and .jsx and gin is Go. Pinned precisely because it is a zero: adding a Go reader has to change this number deliberately rather than quietly."
+        },
+        {
+          "command": "infra",
+          "expect": {
+            "filesRead": 0,
+            "findings": 0,
+            "ships": 0
+          },
+          "verified": "2026-11-08. No Dockerfile, Compose file, Terraform or Kubernetes manifest. Pinned as a zero so a reader that starts inventing has somewhere to fail."
+        },
+        {
+          "command": "sbom",
+          "expect": {
+            "components": 0,
+            "flagged": 0,
+            "dev-unknown": 0,
+            "notRead": 1,
+            "dockerfiles": 0,
+            "bases": 0,
+            "imagePackages": 0
+          },
+          "verified": "2026-11-08. Go: nothing readable, and the report says go.mod is there and unread rather than reporting an empty bill of materials. components 0 with notRead 1 is the honest pair."
         }
       ]
     },

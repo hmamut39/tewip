@@ -166,3 +166,66 @@ describe('the documents it hands over', () => {
     assert.match(page, /does not say whether they are acceptable/, 'it classifies; it does not give legal advice');
   });
 });
+
+// Phase 157: an ecosystem it cannot read, in a repository that is not laid out like an example.
+//
+// Found by pinning `sbom` on bitwarden-server. It reported "0 package(s)" over "Nothing found that
+// Tewip could not read" - a complete, confident, empty bill of materials, explicitly denying any
+// gaps, for a large C# server with a .csproj in every project and packages.lock.json beside some of
+// them. An auditor reading it would conclude the project has no dependencies. It is the failure
+// this file's own opening comment says the command exists not to commit.
+describe('an ecosystem Tewip cannot read', () => {
+  const project = (files: Record<string, string>) => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-eco-'));
+    for (const [path, body] of Object.entries(files)) {
+      mkdirSync(join(root, path, '..'), { recursive: true });
+      writeFileSync(join(root, path), body, 'utf8');
+    }
+    return root;
+  };
+
+  it('names .NET, which the comment above the list has always claimed', () => {
+    const root = project({ 'src/Admin/Admin.csproj': '<Project Sdk="Microsoft.NET.Sdk"></Project>' });
+    const gaps = inventory(root).notRead.join(' ');
+    assert.match(gaps, /\.NET/, 'a C# project came back with no readable packages and no stated gap');
+  });
+
+  it('finds a manifest that is not at the repository root', () => {
+    // `existsSync(join(root, file))` was the whole of the check, which is right for a repository
+    // with one manifest at its root and wrong for every monorepo.
+    const root = project({ 'perf/MicroBenchmarks/packages.lock.json': '{"version":1,"dependencies":{}}' });
+    assert.match(inventory(root).notRead.join(' '), /\.NET/);
+  });
+
+  it('never reports nothing readable and no gap at the same time', () => {
+    // The invariant, stated as one assertion: if this command read nothing, it has to say why.
+    // Every ecosystem it knows about, one at a time, each below the root.
+    const manifests: Record<string, string> = {
+      'api/requirements.txt': 'flask==3.0.0',
+      'svc/pyproject.toml': '[project]\nname = "x"',
+      'cmd/go.mod': 'module example.com/x',
+      'web/Gemfile.lock': 'GEM\n  specs:\n',
+      'mod/pom.xml': '<project></project>',
+      'app/build.gradle': 'dependencies {}',
+      'native/Cargo.lock': 'version = 3',
+      'site/composer.lock': '{"packages":[]}',
+      'src/App/App.csproj': '<Project></Project>',
+    };
+    for (const [path, body] of Object.entries(manifests)) {
+      const root = project({ [path]: body });
+      const inv = inventory(root);
+      assert.equal(inv.components.length, 0, `${path} should not be readable as components`);
+      assert.ok(
+        inv.notRead.length > 0,
+        `${path} is in the project and nothing was read from it, and the report claims no gaps. That is an empty bill of materials denying it is empty.`,
+      );
+    }
+  });
+
+  it('does not go looking inside somebody else dependencies', () => {
+    // A manifest under node_modules belongs to a package, not to this project, and counting it
+    // would report a gap in every JavaScript repository on earth.
+    const root = project({ 'node_modules/left-pad/Cargo.lock': 'version = 3', 'package.json': '{"name":"x","version":"1.0.0"}' });
+    assert.equal(inventory(root).notRead.join(' ').includes('Rust'), false);
+  });
+});

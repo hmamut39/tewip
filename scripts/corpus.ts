@@ -20,11 +20,16 @@ import { findBarriers } from '../engine/access/access-command.ts';
 import { migrationsUnder, readMigration } from '../engine/schema/schema-command.ts';
 import { scanSecrets } from '../engine/secure/secrets.ts';
 import { scanAgent } from '../engine/agent/scan.ts';
+import { scanIac } from '../engine/iac/iac-command.ts';
+import { inventory } from '../engine/sbom/inventory.ts';
+import { imageContents } from '../engine/sbom/sbom-command.ts';
+import { scanContracts } from '../engine/contract/contract-command.ts';
+import { NEEDS_A_LOOK } from '../engine/sbom/licences.ts';
 import { sourceFiles } from '../engine/walk.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 
 interface Expectation { [key: string]: number }
-interface Check { command: 'vouch' | 'schema' | 'access' | 'secrets' | 'agent'; expect: Expectation; verified: string }
+interface Check { command: 'vouch' | 'schema' | 'access' | 'secrets' | 'agent' | 'infra' | 'sbom' | 'contract'; expect: Expectation; verified: string }
 interface Repo { name: string; url: string; commit: string; why: string; checks: Check[] }
 
 const MANIFEST = resolve('corpus/expected.json');
@@ -139,6 +144,46 @@ function measure(command: Check['command'], root: string): Expectation {
     for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;
     for (const t of scan.tools) out[`reach-${t.reach}`] = (out[`reach-${t.reach}`] ?? 0) + 1;
     return out;
+  }
+  if (command === 'infra') {
+    // Counted by what ships, because that is the number the report leads with: a finding in a file
+    // that never reaches production is a different claim from one in the image you deploy.
+    const scan = scanIac(root);
+    const out: Expectation = {
+      filesRead: scan.dockerfiles + scan.composeFiles + scan.terraformFiles + scan.manifests,
+      findings: scan.findings.length,
+      ships: scan.findings.filter((f) => f.ships).length,
+    };
+    for (const f of scan.findings) out[f.risk] = (out[f.risk] ?? 0) + 1;
+    return out;
+  }
+  if (command === 'sbom') {
+    // `flagged` is the one a person acts on - a licence needing a decision - and `notRead` is the
+    // honesty line: an ecosystem present and unreadable is a gap, not a clean bill of materials.
+    const inv = inventory(root);
+    const image = imageContents(root);
+    return {
+      components: inv.components.length,
+      flagged: inv.components.filter((c) => NEEDS_A_LOOK.includes(c.licence.standing)).length,
+      'dev-unknown': inv.components.filter((c) => !c.devKnown).length,
+      notRead: inv.notRead.length,
+      dockerfiles: image.dockerfiles,
+      bases: image.bases.length,
+      imagePackages: image.packages.length,
+    };
+  }
+  if (command === 'contract') {
+    // Against HEAD on a pinned clean tree, so every description is compared with itself and the
+    // breaks are trivially nought. That is not what this measures. `checked` is how many real
+    // OpenAPI descriptions the reader found, and `unreadable` is how many it could not parse -
+    // which is exactly what engine/evidence/confidence.ts admits is unmeasured about this command.
+    const scan = scanContracts({ root });
+    return {
+      checked: scan.checked,
+      unreadable: scan.files.filter((f) => f.unreadable).length,
+      breaks: scan.files.reduce((n, f) => n + f.breaks.length, 0),
+      isNew: scan.isNew.length,
+    };
   }
   if (command === 'access') {
     const { findings, filesRead } = findBarriers(root);

@@ -52,7 +52,10 @@ describe('the folder a verb was pointed at', () => {
   it('no verb module searches for the first undashed argument itself', () => {
     // The structural half of the fix: the next verb to be written cannot reintroduce the bug by
     // copying the line above it, because the line is not there to copy.
-    for (const file of ['verbs-assure.ts', 'verbs-prove.ts', 'verbs-work.ts']) {
+    // tewip.ts included, not only the verb modules. `start` lives there and was the one
+    // repository-wide verb Phase 151 missed, so `tewip start ~/work/api` described whatever
+    // directory the shell was in - in the first command anybody runs.
+    for (const file of ['tewip.ts', 'verbs-assure.ts', 'verbs-prove.ts', 'verbs-work.ts']) {
       const text = readFileSync(join(CLI_DIR, file), 'utf8');
       assert.ok(
         !/args\s*\.\s*find\s*\(\s*\(\s*a\s*\)\s*=>\s*!\s*a\s*\.\s*startsWith/.test(text),

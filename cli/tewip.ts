@@ -10,7 +10,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { flag } from './args.ts';
+import { flag, folderArg } from './args.ts';
 import { HELP } from './help.ts';
 import { assureVerb } from './verbs-assure.ts';
 import { proveVerb } from './verbs-prove.ts';
@@ -225,7 +225,11 @@ async function main(): Promise<void> {
     case undefined:
     case 'start': {
       const { runStart } = await import('../engine/start/start-command.ts');
-      runStart(process.cwd());
+      // A folder argument, like every other repository-wide verb takes. Phase 151 gave one to six
+      // of them and missed this one, which is the first command anybody runs: `tewip start
+      // ~/work/api` silently looked at the directory the shell happened to be in and described the
+      // wrong project - the same wrong answer, in the place it does the most damage to trust.
+      runStart(folderArg(args) ?? process.cwd());
       return;
     }
     case '--help':

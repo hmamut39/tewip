@@ -7,7 +7,7 @@
 // than no bill of materials, because somebody signs it.
 //
 // So: no network, no guessing, and every ecosystem found but unreadable is named in the output.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 import { classify, type Classified } from './licences.ts';
 
@@ -86,16 +86,63 @@ function fromNpm(root: string): { components: Component[]; note: string | null }
  * installed metadata is the truth, and it is not in the repository. Saying so is the useful
  * answer; inventing the rest is not.
  */
-const OTHER_ECOSYSTEMS: Array<[file: string, says: string]> = [
-  ['requirements.txt', 'Python: requirements.txt lists what was asked for, not the versions installed or anything transitive, and the installed metadata is not in the repository'],
-  ['pyproject.toml', 'Python: pyproject.toml declares ranges, not the versions that would ship'],
-  ['go.mod', 'Go: go.mod is readable but Tewip does not read it yet'],
-  ['Gemfile.lock', 'Ruby: Gemfile.lock is readable but Tewip does not read it yet'],
-  ['pom.xml', 'Java: Maven resolution needs the build, which Tewip does not run'],
-  ['build.gradle', 'Java: Gradle resolution needs the build, which Tewip does not run'],
-  ['Cargo.lock', 'Rust: Cargo.lock is readable but Tewip does not read it yet'],
-  ['composer.lock', 'PHP: composer.lock is readable but Tewip does not read it yet'],
+const OTHER_ECOSYSTEMS: Array<[matches: (name: string) => boolean, says: string]> = [
+  [(n) => n === 'requirements.txt', 'Python: requirements.txt lists what was asked for, not the versions installed or anything transitive, and the installed metadata is not in the repository'],
+  [(n) => n === 'pyproject.toml', 'Python: pyproject.toml declares ranges, not the versions that would ship'],
+  [(n) => n === 'go.mod', 'Go: go.mod is readable but Tewip does not read it yet'],
+  [(n) => n === 'Gemfile.lock', 'Ruby: Gemfile.lock is readable but Tewip does not read it yet'],
+  [(n) => n === 'pom.xml', 'Java: Maven resolution needs the build, which Tewip does not run'],
+  [(n) => n === 'build.gradle' || n === 'build.gradle.kts', 'Java: Gradle resolution needs the build, which Tewip does not run'],
+  [(n) => n === 'Cargo.lock', 'Rust: Cargo.lock is readable but Tewip does not read it yet'],
+  [(n) => n === 'composer.lock', 'PHP: composer.lock is readable but Tewip does not read it yet'],
+  // .NET, which the comment above has claimed since this was written and the list never had.
+  //
+  // Found by pinning `sbom` on bitwarden-server: a large C# server with a `.csproj` in every
+  // project and `packages.lock.json` beside some of them. The report said "0 package(s)" over
+  // "Nothing found that Tewip could not read" - a complete, confident, empty bill of materials
+  // that denied having any gaps, for a repository full of NuGet dependencies. An auditor reading
+  // it would conclude the project has no dependencies at all.
+  [(n) => n === 'packages.lock.json', '.NET: packages.lock.json is readable but Tewip does not read it yet'],
+  [(n) => n.endsWith('.csproj') || n.endsWith('.fsproj') || n.endsWith('.vbproj'), '.NET: a project file declares ranges, and NuGet resolution needs the build, which Tewip does not run'],
 ];
+
+/**
+ * Manifest names anywhere near the top of the project, not only at its root.
+ *
+ * `existsSync(join(root, file))` was the whole of this, which is right for a repository with one
+ * manifest at its root and wrong for every monorepo. bitwarden-server keeps its project files in
+ * `src/Admin/Admin.csproj` and a lockfile in `perf/MicroBenchmarks/`, so a root-only check found
+ * nothing and the report said there was nothing to find.
+ *
+ * Directories three deep, so files up to four deep - `bitwarden-server/util/RustSdk/rust/Cargo.lock`
+ * is at that edge and is a real gap worth reporting, because that repository does ship Rust whose
+ * dependencies are not in the bill of materials. No walk of the whole tree: a manifest that declares
+ * what a project ships lives near the top by convention, and this has to stay cheap enough that
+ * nobody is tempted to skip it. Directories holding somebody else's code are skipped, or
+ * `node_modules` alone would make this the slowest part of the command.
+ */
+const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'target', 'vendor', '.venv', 'venv', '__pycache__', 'coverage', '.next', '.cache', 'bin', 'obj']);
+
+function manifestNames(root: string, depth = 3): Set<string> {
+  const names = new Set<string>();
+  const walk = (dir: string, left: number) => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (left > 0 && !SKIP.has(entry.name)) walk(join(dir, entry.name), left - 1);
+      } else {
+        names.add(entry.name);
+      }
+    }
+  };
+  walk(root, depth);
+  return names;
+}
 
 /**
  * pnpm-lock.yaml, which is what five of the six JavaScript projects in the corpus actually use.
@@ -192,6 +239,7 @@ export function inventory(root: string): Inventory {
       `npm: ${unrecordedNpm} package(s) have no licence in package-lock.json. npm omits the field for some packages that do have one, so this is a gap in the lockfile rather than a finding about them. Run \`npm install\` and scan again to read them from node_modules.`,
     );
   }
-  for (const [file, says] of OTHER_ECOSYSTEMS) if (existsSync(join(root, file))) notRead.push(says);
+  const names = manifestNames(root);
+  for (const [matches, says] of OTHER_ECOSYSTEMS) if ([...names].some(matches)) notRead.push(says);
   return { components: components.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version)), notRead, read };
 }

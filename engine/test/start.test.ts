@@ -14,7 +14,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
-import { lookAround, renderStart, suggest } from '../start/start-command.ts';
+import { lookAround } from '../start/look.ts';
+import { renderStart, suggest } from '../start/start-command.ts';
 
 function project(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'tewip-start-'));
@@ -147,5 +148,71 @@ describe('counts from a look that stopped early', () => {
     const because = suggest(found).find((s) => s.command === 'tewip vouch')?.because ?? '';
     assert.doesNotMatch(because, /At least/, because);
     assert.doesNotMatch(renderStart(found, '/x'), /larger than Tewip looks at/);
+  });
+});
+
+// Phase 157: the front door, after the evidence pack existed and it had not noticed.
+describe('what the front door offers first', () => {
+  it('offers the evidence pack where there is anything for it to read', () => {
+    const root = project({ 'package.json': '{"name":"x","version":"1.0.0"}' });
+    const first = suggest(lookAround(root))[0];
+    assert.equal(first?.command, 'tewip evidence --quick');
+    assert.match(first.because, /1 dependency manifest \(1 npm\)/);
+  });
+
+  it('offers it for a Dockerfile with no manifest at all', () => {
+    const root = project({ Dockerfile: 'FROM node:24-slim\nRUN apt-get update\n' });
+    assert.equal(suggest(lookAround(root))[0]?.command, 'tewip evidence --quick');
+  });
+
+  it('does not offer it for a project with neither', () => {
+    const root = project({ 'main.go': 'package main\n\nfunc main() {}\n' });
+    assert.equal(
+      suggest(lookAround(root)).some((s) => s.command.startsWith('tewip evidence')),
+      false,
+      'offering a bill of materials to a project with no manifest and no container promises an answer it cannot give',
+    );
+  });
+
+  it('does not let a test fixture speak for the project', () => {
+    // Five of the seven manifests in Tewip's own repository are under `fixtures/polyglot`, so the
+    // front door announced it as a .NET, Go, Java and Ruby project on the strength of its own test
+    // data. The real one at the root still counts.
+    const root = project({
+      'package.json': '{"name":"x","version":"1.0.0"}',
+      'fixtures/polyglot/dotnet/Shop.Tests.csproj': '<Project></Project>',
+      'fixtures/polyglot/go/go.mod': 'module example.com/x',
+      'fixtures/polyglot/java/pom.xml': '<project></project>',
+      'examples/demo/Gemfile': 'source "https://rubygems.org"',
+    });
+    const found = lookAround(root);
+    assert.deepEqual([...found.manifests.entries()], [['npm', 1]], 'a fixture was counted as a dependency of this project');
+    assert.match(suggest(found)[0].because, /1 dependency manifest \(1 npm\)/);
+  });
+
+  it('still counts test files inside those directories, because that is the point of vouch', () => {
+    // The exclusion is narrow on purpose: only the claim "this project depends on X" is at stake.
+    const root = project({
+      'package.json': '{"name":"x","version":"1.0.0"}',
+      'fixtures/polyglot/node/app.test.js': "const assert = require('assert');\nit('works', () => assert.ok(true));\n",
+    });
+    assert.ok(suggest(lookAround(root)).some((s) => s.command === 'tewip vouch'), 'a test under fixtures/ is still a test file');
+  });
+
+  it('claims no number of commands it does not count', () => {
+    // It said "all eleven commands" from the day it was written. The command line dispatches
+    // forty-one, so the front door understated the tool nearly fourfold, because a number went
+    // into prose and nothing re-derived it.
+    const page = renderStart(lookAround(project({ 'package.json': '{"name":"x","version":"1.0.0"}' })), '/x');
+    assert.doesNotMatch(page, /all (?:eleven|ten|twelve|\d+) commands/i, 'the front door states a command count that nothing re-derives');
+  });
+});
+
+// Phase 157: start is a repository-wide verb and took no folder.
+describe('pointing the front door at a folder', () => {
+  it('reads the folder it is given, not the one the shell is in', () => {
+    const elsewhere = project({ 'package.json': '{"name":"elsewhere","version":"1.0.0"}', 'Dockerfile': 'FROM node:24-slim\n' });
+    const page = renderStart(lookAround(elsewhere), elsewhere);
+    assert.match(page, /1 dependency manifest \(1 npm\) and 1 Dockerfile/);
   });
 });

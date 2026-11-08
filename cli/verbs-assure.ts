@@ -25,7 +25,7 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
     }
     case 'evidence': {
       const { runEvidence } = await import('../engine/evidence/evidence-command.ts');
-      runEvidence({
+      await runEvidence({
         root: folderArg(args, ['out', 'json', 'since', 'key']) ?? process.cwd(),
         out: flag(args, 'out'),
         json: flag(args, 'json'),
@@ -33,6 +33,7 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
         key: flag(args, 'key'),
         quick: args.includes('--quick'),
         gate: args.includes('--gate'),
+        serial: args.includes('--serial'),
       });
       return true;
     }

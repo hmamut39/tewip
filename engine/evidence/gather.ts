@@ -12,18 +12,20 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { findBarriers, readAccepted as readAccessAccepted } from '../access/access-command.ts';
-import { scanAgent, type AgentScan } from '../agent/scan.ts';
-import { verify, type AuditCheck } from '../audit/audit.ts';
-import { scanContracts, type ContractScan } from '../contract/contract-command.ts';
+import type { findBarriers } from '../access/access-command.ts';
+import type { AgentScan } from '../agent/scan.ts';
+import type { AuditCheck } from '../audit/audit.ts';
+import type { ContractScan } from '../contract/contract-command.ts';
 import { ENGINE_VERSION } from '../engine.ts';
-import { scanIac, type IacScan } from '../iac/iac-command.ts';
-import { inventory, type Inventory } from '../sbom/inventory.ts';
-import { imageContents } from '../sbom/sbom-command.ts';
-import { migrationsUnder } from '../schema/migration-files.ts';
-import { readMigration, type Migration } from '../schema/schema-command.ts';
-import { scanSecrets } from '../secure/secrets.ts';
-import { readAccepted, triageSecret, type SecurityItem } from '../secure/triage.ts';
+import { CHECK_RUNNERS, WHY_SKIPPED, type CheckName } from './checks.ts';
+import { runChecks } from './run-checks.ts';
+import type { IacScan } from '../iac/iac-command.ts';
+import type { Inventory } from '../sbom/inventory.ts';
+import type { imageContents } from '../sbom/sbom-command.ts';
+
+import type { Migration } from '../schema/schema-command.ts';
+
+import type { SecurityItem } from '../secure/triage.ts';
 import type { Finding as AccessFinding } from '../access/checks.ts';
 
 export interface Part<T> {
@@ -75,6 +77,10 @@ export interface Evidence {
   approvals: Part<AuditCheck>;
   /** Findings a person wrote down as judged, which is the only approval Tewip can see. */
   accepted: Part<string[]>;
+  /** How many threads the checks ran on, so the duration below can be read correctly. */
+  threads: number;
+  /** Why it ran on one thread, when workers could not be used. */
+  fellBackBecause?: string;
   seconds: number;
 }
 
@@ -162,12 +168,27 @@ export interface GatherOptions {
   since?: string;
   /** Skip the checks that walk every source file, for a pack in seconds rather than a minute. */
   quick?: boolean;
+  /** Run every check in this thread, for a measurement or a test that wants no workers. */
+  serial?: boolean;
 }
 
-export function gather(opts: GatherOptions): Evidence {
+export async function gather(opts: GatherOptions): Promise<Evidence> {
   const began = Date.now();
   const root = resolve(opts.root);
   const quick = opts.quick ?? false;
+  const names = Object.keys(CHECK_RUNNERS) as CheckName[];
+  const only = quick ? names.filter((c) => !WHY_SKIPPED[c]) : names;
+
+  const run = await runChecks({ job: { root, since: opts.since }, only, serial: opts.serial });
+  const byName = new Map(run.ran.map((r) => [r.check, r]));
+  const partOf = <T,>(check: CheckName): Part<T> => {
+    const why = WHY_SKIPPED[check];
+    if (quick && why) return skipped(why);
+    const ran = byName.get(check);
+    // A check the pool never reported is a refusal with a reason, never an absent section.
+    if (!ran) return { refused: `this check did not report a result, and the pack cannot say why`, seconds: 0 };
+    return ran.refused !== undefined ? { refused: ran.refused, seconds: ran.seconds } : { result: ran.result as T, seconds: ran.seconds };
+  };
 
   return {
     project: basename(root) || root,
@@ -176,21 +197,18 @@ export function gather(opts: GatherOptions): Evidence {
     version: tewipVersion(),
     engine: ENGINE_VERSION,
     subject: subjectOf(root),
-    ships: part(() => inventory(root)),
-    image: part(() => imageContents(root)),
-    infra: part(() => scanIac(root)),
-    agent: quick ? skipped('reading every source file for agent tools is the slowest check here') : part(() => scanAgent(root)),
-    access: quick ? skipped('it reads every markup file in the repository') : part(() => findBarriers(root)),
-    secrets: quick
-      ? skipped('it reads every source file, and asks git about each candidate')
-      : part(() => {
-          const judged = readAccepted(root);
-          return scanSecrets(root).map((f) => triageSecret(f, root, judged));
-        }),
-    schema: part(() => migrationsUnder(root).map((f) => readMigration(root, f))),
-    contracts: part(() => scanContracts({ root, since: opts.since })),
-    approvals: part(() => verify(root)),
-    accepted: part(() => [...readAccepted(root), ...readAccessAccepted(root)]),
+    threads: run.threads,
+    fellBackBecause: run.fellBackBecause,
+    ships: partOf<Inventory>('ships'),
+    image: partOf<ImageContents>('image'),
+    infra: partOf<IacScan>('infra'),
+    agent: partOf<AgentScan>('agent'),
+    access: partOf<AccessResult>('access'),
+    secrets: partOf<SecurityItem[]>('secrets'),
+    schema: partOf<Migration[]>('schema'),
+    contracts: partOf<ContractScan>('contracts'),
+    approvals: partOf<AuditCheck>('approvals'),
+    accepted: partOf<string[]>('accepted'),
     seconds: Number(((Date.now() - began) / 1000).toFixed(1)),
   };
 }

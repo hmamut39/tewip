@@ -122,7 +122,12 @@ export function renderEvidence(e: Evidence): string {
     `# Evidence pack: ${e.project}`,
     '',
     ...subject(e),
-    `Produced by Tewip ${e.version} (rules engine ${e.engine}) at ${e.at}, in ${e.seconds}s, by running every check once over \`${e.root}\`.`,
+    `Produced by Tewip ${e.version} (rules engine ${e.engine}) at ${e.at}, in ${e.seconds}s on ` +
+      `${e.threads === 1 ? 'one thread' : `${e.threads} threads`}, by running every check once over \`${e.root}\`.`,
+    // The thread count is here so the duration can be read. The checks are independent, so they run
+    // in a small pool; a pack that took thirty seconds on three threads did about the same work as
+    // one that took sixty on one, and a reader comparing two runs needs to know which they have.
+    ...(e.fellBackBecause ? ['', `Workers could not be used here (${e.fellBackBecause}), so the checks ran one after another. The answers are the same; it took longer.`] : []),
     '',
     'This answers four questions about one repository: what ships, what it is allowed to do, what breaks if it ships, and who approved it — ',
     'together with how much each answer is worth. Nothing in it was written by a model.',

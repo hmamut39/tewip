@@ -471,3 +471,40 @@ now names the repositories its precision is pinned on, and a test holds that lis
 `corpus/expected.json` - which failed on its first run too, because the verb is `secure` and the
 corpus has called that check `secrets` since Phase 127. The two rows with no corpus behind them
 count their own decoys and are named in the test, so neither can quietly look pinned.
+
+## the evidence pack on more than one thread (Phase 156)
+
+Nine independent file readers running one after another is nine waits in a row for no reason. They
+go into a pool now, longest job first, which the pack's own per-check timings chose: `agent` was
+37.9 of 66 seconds on n8n, more than the other eight added together, so a pool that started it last
+would finish no sooner than running everything in order.
+
+Measured by alternating the two paths twice over, reading `gather`'s own duration rather than the
+shell's, on n8n's 11,053 files:
+
+| | wall clock | total check time |
+|---|---|---|
+| one thread | 61.7s, 62.6s | 61.3s, 62.2s |
+| three threads | **35.6s, 36.4s** | 66.7s, 67.3s |
+
+**42% faster, and n8n is under a minute.** The contention is real and visible - the same checks
+take 9% longer each when they run beside one another, because they are reading one disk - and it
+buys a 42% cut in the time a person waits.
+
+**The first comparison was wrong, and the way it was wrong is the point.** Measured end to end
+through the shell it read 89s, then 63s, then 65s, then 39s: n8n's eleven thousand files were being
+progressively cached by the operating system, so the parallel runs happened on a cold cache and the
+serial one on a warm cache. The number said parallelism made things worse, and a feature that works
+was a step away from being reverted on the strength of it. What caught it was a second, independent
+figure - the per-check timings recorded inside the sealed bundle, which showed 73.3 seconds of check
+work completed in 39.6 seconds of wall clock, something a slower path cannot do.
+
+The serial path stays, and is not a leftover: a worker can fail to start in a sandbox with threads
+disabled or on a restricted runner, and a pack that refused to exist because it could not
+parallelise would be worse than the slow one it replaced. A pool that cannot be built is a reason to
+do the work in this thread and say so - the document prints the thread count, and says outright when
+it fell back, so two durations can be compared honestly.
+
+Both paths run the same list from `engine/evidence/checks.ts`. One list, because two copies is how a
+check quietly stops running in one of them, and three times this week something derived from a
+second copy of a fact drifted from the first.

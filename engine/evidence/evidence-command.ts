@@ -31,6 +31,8 @@ export interface EvidenceCommand {
   quick?: boolean;
   /** Exit non-zero when something in the pack needs a person. */
   gate?: boolean;
+  /** Run every check in this thread rather than in a pool of workers. */
+  serial?: boolean;
   /**
    * An Ed25519 private key, as a PEM or a path to one. Defaults to TEWIP_ATTEST_KEY; without
    * either, the bundle carries a digest and says in as many words that it is not a signature.
@@ -150,12 +152,12 @@ function footer(bundle: EvidenceBundle, jsonPath?: string): string[] {
  * `what_tewip_may_do` makes: the person who needs an evidence pack - whoever signs the supplier
  * review, whoever answers the questionnaire - is the least likely of anyone to open a terminal.
  */
-export function buildEvidence(cmd: Omit<EvidenceCommand, 'out' | 'json' | 'gate'>): {
+export async function buildEvidence(cmd: Omit<EvidenceCommand, 'out' | 'json' | 'gate'>): Promise<{
   document: string;
   bundle: EvidenceBundle;
   pending: string[];
-} {
-  const e = gather({ root: cmd.root, since: cmd.since, quick: cmd.quick });
+}> {
+  const e = await gather({ root: cmd.root, since: cmd.since, quick: cmd.quick, serial: cmd.serial });
   const pending = needsAPerson(e);
   const document = [
     renderEvidence(e),
@@ -176,8 +178,8 @@ export function buildEvidence(cmd: Omit<EvidenceCommand, 'out' | 'json' | 'gate'
   return { document, bundle, pending };
 }
 
-export function runEvidence(cmd: EvidenceCommand): { report: string; bundle: EvidenceBundle; pending: string[] } {
-  const { document, bundle, pending } = buildEvidence(cmd);
+export async function runEvidence(cmd: EvidenceCommand): Promise<{ report: string; bundle: EvidenceBundle; pending: string[] }> {
+  const { document, bundle, pending } = await buildEvidence(cmd);
   const report = [document, ...footer(bundle, cmd.json)].join(NL);
   console.log(report);
   if (cmd.out) {

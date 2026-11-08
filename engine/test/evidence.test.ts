@@ -20,6 +20,8 @@ import { check } from '../attest/seal.ts';
 import { MEASURED } from '../evidence/confidence.ts';
 import { bundleOf, needsAPerson, runEvidence } from '../evidence/evidence-command.ts';
 import { gather, subjectOf, type Evidence, type Part } from '../evidence/gather.ts';
+import { CHECK_RUNNERS, SLOWEST_FIRST } from '../evidence/checks.ts';
+import { runChecks, threadsFor } from '../evidence/run-checks.ts';
 import { CHECKS, renderEvidence } from '../evidence/render.ts';
 import { answer } from '../evidence/sections.ts';
 import { looksPlanted } from '../secure/secrets.ts';
@@ -90,8 +92,8 @@ describe('a check that could not run', () => {
     assert.match(answer(refused, () => []).join(' '), /should be read as a clean result/i);
   });
 
-  it('is counted as established nothing in the summary, not quietly dropped', () => {
-    const e = gather({ root: mkdtempSync(join(tmpdir(), 'tewip-ev-')), quick: true });
+  it('is counted as established nothing in the summary, not quietly dropped', async () => {
+    const e = await gather({ root: mkdtempSync(join(tmpdir(), 'tewip-ev-')), quick: true });
     const bundle = bundleOf(e, 'x');
     assert.equal(bundle.checks.length, CHECKS.length, 'every check must appear in the bundle, whether it ran or not');
     const skipped = bundle.checks.filter((c) => !c.established);
@@ -117,14 +119,14 @@ describe('what the pack is about', () => {
     }
   });
 
-  it('says so when the folder is only part of a bigger repository', () => {
+  it('says so when the folder is only part of a bigger repository', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tewip-part-'));
     const s = subjectOf(dir);
     // Either this folder is in no repository at all, or it is inside one and must name it rather
     // than present that repository's commit as though the pack covered all of it.
     if (s.commit || s.noGit?.includes('no commits')) {
       assert.ok(s.partOf, 'a folder that is not the root of its repository must name the repository');
-      assert.match(renderEvidence({ ...gather({ root: dir, quick: true }), subject: s }), /part of a larger repository/);
+      assert.match(renderEvidence({ ...await gather({ root: dir, quick: true }), subject: s }), /part of a larger repository/);
     }
   });
 
@@ -153,8 +155,8 @@ describe('what the pack is about', () => {
     assert.deepEqual(subjectOf(dir).dirty.sort(), ['alpha.txt', 'gamma.txt']);
   });
 
-  it('says a dirty tree does not describe the commit it names', () => {
-    const e = gather({ root: join(import.meta.dirname, '..', '..'), quick: true });
+  it('says a dirty tree does not describe the commit it names', async () => {
+    const e = await gather({ root: join(import.meta.dirname, '..', '..'), quick: true });
     if (e.subject.dirty.length === 0) return;
     assert.match(renderEvidence(e), /working tree was not clean/);
   });
@@ -163,9 +165,9 @@ describe('what the pack is about', () => {
 describe('the document and its seal', () => {
   const root = join(import.meta.dirname, '..', '..');
 
-  it('covers the words a person reads, so changing them breaks the digest', () => {
+  it('covers the words a person reads, so changing them breaks the digest', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tewip-seal-'));
-    const { bundle } = runEvidence({ root, quick: true, json: join(dir, 'p.json') });
+    const { bundle } = await runEvidence({ root, quick: true, json: join(dir, 'p.json') });
     assert.ok(bundle.seal?.digest, 'the bundle must carry a digest');
     assert.equal(check(bundle as never).contentMatches, true);
     // The claim the seal makes: edit the finding and the digest no longer matches.
@@ -173,15 +175,15 @@ describe('the document and its seal', () => {
     assert.equal(check(edited as never).contentMatches, false, 'the digest must cover the document itself');
   });
 
-  it('does not call a digest a signature', () => {
-    const { report } = runEvidence({ root, quick: true });
+  it('does not call a digest a signature', async () => {
+    const { report } = await runEvidence({ root, quick: true });
     assert.match(report, /No signature/);
     assert.match(report, /not that nobody edited it/);
   });
 
-  it('writes the file it says it wrote', () => {
+  it('writes the file it says it wrote', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tewip-out-'));
-    runEvidence({ root, quick: true, out: join(dir, 'pack.md') });
+    await runEvidence({ root, quick: true, out: join(dir, 'pack.md') });
     assert.match(readFileSync(join(dir, 'pack.md'), 'utf8'), /# Evidence pack/);
   });
 });
@@ -194,8 +196,8 @@ describe('the confidence table', () => {
     }
   });
 
-  it('is in the document for the checks that ran, and not for the ones that did not', () => {
-    const e = gather({ root: join(import.meta.dirname, '..', '..'), quick: true });
+  it('is in the document for the checks that ran, and not for the ones that did not', async () => {
+    const e = await gather({ root: join(import.meta.dirname, '..', '..'), quick: true });
     const doc = renderEvidence(e);
     // secure is one of the three --quick skips, so its number must not be quoted as backing a
     // claim this run never made.
@@ -242,19 +244,19 @@ describe('what the pack leaves to a person', () => {
     assert.ok(needsAPerson(e).some((p) => /audit log has been changed/.test(p)));
   });
 
-  it('asks nobody for anything on an empty project', () => {
-    const e = gather({ root: mkdtempSync(join(tmpdir(), 'tewip-empty-')) });
+  it('asks nobody for anything on an empty project', async () => {
+    const e = await gather({ root: mkdtempSync(join(tmpdir(), 'tewip-empty-')) });
     assert.deepEqual(needsAPerson(e), []);
   });
 
-  it('names a tool that cannot be taken back when nothing guards it', () => {
+  it('names a tool that cannot be taken back when nothing guards it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tewip-tool-'));
     writeFileSync(
       join(dir, 'app.py'),
       ['from langchain.tools import tool', '', '@tool', 'def delete_account(user_id: str) -> str:', '    """Delete a user account for good."""', '    return "gone"', ''].join('\n'),
       'utf8',
     );
-    const e = gather({ root: dir });
+    const e = await gather({ root: dir });
     assert.ok(
       needsAPerson(e).some((p) => /cannot be taken back/.test(p)),
       `a deleting tool with no guard anywhere must reach a person; got ${JSON.stringify(needsAPerson(e))}`,
@@ -263,7 +265,7 @@ describe('what the pack leaves to a person', () => {
 });
 
 describe('an eval harness', () => {
-  it('is not read as tools the project ships', () => {
+  it('is not read as tools the project ships', async () => {
     // The pack's first run against this repository reported five tools that can delete, pay or
     // send. Every one was planted in `eval/` by the harness that measures this very check: the one
     // directory certain to be full of the most alarming examples somebody could write on purpose.
@@ -275,7 +277,8 @@ describe('an eval harness', () => {
       ['from langchain.tools import tool', '', '@tool', `def ${name}(x: str) -> str:`, `    ${docstring}`, '    return "gone"', ''].join('\n');
     writeFileSync(join(dir, 'eval', 'recall.py'), tool('delete_planted'), 'utf8');
     writeFileSync(join(dir, 'src', 'app.py'), tool('delete_real'), 'utf8');
-    const names = (gather({ root: dir }).agent.result?.tools ?? []).map((t) => t.name);
+    const scanned = await gather({ root: dir });
+    const names = (scanned.agent.result?.tools ?? []).map((t) => t.name);
     assert.ok(!names.includes('delete_planted'), `a tool planted in eval/ was reported as shipped: ${JSON.stringify(names)}`);
     assert.ok(names.includes('delete_real'), 'excluding eval/ must not also hide the real tool beside it');
   });
@@ -295,5 +298,98 @@ describe('the help', () => {
     const missing = read.filter((f) => !block[0].includes(`--${f}`));
     assert.deepEqual(missing, [], `tewip evidence reads --${missing.join(', --')} and its own help block does not mention it`);
     assert.equal(flag(['--key', 'k.pem'], 'key'), 'k.pem');
+  });
+});
+
+// Phase 156: the checks run in a pool, so every result crosses a thread boundary.
+//
+// Two things could go wrong that no earlier test would catch. A result can fail to survive a
+// structured clone - a Set, a Map, a class instance or a function in any finding and the whole
+// check comes back as an error instead of an answer. And the pool can lose a job, which would
+// leave a section of a signed document with no result and no stated reason, the one defect this
+// pack exists not to have.
+describe('running the checks on more than one thread', () => {
+  const root = join(import.meta.dirname, '..', '..');
+
+  it('gives the same answers as running them one after another', async () => {
+    // The whole claim of the pool: faster, and not different.
+    const [parallel, serial] = await Promise.all([gather({ root, quick: true }), gather({ root, quick: true, serial: true })]);
+    assert.equal(parallel.threads > 1, true, 'this machine should have given the pool more than one thread');
+    assert.equal(serial.threads, 1);
+    for (const key of ['ships', 'image', 'infra', 'schema', 'contracts', 'approvals', 'accepted'] as const) {
+      assert.deepEqual(
+        JSON.parse(JSON.stringify(parallel[key].result ?? null)),
+        JSON.parse(JSON.stringify(serial[key].result ?? null)),
+        `${key} came back different from a worker than from this thread`,
+      );
+    }
+  });
+
+  it('brings every finding back through the clone, not just the counts', async () => {
+    // A finding that arrives without its file, line or reason is unusable, and a count would hide
+    // that. This reads the fields the document actually prints.
+    const e = await gather({ root, quick: true });
+    const findings = e.infra.result?.findings ?? [];
+    for (const f of findings) {
+      assert.equal(typeof f.file, 'string');
+      assert.equal(typeof f.line, 'number');
+      assert.ok(f.what && f.because, 'a finding crossed the thread boundary without its explanation');
+    }
+    const migrations = e.schema.result ?? [];
+    for (const m of migrations) assert.equal(typeof m.file, 'string');
+  });
+
+  it('reports a check that refuses, with its reason, from inside a worker', async () => {
+    // A folder that is not there: every check should refuse rather than the pack losing sections.
+    const e = await gather({ root: join(import.meta.dirname, 'no-such-folder-at-all') });
+    const parts = [e.ships, e.image, e.infra, e.agent, e.access, e.secrets, e.schema, e.contracts, e.approvals, e.accepted];
+    for (const p of parts) {
+      assert.ok(p.result !== undefined || p.refused !== undefined, 'a check came back with neither a result nor a reason');
+    }
+  });
+
+  it('never leaves a check with neither a result nor a reason', async () => {
+    const e = await gather({ root, quick: true });
+    for (const name of ['ships', 'image', 'infra', 'agent', 'access', 'secrets', 'schema', 'contracts', 'approvals', 'accepted'] as const) {
+      const part = e[name];
+      assert.ok(part.result !== undefined || part.refused !== undefined, `${name} has no result and no reason, which is the one thing this pack must never print`);
+    }
+  });
+
+  it('asks for no more threads than there is work or machine', async () => {
+    assert.equal(threadsFor(1), 1, 'one job needs no pool');
+    assert.ok(threadsFor(10) <= 4, 'the pool is capped: past four these checks wait on the disk, not on a core');
+    assert.ok(threadsFor(10) >= 1);
+  });
+});
+
+// The order the pool dispatches in has to name every check there is.
+//
+// `runChecks` appends anything the order leaves out, so a forgotten check still runs - but it runs
+// last, which for the slowest check in the pack would undo the whole point of the pool. Sabotage
+// found this untested: deleting that fallback changed nothing, because the order happened to be
+// complete, so the test passed for a reason unrelated to what it claimed.
+describe('the order the checks are dispatched in', () => {
+  it('names every check there is', () => {
+    const runners = Object.keys(CHECK_RUNNERS).sort();
+    const ordered = [...SLOWEST_FIRST].sort();
+    assert.deepEqual(
+      ordered,
+      runners,
+      'a check in checks.ts is missing from SLOWEST_FIRST. It would still run, but last - and if it is the slow one, the pool is pointless.',
+    );
+  });
+
+  it('puts the slowest check first, because that is what the pool is for', () => {
+    // Measured, not assumed: `agent` was 37.9 of 66 seconds on n8n, more than the other eight
+    // together. A pool that starts it last finishes no sooner than running everything in order.
+    assert.equal(SLOWEST_FIRST[0], 'agent');
+  });
+
+  it('runs a check that the order forgot, rather than dropping it', async () => {
+    // The fallback itself, exercised directly: ask for one check and give the pool no choice.
+    const { ran } = await runChecks({ job: { root: join(import.meta.dirname, '..', '..') }, only: ['approvals'] });
+    assert.deepEqual(ran.map((r) => r.check), ['approvals']);
+    assert.ok(ran[0].result !== undefined || ran[0].refused !== undefined);
   });
 });

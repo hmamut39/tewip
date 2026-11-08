@@ -4,7 +4,7 @@
 // a trap for whoever adds the next verb. This is the same split, and for the same reason, as
 // cli/verbs-assure.ts beside cli/tewip.ts.
 export const ASSURE_HELP = `  tewip evidence [folder] [--out pack.md] [--json pack.json] [--key <private.pem>] [--quick]
-                 [--since <ref>] [--gate]
+                 [--since <ref>] [--gate] [--serial]
                                     One signed document for one repository, answering what a supplier
                                     review, a security questionnaire and an EU AI Act file all ask:
                                     what ships and under which licence, what a model and the
@@ -13,7 +13,9 @@ export const ASSURE_HELP = `  tewip evidence [folder] [--out pack.md] [--json pa
                                     scored against a list somebody else published. A check that
                                     cannot run says so in place of its answer, so no empty section
                                     reads as a clean one. --json writes the bundle the seal covers.
-                                    No model is called and nothing is fetched. No cost.
+                                    The checks run on several threads; --serial uses one, which is
+                                    slower and what the pack falls back to anyway where a worker
+                                    cannot start. No model is called, nothing is fetched. No cost.
   tewip attest [--run <id>] [--out attestation.md] [--json bundle.json]
   tewip attest --verify <bundle.json> [--key <public.pem>]
                                     What Tewip checked for a build, as one artifact: the claims with

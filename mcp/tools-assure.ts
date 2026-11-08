@@ -52,7 +52,7 @@ server.registerTool(
     answer(async () => {
       if (!isAbsolute(root) || !existsSync(root)) throw new Error(`project must be an existing absolute path, got "${root}"`);
       const { buildEvidence } = await import('../engine/evidence/evidence-command.ts');
-      const { document, bundle } = buildEvidence({ root, quick, since });
+      const { document, bundle } = await buildEvidence({ root, quick, since });
       // The digest is given here too: an assistant that passes the pack on should be able to say
       // which document it is quoting, and a digest is the only identity the pack has.
       return `${document}\n\nDigest of this document (sha256): \`${bundle.seal?.digest ?? 'none'}\`${

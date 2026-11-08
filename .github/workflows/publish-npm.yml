@@ -110,19 +110,55 @@ jobs:
 
       # A staged version that nobody approves is not released, and a workflow that ends green
       # without saying so would let a release sit unnoticed.
+      # A staged version that nobody approves is not released, and a workflow that ends green
+      # without saying so would let a release sit unnoticed.
+      #
+      # This used to print `npm stage approve tewip-ai@$version`, which npm does not accept: the
+      # command takes a stage id and nothing else. So the one instruction this workflow exists to
+      # hand over was a command that fails, and the way out was to go and find a UUID. Worse, a
+      # wrong UUID fails with `404 staged version not found`, which reads like the release was lost
+      # rather than like the argument was wrong. The id is read from the registry and printed here.
       - name: What is waiting for you
         if: steps.already.outputs.published == 'false'
         run: |
           version="$(node -p "require('./package.json').version")"
+          # Best effort: if the read fails the release is still staged, and the fallback below says
+          # how to find the id by hand rather than this step going red over a summary.
+          id="$(npm stage list tewip-ai --json 2>/dev/null \
+            | node -e "
+                let s = '';
+                process.stdin.on('data', (d) => { s += d; });
+                process.stdin.on('end', () => {
+                  try {
+                    const rows = JSON.parse(s);
+                    const row = rows.find((r) => r.version === process.argv[1] && r.status === 'staged');
+                    process.stdout.write(row ? row.id : '');
+                  } catch { process.stdout.write(''); }
+                });
+              " "$version" || true)"
           {
             echo "### tewip-ai@$version is staged, not yet released"
             echo ""
             echo "Built and tested here, with provenance, and no token was used. **Nobody can install it until you approve it.**"
             echo ""
-            echo '```'
-            echo "npm stage list tewip-ai"
-            echo "npm stage approve tewip-ai@$version"
-            echo '```'
+            if [ -n "$id" ]; then
+              echo 'Copy this, it is the whole command:'
+              echo ""
+              echo '```'
+              echo "npm stage approve $id"
+              echo '```'
+            else
+              echo "The stage id could not be read from here. Find it and approve with:"
+              echo ""
+              echo '```'
+              echo "npm stage list tewip-ai"
+              echo "npm stage approve <the id it prints>"
+              echo '```'
+            fi
+            echo ""
+            echo "It asks for your two-factor code. \`npm stage approve\` takes a stage id only -"
+            echo "a package name or a version is rejected with a 404 that reads as if the release"
+            echo "were missing."
             echo ""
             echo "Or approve it at https://www.npmjs.com/package/tewip-ai"
           } >> "$GITHUB_STEP_SUMMARY"

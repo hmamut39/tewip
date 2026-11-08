@@ -124,14 +124,21 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           # Best effort: if the read fails the release is still staged, and the fallback below says
           # how to find the id by hand rather than this step going red over a summary.
+          #
+          # Matched on the version alone. The first version of this also required
+          # `status === 'staged'`, and a version that has just been published reads `validating`
+          # for the first few seconds while npm checks the tarball - which is exactly when this
+          # step runs. So it found nothing and printed the fallback, failing at the one job it was
+          # added for, on the first release after it was added. There is only ever one stage per
+          # version, so the status does not help identify it; what the status is worth saying is
+          # said to the reader instead.
           id="$(npm stage list tewip-ai --json 2>/dev/null \
             | node -e "
                 let s = '';
                 process.stdin.on('data', (d) => { s += d; });
                 process.stdin.on('end', () => {
                   try {
-                    const rows = JSON.parse(s);
-                    const row = rows.find((r) => r.version === process.argv[1] && r.status === 'staged');
+                    const row = JSON.parse(s).find((r) => r.version === process.argv[1]);
                     process.stdout.write(row ? row.id : '');
                   } catch { process.stdout.write(''); }
                 });
@@ -159,6 +166,9 @@ jobs:
             echo "It asks for your two-factor code. \`npm stage approve\` takes a stage id only -"
             echo "a package name or a version is rejected with a 404 that reads as if the release"
             echo "were missing."
+            echo ""
+            echo "If it refuses at first, npm is still validating the tarball. Wait a few seconds"
+            echo "and run the same command again."
             echo ""
             echo "Or approve it at https://www.npmjs.com/package/tewip-ai"
           } >> "$GITHUB_STEP_SUMMARY"

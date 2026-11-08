@@ -5,7 +5,7 @@
 // These are the verbs an IT department reads and keeps, rather than the ones a developer runs and
 // forgets, so they sit together. Split out of cli/tewip.ts the same way the work and prove verbs
 // were, to keep every file inside this project's own 300-line rule.
-import { flag } from './args.ts';
+import { flag, folderArg } from './args.ts';
 
 /** Runs `verb` if it is one of these, and says whether it did. */
 export async function assureVerb(verb: string, args: string[]): Promise<boolean> {
@@ -23,37 +23,51 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
       runAttest({ root: process.cwd(), name: flag(args, 'name'), runId: flag(args, 'run'), out: flag(args, 'out'), json: flag(args, 'json') });
       return true;
     }
+    case 'evidence': {
+      const { runEvidence } = await import('../engine/evidence/evidence-command.ts');
+      runEvidence({
+        root: folderArg(args, ['out', 'json', 'since', 'key']) ?? process.cwd(),
+        out: flag(args, 'out'),
+        json: flag(args, 'json'),
+        since: flag(args, 'since'),
+        key: flag(args, 'key'),
+        quick: args.includes('--quick'),
+        gate: args.includes('--gate'),
+      });
+      return true;
+    }
     case 'agent': {
       const { runAgent } = await import('../engine/agent/agent-command.ts');
-      runAgent({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      runAgent({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'contract': {
       const { runContract } = await import('../engine/contract/contract-command.ts');
-      runContract({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), since: flag(args, 'since'), out: flag(args, 'out'), gate: args.includes('--gate') });
+      runContract({ root: folderArg(args, ['since', 'out']) ?? process.cwd(), since: flag(args, 'since'), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'audit': {
       const { runAudit } = await import('../engine/audit/audit-command.ts');
-      runAudit({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });
+      runAudit({ root: folderArg(args) ?? process.cwd(), all: args.includes('--all'), gate: args.includes('--gate') });
       return true;
     }
     case 'portfolio': {
       const { runPortfolio } = await import('../engine/portfolio/portfolio-command.ts');
-      runPortfolio({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), quick: args.includes('--quick') });
+      runPortfolio({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), quick: args.includes('--quick') });
       return true;
     }
     case 'infra': {
       const { runIac } = await import('../engine/iac/iac-command.ts');
       // A folder argument, like `portfolio` and `agent` take. Without this, `tewip infra ~/work/api`
       // silently read the current directory and reported on the wrong repository - the kind of
-      // wrong answer that looks exactly like a right one.
-      runIac({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      // wrong answer that looks exactly like a right one. `folderArg` and not a bare search for
+      // the first undashed argument, for the other half of the same bug: see cli/args.ts.
+      runIac({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'sbom': {
       const { runSbom } = await import('../engine/sbom/sbom-command.ts');
-      runSbom({ root: args.find((a) => !a.startsWith('--')) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      runSbom({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
       return true;
     }
     case 'safety': {

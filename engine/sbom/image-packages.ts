@@ -83,12 +83,24 @@ export function imagePackages(file: string, source: string): ImagePackage[] {
 
 /** The base images a Dockerfile builds on, which is the part none of this can see inside. */
 export function baseImages(source: string): string[] {
+  // `FROM x AS builder` names a stage, and a later `FROM builder` refers to that stage rather than
+  // to any image. The comment saying so was here from the start; the code was not, and so immich's
+  // evidence pack said it was built from `builder`, `builder-${DEVICE}`, `prod-cpu`, `sdk`, `dev`,
+  // `plugin-sdk` and `dev-container-server` - seven of its eighteen "base images" were its own
+  // build stages. The stage names are collected first, because a stage can be referred to before
+  // the line that defines it only in the sense that a reader scanning once would not know yet.
+  const stages = new Set(
+    [...source.matchAll(/^\s*FROM\s+\S+\s+AS\s+(\S+)/gim)].map((m) => m[1].toLowerCase()),
+  );
   const out: string[] = [];
   for (const instruction of instructionsOf(source)) {
     if (instruction.keyword !== 'FROM') continue;
     const image = instruction.rest.trim().split(/\s+/)[0];
-    // `FROM builder` refers to an earlier stage in this same file, not to an image.
-    if (image && !out.includes(image) && !/^\$/.test(image)) out.push(image);
+    if (!image || out.includes(image)) continue;
+    // A name built out of a build argument cannot be resolved by reading the file, and `${DEVICE}`
+    // in the middle of a stage name is the commonest way a stage is selected at build time.
+    if (/\$/.test(image) || stages.has(image.toLowerCase())) continue;
+    out.push(image);
   }
   return out;
 }

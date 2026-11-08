@@ -65,9 +65,31 @@ describe('what a Dockerfile installs', () => {
 });
 
 describe('the base images, which are the part this cannot see inside', () => {
+  // This test was called "leaves out the stage names" and asserted that `builder` was one of them.
+  // The intent was written down and the output it actually got was recorded as expected, so it
+  // passed while the thing it is named for did not work: immich's evidence pack reported seven of
+  // its own build stages - `builder`, `prod-cpu`, `sdk`, `dev`, `plugin-sdk` - as base images.
   it('names each one once, and leaves out the stage names', () => {
     const bases = baseImages(['FROM node:20-slim AS builder', 'FROM node:20-slim AS runner', 'FROM builder', 'FROM gcr.io/distroless/nodejs20'].join(NL));
-    assert.deepEqual(bases, ['node:20-slim', 'builder', 'gcr.io/distroless/nodejs20']);
+    assert.deepEqual(bases, ['node:20-slim', 'gcr.io/distroless/nodejs20']);
+  });
+
+  it('leaves out a stage whose name is only defined later in the file', () => {
+    // Reading once, in order, would not know `sdk` was a stage when it reached `FROM sdk`.
+    assert.deepEqual(baseImages(['FROM sdk', 'FROM alpine:3.19 AS sdk'].join(NL)), ['alpine:3.19']);
+  });
+
+  it('keeps an image whose name merely looks like a word', () => {
+    // `scratch` and `alpine` are real images, and nothing in the file declares them as stages.
+    assert.deepEqual(baseImages(['FROM scratch', 'FROM alpine'].join(NL)), ['scratch', 'alpine']);
+  });
+
+  it('leaves out a stage selected by a build argument', () => {
+    // immich's `FROM builder-${DEVICE}` picks one of several stages at build time, and reading the
+    // file cannot say which - so it is not an image this can name.
+    assert.deepEqual(baseImages(['FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04 AS builder-cuda', 'FROM builder-${DEVICE}'].join(NL)), [
+      'nvidia/cuda:12.2.2-runtime-ubuntu22.04',
+    ]);
   });
 
   it('leaves out an image that is a build argument', () => {

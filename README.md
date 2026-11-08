@@ -599,6 +599,57 @@ Every change is small (1 to 16 lines, median 4) and most are what the developers
 **No wrong fix was offered**: anything that could not be proved was thrown away and the file put
 back byte for byte.
 
+## The one document an auditor asks for (Phase 151, new)
+
+```bash
+tewip evidence --out pack.md --json pack.json
+```
+
+Running six commands and reading six reports is not what anybody asks an IT department for. A
+customer security questionnaire, a supplier review and an EU AI Act technical file all want the same
+four answers about one repository, with some stated reason to believe each one:
+
+- **What ships** — every dependency and its licence, which of them need a lawyer, and what the
+  container installs on top of the code.
+- **What it is allowed to do** — the tools a model can call, which of them cannot be taken back,
+  whether anything anywhere asks a person first, and what the infrastructure permits.
+- **What breaks if it ships** — migrations that would break the version still running, published
+  interfaces that changed under somebody else's client, credentials that are committed and reachable.
+- **Who approved it** — who ran what, whether that log has been edited since, and which findings a
+  person wrote down as judged.
+
+Then the part no other tool prints: **how much each line above is worth.** Nothing found is not
+evidence of anything on its own — a check that finds nothing scores perfect precision, and a reader
+cannot tell a careful answer from an empty one. So each claim carries the precision and recall that
+check scored against a list somebody else published (the W3C's numbered failure techniques, the
+database manuals, each provider's own token format, each framework's own quickstart), and names the
+harness that re-derives the number. Checks with no measured recall yet say so by name rather than
+sitting silently in the table.
+
+A check that could not run says so **in place of its answer**:
+
+```
+- committed credentials (tewip secure) — not run, because --quick was given and it reads every
+  source file, and asks git about each candidate. This is not a finding of nothing
+```
+
+That is the whole discipline of the pack. It gets signed and sent to somebody who will not re-run
+it, so an empty section reading as a clean one is the one defect it cannot have. There is also no
+overall pass or fail: a single word would be worth no more than the weakest check behind it, and a
+reader would stop at the word.
+
+```bash
+tewip evidence --key ./private.pem --json pack.json    # sign it
+tewip attest --verify pack.json --key public.pem       # check it
+tewip evidence --quick                                 # seconds, not a minute, and says what it skipped
+tewip evidence --gate                                  # non-zero when something needs a person
+```
+
+The seal covers the document itself, so editing a finding out of the pack makes verification fail.
+A dirty working tree is stated at the top, in those words: a pack that named a commit while
+uncommitted changes were on disk would be a false statement about a real artifact, and signing it
+would only make the falsehood portable.
+
 ## One bundle a release manager can read (Phase 15)
 
 ```bash

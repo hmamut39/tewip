@@ -25,8 +25,14 @@ const AGENT_FILE = /\.(?:py|[cm]?[jt]sx?)$/i;
  * worse than no list.
  *
  * `[\w-]+[_-]tests?` and not `[\w-]*tests?`, because the second one also excludes `latest/`.
+ *
+ * `evals?` was added after the evidence pack ran this check against Tewip's own repository and
+ * reported five tools that can delete, pay or send - every one of them planted in `eval/` by the
+ * recall harness that measures this very check. An eval harness declares fake tools as its whole
+ * job, so reading them as shipped is the same mistake as reading a fixture as shipped, in the one
+ * directory guaranteed to be full of the most alarming examples somebody could write.
  */
-const NOT_SHIPPED = /(?:^|[\\/])(?:tests?|[\w-]+[_-]tests?|__tests__|spec|e2e|examples?|samples?|docs?|fixtures?|node_modules|\.venv|venv)[\\/]|\.(?:test|spec)\.[cm]?[jt]sx?$|_test\.py$|(?:^|[\\/])test_[^\\/]*\.py$/i;
+const NOT_SHIPPED = /(?:^|[\\/])(?:tests?|[\w-]+[_-]tests?|__tests__|spec|e2e|evals?|examples?|samples?|docs?|fixtures?|node_modules|\.venv|venv)[\\/]|\.(?:test|spec)\.[cm]?[jt]sx?$|_test\.py$|(?:^|[\\/])test_[^\\/]*\.py$/i;
 
 
 export interface AgentScan {

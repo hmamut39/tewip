@@ -110,7 +110,9 @@ export function renderSbom(inv: Inventory, wrote: string | null, image: { packag
   const lines = [
     '# What this project ships, and under what licence',
     '',
-    `${inv.components.length} package(s): ${shipped.length} that ship with the product, ${inv.components.length - shipped.length} needed only to build or test it.`,
+    inv.components.some((c) => !c.devKnown)
+      ? `${inv.components.length} package(s). Which of them are needed only to build or test is not recorded by the lockfile this was read from, so they are not divided here.`
+      : `${inv.components.length} package(s): ${shipped.length} that ship with the product, ${inv.components.length - shipped.length} needed only to build or test it.`,
     '',
   ];
 

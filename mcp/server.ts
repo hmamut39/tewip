@@ -5,6 +5,7 @@
 // Read-only by design, except test_plan, which saves the plan it returns in the project's .tewip
 // folder: no tool changes code, CI, GitHub or collected data.
 // Run: node mcp/server.ts (stdio). Setup for each client is in README.md.
+import { registerAssuranceTools } from './tools-assure.ts';
 import { registerProofTools } from './tools-prove.ts';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -192,5 +193,6 @@ server.registerTool(
 );
 
 registerProofTools(server, { answer, readOnly, project });
+registerAssuranceTools(server, { answer, readOnly, project });
 
 await server.connect(new StdioServerTransport());

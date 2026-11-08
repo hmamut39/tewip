@@ -1,6 +1,8 @@
 // The text `tewip --help` prints. It lives on its own because it is prose, not logic, and it grows
 // every time a verb is added - which would otherwise push the command file past the size any of
 // these files are allowed to be.
+import { ASSURE_HELP } from './help-assure.ts';
+
 export const HELP = `Tewip - finds why each test failed, for any stack.
 
 Usage:
@@ -262,15 +264,7 @@ Usage:
                                     against the code the trace names, runs it, and keeps it ONLY if
                                     it fails for the incident's own reason. A test that passes, or
                                     fails its own way, is reported and thrown away.
-  tewip attest [--run <id>] [--out attestation.md] [--json bundle.json]
-  tewip attest --verify <bundle.json> [--key <public.pem>]
-                                    What Tewip checked for a build, as one artifact: the claims with
-                                    their evidence and which layer decided each, what it refused to
-                                    decide and why, and what it did not check at all. Nothing enters
-                                    it that Tewip did not verify itself. Every bundle carries a
-                                    digest; set TEWIP_ATTEST_KEY to an ed25519 private key to sign
-                                    it too. --verify says what it checked and what that does not
-                                    establish - a digest means undamaged, not unedited. No cost.
+${ASSURE_HELP}
   tewip mcp                         Serve Tewip over MCP (stdio) for an editor or AI assistant.
   tewip a2a [--port 41241] [--host 127.0.0.1]
                                     Answer other agents over A2A, so an agent that writes a diff has

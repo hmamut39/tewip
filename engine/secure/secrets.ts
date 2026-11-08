@@ -170,6 +170,37 @@ export function urlCredentialIsHarmless(value: string, line: string): string | n
   return null;
 }
 
+/**
+ * A credential somebody is writing *about*, rather than using.
+ *
+ * Found on this project's own repository, by the evidence pack: `corpus/expected.json` records what
+ * a human verified on a stranger's repo, and one of those notes quotes the shape of the Slack token
+ * it had read by hand. The note is prose about a finding. Tewip reported it as a live Slack token,
+ * at high severity, in its own corpus - which is the one place a false positive is least excusable.
+ *
+ * The discriminator is the prose, deliberately not the backticks around it. Backticks look like the
+ * obvious signal and are the wrong one: a JavaScript template literal is backticked real code, so
+ * `const token = ` + backtick + `xoxb-...` would have been dismissed by a rule that keyed on them.
+ * What is never real is a secret that arrives at the end of an English sentence. A secret in source
+ * is the right-hand side of an assignment or a mapping key; it does not come after ten words and a
+ * full stop. So: ten or more words of running text before the value, including a sentence that has
+ * already ended. Both halves are required, which is what keeps `description: "the API key"` out.
+ */
+function writtenAbout(line: string, value: string): string | null {
+  const at = line.indexOf(value);
+  if (at <= 0) return null;
+  const before = line.slice(0, at);
+  // A sentence that already ended before the value appeared. The whitespace after the full stop is
+  // what does the work: it is what "v1.2" and "secrets.ts" do not have. The character before the
+  // stop was first restricted to letters, which silently cost the rule its own founding case -
+  // "Pinned to hold Phase 127. All three findings..." ends a sentence on a digit, and so did the
+  // other sentence in that note. A tightening that excludes the example it was written for.
+  if (!/[\w)\]"']\.\s/.test(before)) return null;
+  const words = before.match(/\b[A-Za-z][A-Za-z'-]{1,}\b/g) ?? [];
+  if (words.length < 10) return null;
+  return `it sits at the end of a sentence (${words.length} words of prose before it), so it is being written about rather than used`;
+}
+
 export function looksPlanted(value: string, line: string, file: string, before = '', whole = value): string | null {
   // Substitution, not illustration: `${VAR}` is not an example, and the reason is what gets read.
   if (/\$\{|\{\{|\$\(/.test(value)) return 'the value is a variable, substituted at run time, so no credential is written here';
@@ -184,6 +215,8 @@ export function looksPlanted(value: string, line: string, file: string, before =
   // token's line found nothing and the sample JWTs in its API documentation were reported as real.
   if (/"?(?:example|sample|placeholder|default|demo)"?\s*:\s*$/i.test(before.trim())) return 'the key above it says it is an example';
   if (/(.)\1{5,}/.test(value)) return 'the value repeats one character, so it is a stand-in';
+  const described = writtenAbout(line, whole);
+  if (described) return described;
   const harmless = urlCredentialIsHarmless(value, line);
   if (harmless) return harmless;
   return null;

@@ -19,6 +19,16 @@ export interface Component {
   licence: Classified;
   /** True when the project needs it only to build or test, not to run. */
   dev: boolean;
+  /**
+   * Whether `dev` was read or merely defaulted.
+   *
+   * A pnpm lockfile is parsed here for names and versions only, and every component came back
+   * `dev: false`. The evidence pack then told a reader that all 2,705 of immich's packages "ship
+   * with the product", which is a claim about the product that nothing in the file supports. An
+   * unread field defaulting to a confident answer is the same defect as an empty section reading
+   * as a clean one, so the readers that cannot tell say they cannot tell.
+   */
+  devKnown: boolean;
   /** Where the version came from, so a reader can check it. */
   from: string;
 }
@@ -62,7 +72,7 @@ function fromNpm(root: string): { components: Component[]; note: string | null }
     const licence = entry.license
       ? classify(entry.license)
       : { declared: '(none)', standing: 'not-recorded' as const, means: 'this lockfile does not record a licence for it, which is not the same as the package not having one' };
-    components.push({ name, version: entry.version, ecosystem: 'npm', licence, dev: Boolean(entry.dev), from: 'package-lock.json' });
+    components.push({ name, version: entry.version, ecosystem: 'npm', licence, dev: Boolean(entry.dev), devKnown: true, from: 'package-lock.json' });
   }
   return { components, note: null };
 }
@@ -131,7 +141,7 @@ function fromPnpm(root: string): { components: Component[]; note: string | null 
     const id = `${key[1]}@${key[2]}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    components.push({ name: key[1], version: key[2], ecosystem: 'npm', licence: { ...classify(undefined), standing: 'not-recorded', means: 'a pnpm lockfile does not record licences, so this one has not been read - which is not the same as the package not having one' }, dev: false, from: 'pnpm-lock.yaml' });
+    components.push({ name: key[1], version: key[2], ecosystem: 'npm', licence: { ...classify(undefined), standing: 'not-recorded', means: 'a pnpm lockfile does not record licences, so this one has not been read - which is not the same as the package not having one' }, dev: false, devKnown: false, from: 'pnpm-lock.yaml' });
   }
   return {
     components,

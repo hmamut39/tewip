@@ -168,8 +168,14 @@ export function attestRun(
   return { ...bundle, seal: seal(bundle, signingKey()) };
 }
 
-/** The Ed25519 private key to sign with, from TEWIP_ATTEST_KEY: a PEM, or a path to one. */
-function signingKey(): string | undefined {
+/**
+ * The Ed25519 private key to sign with, from TEWIP_ATTEST_KEY: a PEM, or a path to one.
+ *
+ * Exported so `tewip evidence` signs through this exact path rather than growing a second one. Two
+ * ways to find a signing key is two ways to silently find none, and a bundle that quietly carries a
+ * digest where the operator expected a signature is the failure this whole module is written around.
+ */
+export function signingKey(): string | undefined {
   const given = process.env.TEWIP_ATTEST_KEY?.trim();
   if (!given) return undefined;
   if (given.includes('BEGIN')) return given;

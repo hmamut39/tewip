@@ -305,3 +305,49 @@ Each line of the file is one JSON object:
 - `label` must be one of `REAL_BUG`, `LOCATOR_DRIFT`, `TIMING`, `ENV`, `TEST_DATA`.
 - If you leave out `runId`, the label applies to every collected failure of that test. Do this only when the cause can't differ between runs.
 - Decide each label from the failure itself (the trace, the diff, the fix that was eventually made). Don't use the pipeline's answer, or the eval ends up measuring the pipeline against itself.
+
+## the prompt-injection half of agent, which nothing had measured (Phase 152)
+
+`agent` reports three things: the tools a model may call, the guards in front of them, and text
+from outside glued into a prompt. Only the tools had a number, and the evidence pack printed that
+number - "10 of 10 framework shapes read" - underneath every claim the command makes, the injection
+flows included. A confidence figure standing in for a claim it was not measured on is worse than no
+figure, because it gets believed.
+
+`node eval/injection-recall.ts`
+
+| | found | wrongly accused |
+|---|---|---|
+| 6 documented flows, one per framework shape | **6 (100%)** | — |
+| 5 decoys, every one real code this check reported | — | **0** of 5 |
+
+The decoys are the unusual part: none of them is invented. `tewip agent` found three
+prompt-injection flows across n8n's 11,054 files and **all three were false** - a display
+formatter building the label `[tool-result: x]`, a chat record doing
+`message.content = message.content + content`, reported twice, and a log line. They are kept here
+so that any fix has to keep finding the six real shapes to count for anything.
+
+Two separate causes, each needing its own rule. `content:`, `input:` and `template:` are ordinary
+object keys and are not evidence of a prompt, so they now count only when the same **statement**
+also contains something that can only be a model. And a value appended to the field it was read
+from is not glued into a prompt at all.
+
+**The measurement was wrong before the code was.** The first version of the formatter decoy was
+that function alone, it passed, and the real file went on being reported - because a file about
+displaying LLM steps has `messages:` and `prompt` all through it, so a test that looks *nearby*
+for a model always finds one. The decoy now carries the surrounding code, and the rule looks at
+the statement rather than a window. A decoy that cannot reproduce the context cannot measure the
+fix; this one reported success for a defect that was still live.
+
+## every number here is re-derived in CI (Phase 152)
+
+`engine/test/confidence-is-current.test.ts` runs five of these harnesses and holds both the counts
+and the sentence in `engine/evidence/confidence.ts` to what they return. Before it existed nothing
+re-derived any of them: a rule change would have left the evidence pack publishing "20 of 20" from
+a string literal while the harness returned eighteen - a stated measurement that had quietly
+stopped holding, in a signed document, read by somebody whose reason for reading it is that they
+cannot run the checks themselves.
+
+`vouch-recall` is excluded and the test asserts that it is the *only* exclusion, so a harness
+cannot be added without either being re-derived or being named. It runs a real suite and mutates
+real source, which takes minutes rather than the two seconds the others take together.

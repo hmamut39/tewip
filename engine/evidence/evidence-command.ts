@@ -104,7 +104,7 @@ export function bundleOf(e: Evidence, document: string): EvidenceBundle {
         seconds: p.seconds,
       };
     }),
-    confidence: MEASURED.filter((m) => ran.has(m.check)).map((m) => ({
+    confidence: MEASURED.filter((m) => ran.has(m.command)).map((m) => ({
       check: m.check,
       precision: m.precision,
       recall: m.recall,

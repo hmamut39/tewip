@@ -41,7 +41,7 @@ export interface PromptFlow {
  * of a ticket or a message. A general "anything from a function call" source would match the whole
  * program and find nothing worth reading.
  */
-const SOURCES: Array<{ re: string; origin: string }> = [
+export const SOURCES: Array<{ re: string; origin: string }> = [
   { re: String.raw`(?:requests|httpx|session)\s*\.\s*(?:get|post)\s*\([^)]*\)\s*\.\s*(?:text|content|json\(\))`, origin: 'a web page this agent fetched' },
   { re: String.raw`(?:await\s+)?(?:fetch|axios\s*\.\s*get)\s*\([^)]*\)[^;\n]*?\.\s*(?:text|json|data)\s*\(?\)?`, origin: 'a web page this agent fetched' },
   { re: String.raw`\w*(?:page|html|soup|article|scraped?)\w*\s*\.\s*(?:content|text|get_text|inner_text|innerText)\s*\(?\)?`, origin: 'a web page this agent fetched' },
@@ -54,6 +54,31 @@ const SOURCES: Array<{ re: string; origin: string }> = [
 
 /** Where a prompt is built or sent. */
 const PROMPT = /\b(?:messages|prompt|system|instructions|user_message|userMessage|input|content|template)\s*[:=]|\b(?:SystemMessage|HumanMessage|ChatPromptTemplate|PromptTemplate)\s*(?:\.\s*from_\w+\s*)?\(|\.\s*(?:invoke|complete|create|generate|run|predict|chat)\s*\(/g;
+
+/**
+ * Three of those words are not evidence of a prompt on their own.
+ *
+ * `content:`, `input:` and `template:` are ordinary object keys. On n8n this check reported three
+ * flows across 11,054 files and every one of them was one of these words: a formatter building the
+ * label `[tool-result: x]`, and `message.content = message.content + content` on a chat record.
+ * Neither calls a model. The other words in PROMPT are different in kind - `messages:`, a
+ * `ChatPromptTemplate`, an `.invoke(` - because nothing but a model call is written that way.
+ *
+ * So these three count only when something in the same body is unambiguously a model. That keeps
+ * every documented framework shape, each of which has a strong sink of its own somewhere in the
+ * call, and drops the three n8n findings. Both halves are measured by eval/injection-recall.ts.
+ */
+const WEAK_SINK = /^\s*(?:input|content|template)\s*[:=]/;
+const A_MODEL_IS_HERE =
+  /\b(?:messages|prompt|system|instructions|user_message|userMessage)\s*[:=]|\b(?:SystemMessage|HumanMessage|ChatPromptTemplate|PromptTemplate)\s*(?:\.\s*from_\w+\s*)?\(|\.\s*(?:invoke|complete|generate|predict|chat)\s*\(|\b(?:openai|anthropic|llm|model|chain|agent|completion)\w*\s*\.\s*\w+\s*\(/i;
+
+/** A value glued into its own field is not a value glued into a prompt. */
+const assignsToItself = (statement: string, value: string): boolean => {
+  const eq = statement.indexOf('=');
+  if (eq < 0) return false;
+  const target = statement.slice(0, eq).trim();
+  return target.length > 0 && (target === value.trim() || value.trim().startsWith(target));
+};
 
 /** The same body also handing the model tools - which is what turns exposure into reach. */
 // `[:=,})]` and not just `[:=]`: `client.create({ tools, messages })` is the shorthand both the
@@ -99,8 +124,24 @@ function statementAt(text: string, at: number): string {
   return text.slice(start, end);
 }
 
-/** Every source as one pattern, for the cheap question asked first. */
-const ANY_SOURCE = new RegExp(SOURCES.map((s) => `(?:${s.re})`).join('|'));
+/**
+ * Every source as one pattern, for the cheap question asked first - with the leading `\w*` of each
+ * one taken off, because for a yes-or-no question it is not only useless but most of the cost.
+ *
+ * Six of the eight patterns open with `\w*`, which is there so the reported source reads
+ * `issue.body` rather than `sue.body` when the variable is `myIssue`. For *whether a match exists*
+ * it changes nothing: any text matching `\w*issue\w*\s*\.\s*body` also matches
+ * `issue\w*\s*\.\s*body` starting further along. What it does do is make the engine try `\w*` at
+ * every position in the file and backtrack, and a CPU profile of `tewip agent` on n8n put this one
+ * regex at 6.3 of 37 seconds - the second-largest cost in the command, inside the gate that was
+ * added to make this check cheap in the first place.
+ *
+ * Derived from SOURCES rather than written out again, so it cannot drift from the patterns it is
+ * the gate for; the test beside this asserts the two agree on every shape the scan claims.
+ */
+export const ANY_SOURCE = new RegExp(
+  SOURCES.map((s) => `(?:${s.re.replace(/^\\w\*/, '').replace(/^\(\?:await\\s\+\)\?/, '')})`).join('|'),
+);
 
 export function promptFlows(file: string, text: string): PromptFlow[] {
   // Nothing untrusted in this file means nothing to find, and asking that once is far cheaper than
@@ -125,17 +166,31 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
     const at = prompt.index ?? 0;
     const statement = statementAt(text, at);
     if (!statement.trim()) continue;
+    // A body window rather than the statement: the framework shapes put the strong signal beside
+    // the weak one - `messages:` in the same call as `content:`, or an `.invoke(` on the next line.
+    const body = text.slice(Math.max(0, at - 3000), at + 3000);
+    // The statement, and deliberately not the body window used for tools.
+    //
+    // A window was the first attempt and it failed on the file it was written for. n8n's
+    // `llm-step-display.ts` is 338 lines of code about displaying LLM steps, so three thousand
+    // characters either side of anything in it contain `messages:`, `prompt` and `role:` belonging
+    // to entirely unrelated code - and the formatter building the label `[tool-result: x]` was
+    // reported again. The decoy in eval/injection-recall.ts said it was fixed, because the decoy
+    // was one function with nothing around it. Every documented framework shape keeps its strong
+    // signal inside the same statement as the glue, which is what makes the narrower test the
+    // right one rather than merely the stricter one.
+    if (WEAK_SINK.test(prompt[0]) && !A_MODEL_IS_HERE.test(statement)) continue;
     const line = text.slice(0, at).split(NL).length;
     // Tools in the same body: looked for from the start of the enclosing function rather than the
     // whole file, so a tool list in one handler does not arm a prompt built in another.
-    const withTools = TOOLS_HERE.test(text.slice(Math.max(0, at - 3000), at + 3000));
+    const withTools = TOOLS_HERE.test(body);
 
     // Directly: the fetched value is written inside the prompt string itself.
     for (const { re, origin } of SOURCES) {
       const hit = new RegExp(re).exec(statement);
       if (!hit) continue;
       const how = gluedIn(statement, hit[0]);
-      if (!how) continue;
+      if (!how || assignsToItself(statement, hit[0])) continue;
       // One finding per untrusted value, not per place a prompt is mentioned: `messages=` and
       // `.create(` both match the same statement, and reporting it twice reads as two problems.
       const key = `direct:${hit[0]}:${statement.slice(0, 40)}`;
@@ -148,7 +203,7 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
     for (const a of assigned) {
       if (a.at > at || !sameBody(text, a.at, at)) continue;
       const how = gluedIn(statement, a.name);
-      if (!how) continue;
+      if (!how || assignsToItself(statement, a.source)) continue;
       const key = `via:${a.name}:${a.at}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -163,5 +218,16 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
       });
     }
   }
-  return found;
+  // One finding per flow a reader can see, however many ways the scan arrived at it.
+  //
+  // `seen` keys the variable route by where the assignment was, so a value assigned from the same
+  // source twice - `message.content = (message.content ? message.content + "\n" : "") + content`,
+  // which is real n8n code - produced two keys and two findings that were identical in every
+  // field. The report printed the same file, line, source and route twice, which reads as two
+  // problems. Only findings alike in all of those are collapsed: a value that reaches one prompt
+  // both directly and through a variable keeps both lines, because those are two routes somebody
+  // actually wrote.
+  const once = new Map<string, PromptFlow>();
+  for (const flow of found) once.set(`${flow.file}:${flow.line}:${flow.source}:${flow.through}`, flow);
+  return [...once.values()];
 }

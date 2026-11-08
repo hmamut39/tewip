@@ -10,6 +10,7 @@
 // ways. Either prose was read as code (a docstring example, an apostrophe, a verb in a sentence
 // about something else), or code was read as prose (a glob containing `/*`).
 import assert from 'node:assert/strict';
+import { ANY_SOURCE, SOURCES, promptFlows as promptFlowsOf } from '../agent/prompt-flow.ts';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -486,5 +487,92 @@ describe('which tools anybody wrote a test about', () => {
     assert.match(page, /appear in no test file/);
     assert.match(page, /not a tool whose\s+behaviour is untested/);
     assert.match(page, /by that name/);
+  });
+});
+
+// Phase 152: the gate that was added to make this check cheap, and became its second-largest cost.
+//
+// `promptFlows` asks one cheap question before the expensive work - is there any untrusted source
+// in this file at all - and a CPU profile of `tewip agent` on n8n put that single regex at 6.3 of
+// 37 seconds. Six of the eight source patterns open with `\w*`, which is there so a reported
+// source reads `issue.body` rather than `sue.body` when the variable is `myissue`. For a yes-or-no
+// question it contributes nothing and costs nearly everything: the engine tries `\w*` at every
+// position in the file and backtracks. The gate drops those prefixes.
+//
+// Which is only safe while the gate and the patterns agree, so that is what this measures rather
+// than asserts. A pattern added later whose stripped form is *narrower* than the pattern would
+// silently stop this check finding anything in files it used to read - a check going quiet, which
+// is the failure this project is most afraid of, because it looks exactly like good news.
+describe('the cheap gate in front of the prompt-flow scan', () => {
+  const fullUnion = new RegExp(SOURCES.map((s) => `(?:${s.re})`).join('|'));
+
+  it('is actually cheaper than the patterns it guards', () => {
+    assert.ok(
+      ANY_SOURCE.source.length < fullUnion.source.length,
+      'the gate is no shorter than the full union, so nothing was stripped and the cost is still there',
+    );
+  });
+
+  it('says yes wherever any source pattern says yes', () => {
+    // One line per source in SOURCES, in the shape its own framework documents, each with the
+    // `\w*` prefix in play so the stripping is what is being tested.
+    const realistic = [
+      'r = requests.get(url).text',
+      'const d = await fetch(url).json()',
+      'body = mypage.get_text()',
+      'hits = myretriever.invoke(question)',
+      'text = mydoc.page_content',
+      'msg = myissue.body',
+      'raw = myemail.get_payload()',
+      'summary = my_tool_result',
+      'soup.content',
+      'ticket.description',
+      'store.query(q)',
+      'observation',
+    ];
+    for (const line of realistic) {
+      assert.equal(ANY_SOURCE.test(line), fullUnion.test(line), `the gate and the patterns disagree about: ${line}`);
+      assert.ok(fullUnion.test(line), `this sample no longer matches any source pattern, so it tests nothing: ${line}`);
+    }
+  });
+
+  it('says no to ordinary code, which is the whole point of asking', () => {
+    for (const line of ['const x = 1', 'return a + b;', 'import os', 'nothing here at all']) {
+      assert.equal(ANY_SOURCE.test(line), false, `the gate lets through ordinary code, so it filters nothing: ${line}`);
+      assert.equal(fullUnion.test(line), false);
+    }
+  });
+
+  it('still finds a flow through a prefixed variable, end to end', () => {
+    // The gate is upstream of everything, so a false negative there is silent. This goes through
+    // promptFlows itself rather than the regex.
+    const found = promptFlows(
+      'bot.py',
+      ['def handle(myissue, client):', '    body = myissue.body', '    return client.create(messages=f"Summarise: {body}", tools=TOOLS)'].join('\n'),
+    );
+    assert.equal(found.length, 1, `expected one flow through a prefixed variable, got ${JSON.stringify(found)}`);
+    assert.equal(found[0].withTools, true);
+  });
+});
+
+// Phase 152: one finding per flow, however many ways the scan reached it.
+describe('a prompt-injection flow reported twice', () => {
+  const flows = (body: string) => promptFlowsOf('handler.py', body);
+
+  it('is reported once when the same value is assigned twice', () => {
+    // Real n8n code: `message.content = (message.content ? message.content + "\n" : "") + content`
+    // assigns from the same source more than once. The dedup key was the position of the
+    // assignment, so each one produced a finding identical in file, line, source and route - the
+    // same problem printed twice, which reads as two.
+    const found = flows(['def go(ticket, client):', '    body = ticket.body', '    body = ticket.body', '    return client.invoke(f"x {body}", tools=T)'].join('\n'));
+    assert.equal(found.length, 1, `expected one finding, got ${JSON.stringify(found.map((f) => f.through))}`);
+  });
+
+  it('still reports two routes when the code really wrote two', () => {
+    // Directly inside the f-string and through a variable, in one statement. Those are two things
+    // somebody wrote, so collapsing them would be hiding one.
+    const found = flows(['def go(ticket, client):', '    body = ticket.body', '    return client.invoke(f"{ticket.body} and {body}", tools=T)'].join('\n'));
+    assert.equal(found.length, 2);
+    assert.equal(new Set(found.map((f) => f.through)).size, 2, 'the two findings must differ in how the value got in');
   });
 });

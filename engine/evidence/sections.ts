@@ -111,7 +111,15 @@ export function whatItMayDo(e: Evidence): string[] {
       const kinds = [...new Set(scan.guards.map((g) => g.kind))];
       out.push(
         kinds.length === 0
-          ? '**Nothing anywhere in this project asks a person anything, declares a step ceiling, or draws its tools from a named list.** Where a tool can delete or pay, that is not a maybe.'
+          ? // The strongest sentence in the pack, and the only categorical negative in it, so it
+            // names the shapes it looked for. A reader can then tell this from the other reason a
+            // check falls silent - that it could not read the gate in front of it. Those shapes
+            // are measured at 14 of 14 by eval/guard-recall.ts; before that harness existed this
+            // sentence was printed on the strength of nothing at all, and the reader had no way
+            // to know. Nine of those fourteen were invisible at the time it was written.
+            '**Nothing anywhere in this project asks a person anything, declares a step ceiling, or draws its tools from a named list** — ' +
+            'on the shapes LangGraph, CrewAI, the OpenAI Agents SDK and the Vercel AI SDK publish, in both the Python and JavaScript form of each. ' +
+            'Where a tool can delete or pay, that is not a maybe.'
           : `Guards present somewhere in the project: ${kinds.map((k) => `\`${k}\``).join(', ')}. That a gate exists here is not a claim that it stands in front of any particular tool — that depends on the running graph.`,
         '',
       );

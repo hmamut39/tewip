@@ -35,6 +35,20 @@ const AGENT_FILE = /\.(?:py|[cm]?[jt]sx?)$/i;
 const NOT_SHIPPED = /(?:^|[\\/])(?:tests?|[\w-]+[_-]tests?|__tests__|spec|e2e|evals?|examples?|samples?|docs?|fixtures?|node_modules|\.venv|venv)[\\/]|\.(?:test|spec)\.[cm]?[jt]sx?$|_test\.py$|(?:^|[\\/])test_[^\\/]*\.py$/i;
 
 
+/**
+ * Minified or generated, by its shape rather than its name.
+ *
+ * Hand-written code averages well under a hundred characters a line whatever the language; a
+ * bundler emits one line of hundreds of thousands. The size floor keeps a short file with one long
+ * line - a single-line config, a long import list - out of it, because those are written by people.
+ */
+const isGenerated = (text: string): boolean => {
+  if (text.length < 50_000) return false;
+  let lines = 1;
+  for (let i = 0; i < text.length; i += 1) if (text.charCodeAt(i) === 10) lines += 1;
+  return text.length / lines > 500;
+};
+
 export interface AgentScan {
   tools: AgentTool[];
   /** Untrusted text glued into a prompt, in the same function. */
@@ -76,6 +90,15 @@ export function scanAgent(root: string): AgentScan {
     } catch {
       continue;
     }
+    // A bundle somebody else built is not this project's agent.
+    //
+    // nocodb vendors `swagger-ui-bundle.min.js` under `public/js`, and the word `interrupt` appears
+    // somewhere in the megabyte of it - so `tewip agent` reported that nocodb stops and asks a
+    // person before acting. It does not; Swagger UI does something unrelated with that word. The
+    // claim a reader takes from a guard finding is about *this* project's own code, and a vendored
+    // bundle cannot support it either way. The test for it is shape rather than filename, because
+    // the second of nocodb's two is not called `.min` and is minified all the same.
+    if (isGenerated(text)) continue;
     filesRead += 1;
     // One blanking per file, shared by both readers.
     const blanked = blank(text, /\.py$/i.test(where));

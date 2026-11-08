@@ -351,3 +351,58 @@ cannot run the checks themselves.
 `vouch-recall` is excluded and the test asserts that it is the *only* exclusion, so a harness
 cannot be added without either being re-derived or being named. It runs a real suite and mutates
 real source, which takes minutes rather than the two seconds the others take together.
+
+## the guards half of agent, which was finding 5 of 14 (Phase 153)
+
+The third and last leg of `agent`. The tools had a number, the injection flows got one in Phase
+152, and the guards had none - and were not even listed as unmeasured, while the pack printed this
+about them:
+
+> **Nothing anywhere in this project asks a person anything, declares a step ceiling, or draws its
+> tools from a named list.** Where a tool can delete or pay, that is not a maybe.
+
+Categorical, and an *absence* claim - the hardest kind to earn, because a shape the reader cannot
+parse produces exactly the same silence as a shape that is not there.
+
+`node eval/guard-recall.ts`
+
+| | found | wrongly counted |
+|---|---|---|
+| 14 documented gates, Python and JavaScript form of each | **14 (100%)**, from 5 | — |
+| 4 decoys that look like gates and stop nothing | — | **0** of 4 |
+
+Every case is the shape its vendor's own human-in-the-loop page uses, named beside it: LangGraph,
+CrewAI, the OpenAI Agents SDK, LangChain and the Vercel AI SDK. Nine of the fourteen were invisible.
+Three causes:
+
+**A stray word boundary, which cost seven of the nine.** `interrupt(?:_before|_after)?\s*[(=]`
+inherited a trailing `\b` from its group, and a word boundary after `[(=]` demands that the next
+character be a *word* character. So `interrupt(state)` matched, and `interrupt({"question": ...})`
+and `interrupt_before=["tools"]` did not - the two forms LangGraph's own page is written in.
+
+**String blanking hid configuration keys.** `graph.invoke(state, config={"recursion_limit": 25})`
+arrived as `{"               ": 25}`, so a declared ceiling read as no ceiling. Blanking is right -
+one decoy is `print("pass --dry-run to see what would happen")`, help text for a flag the code does
+not implement - so the fix keys on shape: `"word":` is a key with a value under it.
+
+**The JavaScript form of every framework whose Python form was already covered:** `interruptBefore`,
+`needsApproval`, CrewAI's `human_input`, `HumanApprovalCallbackHandler`, and `stopWhen` /
+`stepCountIs`, which is how the Vercel AI SDK declares a ceiling since it dropped `maxSteps`.
+
+**The first fix was wrong, and real code showed it.** The quoted-key words were derived from the
+pattern's own source so they could not drift - and it extracted *fragments*: `tool_allow_?list`
+yields `list`, so every `'list':` in any object counted as a tool allow-list. nocodb's icon map and
+two Saleor migrations came back as gating an agent's tools. A derivation that cannot tell a word
+from a piece of one is not a safeguard against drift, it is a second thing to get wrong. The lists
+are explicit now, and a test holds each key to its own pattern.
+
+**Two more found on real repositories.** A JSON schema *declaring* `max_iterations` read as a
+project *setting* it, which predates all of this. And `agent` was reading vendored minified
+bundles: nocodb was credited with a human-approval gate because Swagger UI's minified code contains
+the word `interrupt` somewhere in a megabyte of it.
+
+**What it was getting wrong, concretely.** n8n's AI workflow builder calls
+`interrupt({ type: 'plan', plan })` to have a plan approved, and its credential tool computes
+`needsApproval` before deleting a credential. Before this, Tewip told a reader that n8n asks a
+person nothing. nocodb went from four guard findings to none, every one of the four false; n8n from
+one kind to all four, all nine of its `asks-a-person` findings genuine.

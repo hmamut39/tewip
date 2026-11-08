@@ -88,6 +88,15 @@ export const MEASURED: Confidence[] = [
     // measured. The pack printed that one number under all three, which is a figure standing in for
     // claims it was not measured on. Measuring the second half found all three of the flows this
     // check reported on n8n to be false: two object keys and a value appended to its own field.
+    check: 'agent (the guards)',
+    command: 'agent',
+    precision: '0 of 4 decoys counted as a gate, including a schema that only declares the option',
+    recall: '14 of 14 documented gates found, up from 5',
+    from: 'eval/guard-recall.ts',
+    measured: { found: 14, of: 14, accused: 0, decoys: 4 },
+    groundTruth: "the human-in-the-loop page of LangGraph, CrewAI, the OpenAI Agents SDK and the Vercel AI SDK, in both the Python and JavaScript forms each publishes",
+  },
+  {
     check: 'agent (prompt-injection flows)',
     command: 'agent',
     precision: '0 of 5 decoys accused, every one real code this check had reported',

@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { measure as accessRecall } from '../../eval/access-recall.ts';
 import { measure as agentRecall } from '../../eval/agent-recall.ts';
+import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as injectionRecall } from '../../eval/injection-recall.ts';
 import { measure as schemaRecall } from '../../eval/schema-recall.ts';
 import { measure as secureRecall } from '../../eval/secure-recall.ts';
@@ -66,6 +67,15 @@ const HARNESSES: Record<string, () => Counts> = {
   },
   agent: () => {
     const { frameworks, decoys } = agentRecall();
+    return {
+      found: frameworks.filter((f) => f.found).length,
+      of: frameworks.length,
+      accused: decoys.filter((d) => d.found).length,
+      decoys: decoys.length,
+    };
+  },
+  guard: () => {
+    const { frameworks, decoys } = guardRecall();
     return {
       found: frameworks.filter((f) => f.found).length,
       of: frameworks.length,

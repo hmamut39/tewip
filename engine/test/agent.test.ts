@@ -576,3 +576,62 @@ describe('a prompt-injection flow reported twice', () => {
     assert.equal(new Set(found.map((f) => f.through)).size, 2, 'the two findings must differ in how the value got in');
   });
 });
+
+// Phase 153: the guard check found 5 of 14 documented gates, while printing that a project with
+// no detectable gate asks a person nothing - in bold, about an agent that can delete and pay.
+describe('the gates each framework documents', () => {
+  const kinds = (file: string, body: string) => guardsIn(file, body).map((g) => g.kind);
+
+  it('sees an interrupt whose first argument is not a word', () => {
+    // `interrupt(?:_before|_after)?\s*[(=]` carried a trailing `\b` from its group, and a word
+    // boundary after `[(=]` demands a word character next. So `interrupt(state)` matched and these
+    // two did not - which are the forms LangGraph's own human-in-the-loop page is written in.
+    assert.deepEqual(kinds('g.py', 'answer = interrupt({"question": "ship it?"})'), ['asks-a-person']);
+    assert.deepEqual(kinds('g.py', 'graph = workflow.compile(checkpointer=s, interrupt_before=["tools"])'), ['asks-a-person']);
+  });
+
+  it('reads the JavaScript form of a framework whose Python form it already read', () => {
+    assert.deepEqual(kinds('g.ts', 'const graph = workflow.compile({ checkpointer, interruptBefore: ["tools"] });'), ['asks-a-person']);
+    assert.deepEqual(kinds('g.ts', 'export const cancel = tool({ name: "cancel", needsApproval: true });'), ['asks-a-person']);
+    assert.deepEqual(kinds('g.py', 'task = Task(description="Write it.", human_input=True)'), ['asks-a-person']);
+    assert.deepEqual(kinds('g.ts', 'const r = await generateText({ model, tools, stopWhen: stepCountIs(5) });'), ['step-budget']);
+  });
+
+  it('sees a ceiling written as a quoted configuration key', () => {
+    // Strings have their contents blanked, so this arrived as `{"               ": 25}` and a
+    // declared ceiling read as none at all. It is the shape LangGraph documents.
+    assert.deepEqual(kinds('g.py', 'result = graph.invoke(state, config={"recursion_limit": 25})'), ['step-budget']);
+  });
+
+  it('still refuses a word loose inside a string, which is why strings are blanked', () => {
+    assert.deepEqual(kinds('cli.py', 'print("pass --dry-run to see what would happen")'), []);
+  });
+
+  it('does not read a schema that only says the option exists', () => {
+    // Declaring that a caller may set a ceiling is not setting one. Pre-existing, and it survived
+    // the first version of the quoted-key rule because the plain pattern matched the bare key.
+    assert.deepEqual(kinds('schema.ts', 'export const s = { properties: { max_iterations: { type: "integer" } } };'), []);
+    assert.deepEqual(kinds('schema.ts', 'export const s = { properties: { "recursion_limit": { type: "integer" } } };'), []);
+  });
+
+  it('never reads a fragment of its own pattern as a guard word', () => {
+    // `tool_allow_?list` yields `list` if the words are pulled out of the regex source, so every
+    // `'list':` in any object counted as a tool allow-list. nocodb's icon map and two Saleor
+    // migrations were reported as gating an agent's tools.
+    assert.deepEqual(kinds('icons.ts', "const icons = { 'list': h('span', { class: 'material-symbols' }, 'list') };"), []);
+    assert.deepEqual(kinds('m.py', 'if block_type == "list":' + NL + '    pass'), []);
+  });
+
+  it('prefers a line that sets a value over one that only names the field', () => {
+    // The evidence line is the whole reason a reader need not take any of this on trust, and
+    // `maxIterations: number;` on an interface is a type, not a ceiling.
+    const found = guardsIn('rt.ts', ['export interface Options {', '  maxIterations: number;', '}', '', 'const opts = { maxIterations: 6 };'].join(NL));
+    assert.deepEqual(found.map((g) => g.kind), ['step-budget']);
+    assert.match(found[0].evidence, /maxIterations: 6/);
+  });
+
+  it('uses the weaker line when it is the only one there is', () => {
+    const found = guardsIn('cli.ts', 'export interface Flags {' + NL + '  dryRun?: boolean;' + NL + '}');
+    assert.deepEqual(found.map((g) => g.kind), ['dry-run']);
+  });
+});

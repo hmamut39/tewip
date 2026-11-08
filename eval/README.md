@@ -406,3 +406,30 @@ the word `interrupt` somewhere in a megabyte of it.
 `needsApproval` before deleting a credential. Before this, Tewip told a reader that n8n asks a
 person nothing. nocodb went from four guard findings to none, every one of the four false; n8n from
 one kind to all four, all nine of its `asks-a-person` findings genuine.
+
+## camelCase, which is how the language most agents are written in names things (Phase 153)
+
+The source keywords were lowercase and the patterns case-sensitive, so `myissue.body` was found and
+`myIssue.body` was not. Backwards for TypeScript. Two of the injection harness's documented flows
+were invisible for this reason alone, and it took adding them to see it:
+**6 of 8 before, 8 of 8 after, decoys still 0 of 5.**
+
+It had to be fixed together with `pr`. In an alternation with `\w*` on both sides, `pr` matched
+`process.text`, `properties.text`, `preview.text`, `expression.text`, `sprite.body` and
+`compressor.text` - ordinary TypeScript, every one of it reported as "a ticket or comment somebody
+else wrote". Capitalising the keywords would have added `Pr` and taken `MyProcess.text` with it. So
+`pr` is anchored to a word boundary and kept out of the group, and all six of those are now
+rejected while `pr.body` and `pullRequest.body` still match.
+
+**The fixture lied first, again.** The camelCase *document* case passed before the fix - through
+`retriever.invoke(...)` in the same function, not through the camelCase keyword - so it reported
+success for a reader that was blind. The retriever call is gone and the document arrives as a
+parameter, leaving the camelCase path as the only route. That is the third time in two phases that
+a measurement needed fixing before the code did.
+
+**What it cost.** `tewip agent` on n8n went from 30s to 32-34s: each keyword alternation doubled,
+and the gate in front of the scan is read over every file. Measured on five real repositories,
+nothing new was accused - 0 injection findings on n8n, nocodb, immich, saleor and dispatch, the
+same as before - so this buys recall rather than noise. The gate could be made case-insensitive
+with single keywords instead, which would halve the alternatives; it is not worth touching the
+table that produces every injection finding for three seconds on one repository.

@@ -100,9 +100,9 @@ export const MEASURED: Confidence[] = [
     check: 'agent (prompt-injection flows)',
     command: 'agent',
     precision: '0 of 5 decoys accused, every one real code this check had reported',
-    recall: '6 of 6 documented flows found',
+    recall: '8 of 8 documented flows found, up from 6',
     from: 'eval/injection-recall.ts',
-    measured: { found: 6, of: 6, accused: 0, decoys: 5 },
+    measured: { found: 8, of: 8, accused: 0, decoys: 5 },
     groundTruth: "the shape each framework's own documentation glues outside text into a prompt in",
   },
   {

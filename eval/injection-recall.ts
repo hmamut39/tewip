@@ -88,6 +88,31 @@ const FLOWS: Case[] = [
     ].join(NL),
   },
   {
+    what: 'a ticket body in a camelCase variable, which is how TypeScript names things',
+    file: 'camel.ts',
+    // The keywords are lowercase and the patterns are case-sensitive, so `myissue.body` is found
+    // and `myIssue.body` is not - backwards for the language most agents are written in.
+    body: [
+      'export async function triage(myIssue: Issue) {',
+      '  const text = myIssue.body;',
+      '  return client.messages.create({ messages: [{ role: "user", content: `Classify: ${text}` }], tools: TOOLS });',
+      '}',
+    ].join(NL),
+  },
+  {
+    what: 'a retrieved document in a camelCase variable',
+    file: 'camel-doc.ts',
+    // The retriever call is deliberately *not* here. With `retriever.invoke(...)` in the function
+    // this case passed, and it passed through the retriever pattern rather than through `topDoc` -
+    // so it reported success for the camelCase reader while that reader was blind. The document
+    // arrives as a parameter, which leaves the camelCase keyword as the only way to find it.
+    body: [
+      'export async function answer(question: string, topDoc: Document) {',
+      '  return llm.invoke(`Context: ${topDoc.pageContent}\\nQ: ${question}`, { tools: TOOLS });',
+      '}',
+    ].join(NL),
+  },
+  {
     what: 'the output of another tool fed back into the next prompt',
     file: 'loop.py',
     body: [

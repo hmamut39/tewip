@@ -41,15 +41,37 @@ export interface PromptFlow {
  * of a ticket or a message. A general "anything from a function call" source would match the whole
  * program and find nothing worth reading.
  */
+/**
+ * A keyword that may arrive capitalised, because it is in the middle of an identifier.
+ *
+ * These patterns were lowercase and case-sensitive, so `myissue.body` was found and `myIssue.body`
+ * was not - backwards for TypeScript, where camelCase is the convention and which is what most
+ * agents are written in. Measured by eval/injection-recall.ts: two of its eight documented flows
+ * were invisible for this reason alone.
+ *
+ * A helper over a list of words, deliberately not a derivation from a pattern's source. Twice this
+ * week a clever derivation turned out to extract fragments rather than words - `tool_allow_?list`
+ * yielding `list` - and the difference is that this takes whole words and only adds a case.
+ */
+const eitherCase = (...words: string[]): string => words.map((w) => `${w}|${w[0].toUpperCase()}${w.slice(1)}`).join('|');
+
 export const SOURCES: Array<{ re: string; origin: string }> = [
   { re: String.raw`(?:requests|httpx|session)\s*\.\s*(?:get|post)\s*\([^)]*\)\s*\.\s*(?:text|content|json\(\))`, origin: 'a web page this agent fetched' },
   { re: String.raw`(?:await\s+)?(?:fetch|axios\s*\.\s*get)\s*\([^)]*\)[^;\n]*?\.\s*(?:text|json|data)\s*\(?\)?`, origin: 'a web page this agent fetched' },
-  { re: String.raw`\w*(?:page|html|soup|article|scraped?)\w*\s*\.\s*(?:content|text|get_text|inner_text|innerText)\s*\(?\)?`, origin: 'a web page this agent fetched' },
-  { re: String.raw`\w*(?:retriever|vectorstore|index|store)\w*\s*\.\s*(?:invoke|search|similarity_search|get_relevant_documents|query)\s*\([^)]*\)`, origin: 'a document this agent retrieved' },
-  { re: String.raw`\w*(?:doc|document|chunk|result|passage)\w*\s*\.\s*(?:page_content|pageContent|text)\b`, origin: 'a document this agent retrieved' },
-  { re: String.raw`\w*(?:issue|ticket|comment|review|pr|pull_request)\w*\s*\.\s*(?:body|description|text)\b`, origin: 'a ticket or comment somebody else wrote' },
-  { re: String.raw`\w*(?:email|mail|message|msg)\w*\s*\.\s*(?:body|payload|text|content|get_payload\(\))`, origin: 'a message this agent received' },
-  { re: String.raw`\w*(?:tool_result|toolResult|observation|tool_output)\w*\b`, origin: 'the output of another tool' },
+  { re: String.raw`\w*(?:${eitherCase('page', 'html', 'soup', 'article', 'scraped?')})\w*\s*\.\s*(?:content|text|get_text|inner_text|innerText)\s*\(?\)?`, origin: 'a web page this agent fetched' },
+  { re: String.raw`\w*(?:${eitherCase('retriever', 'vectorstore', 'index', 'store')})\w*\s*\.\s*(?:invoke|search|similarity_search|get_relevant_documents|query)\s*\([^)]*\)`, origin: 'a document this agent retrieved' },
+  { re: String.raw`\w*(?:${eitherCase('doc', 'document', 'chunk', 'result', 'passage')})\w*\s*\.\s*(?:page_content|pageContent|text)\b`, origin: 'a document this agent retrieved' },
+  // `pr` is anchored to a word boundary and kept out of the `\w*` group on purpose. Inside it, with
+  // `\w*` on both sides, it matched `process.text`, `properties.text`, `preview.text`,
+  // `expression.text`, `sprite.body` and `compressor.text` - ordinary TypeScript, all of it
+  // reported as "a ticket or comment somebody else wrote". Capitalising the keywords would have
+  // added `Pr` and taken `MyProcess.text` with it, so the two changes belong together.
+  {
+    re: String.raw`(?:\w*(?:${eitherCase('issue', 'ticket', 'comment', 'review', 'pull_request', 'pullRequest')})\w*|\bpr)\s*\.\s*(?:body|description|text)\b`,
+    origin: 'a ticket or comment somebody else wrote',
+  },
+  { re: String.raw`\w*(?:${eitherCase('email', 'mail', 'message', 'msg')})\w*\s*\.\s*(?:body|payload|text|content|get_payload\(\))`, origin: 'a message this agent received' },
+  { re: String.raw`\w*(?:${eitherCase('tool_result', 'toolResult', 'observation', 'tool_output')})\w*\b`, origin: 'the output of another tool' },
 ];
 
 /** Where a prompt is built or sent. */

@@ -14,6 +14,8 @@
 // minutes rather than seconds. Its row is held to its shape rather than its result, and that is
 // stated rather than hidden.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { measure as accessRecall } from '../../eval/access-recall.ts';
 import { measure as agentRecall } from '../../eval/agent-recall.ts';
@@ -138,5 +140,48 @@ describe('every number the evidence pack publishes', () => {
       assert.ok(row.measured.found <= row.measured.of, `${row.check} claims to find more than it looked for`);
       assert.ok(row.measured.of > 0, `${row.check} measured nothing`);
     }
+  });
+});
+
+// Phase 155: the precision half of the table, which nothing re-derived either.
+//
+// `recall` is held to its harness above. A precision sentence - "0 findings across 18,617 files of
+// real code" - is only as current as the last person who happened to run the thing, and three
+// phases of changes to `agent` went in against one. Where a figure comes from the corpus, the row
+// now names the repositories it was read on, and `npm run corpus` re-derives it. This holds that
+// list to the corpus file: a row cannot claim a repository that does not pin that command.
+describe('where a precision figure is pinned', () => {
+  const corpus = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'corpus', 'expected.json'), 'utf8')) as {
+    repos: Array<{ name: string; checks: Array<{ command: string }> }>;
+  };
+  // The verb and the corpus check share a name everywhere but one: the command is `tewip secure`
+  // and the corpus has always called that check `secrets`. Mapped here rather than renamed, because
+  // the name in corpus/expected.json is part of a pinned record going back to Phase 127.
+  const CORPUS_NAME: Record<string, string> = { secure: 'secrets' };
+  const pinned = (command: string) => {
+    const name = CORPUS_NAME[command] ?? command;
+    return corpus.repos.filter((r) => r.checks.some((c) => c.command === name)).map((r) => r.name);
+  };
+
+  for (const row of MEASURED.filter((r) => r.pinnedIn)) {
+    it(`is really in the corpus for ${row.check}`, () => {
+      const actually = pinned(row.command);
+      const claimed = row.pinnedIn ?? [];
+      const missing = claimed.filter((name) => !actually.includes(name));
+      assert.deepEqual(
+        missing,
+        [],
+        `${row.check} says its precision is pinned on ${missing.join(', ')}, and corpus/expected.json has no ${row.command} check for those. ` +
+          'The sentence in the pack would be claiming a measurement nobody takes.',
+      );
+      assert.equal(claimed.length, actually.length, `${row.check} claims ${claimed.length} pinned repositories and the corpus has ${actually.length} for ${row.command}`);
+    });
+  }
+
+  it('says plainly which figures are not pinned at all', () => {
+    // The two harness-backed rows count their own decoys, which the test above re-derives, so they
+    // need no corpus. Any other unpinned row is a precision claim with nothing behind it.
+    const unpinned = MEASURED.filter((r) => !r.pinnedIn).map((r) => r.check);
+    assert.deepEqual(unpinned, ['agent (the guards)', 'agent (prompt-injection flows)'], `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`);
   });
 });

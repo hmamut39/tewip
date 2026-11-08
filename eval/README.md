@@ -433,3 +433,41 @@ nothing new was accused - 0 injection findings on n8n, nocodb, immich, saleor an
 same as before - so this buys recall rather than noise. The gate could be made case-insensitive
 with single keywords instead, which would halve the alternatives; it is not worth touching the
 table that produces every injection finding for three seconds on one repository.
+
+## agent had no pinned number on real code at all (Phase 155)
+
+The corpus measures four commands across nine languages - `schema` on all fourteen repositories,
+`vouch` on ten - so "works across languages" was better measured than it looked. The gap was not
+languages. It was that `agent`, `infra`, `sbom`, `contract` and the evidence pack had **no corpus
+coverage whatsoever**, and `agent` is the flagship: changed in four consecutive phases, with a
+precision figure that was a sentence in `engine/evidence/confidence.ts` nobody re-derived.
+
+Phase 152 made every *recall* number re-derivable in CI. Precision was still prose - "0 findings
+across 1,691 files of real agent code", true when somebody ran it once, and three phases of changes
+to this check went in against it.
+
+`agent` is now pinned on five repositories, chosen to fail in both directions:
+
+| repo | what it pins |
+|---|---|
+| nocodb | 13 real MCP tools, reach from the authors' own `destructiveHint` / `readOnlyHint` |
+| n8n | 11,053 files, 91 guards of all four kinds, `injections: 0` |
+| immich | exactly one guard, the CLI's `dryRun` flag |
+| saleor | 2,627 Python files of nothing, and it must stay nothing |
+| gin | **0 files read**, because this check opens only .py, .ts, .js, .tsx, .jsx |
+
+Going quiet is caught by n8n and nocodb - if a pattern breaks the way `interrupt` did in Phase 153,
+those drop. Inventing is caught by saleor, which is exactly where Phase 153's `list` fragment
+produced two false findings, and by `injections: 0` on n8n, which was 3 before Phase 152 with all
+three false. gin is pinned *because* it is a zero: adding a Go reader has to change it deliberately.
+
+**It caught its own author within a minute.** n8n reported MOVED on the first run - not a
+regression, an incomplete expectation: the runner records a `reach-*` key per tool and two of n8n's
+were missing from what was pinned. The comparison takes the union of expected and actual keys and
+treats a missing one as zero, so an under-specified expectation fails loudly instead of passing.
+
+Four of the seven confidence rows turned out to be corpus-backed already and never said so. Each
+now names the repositories its precision is pinned on, and a test holds that list to
+`corpus/expected.json` - which failed on its first run too, because the verb is `secure` and the
+corpus has called that check `secrets` since Phase 127. The two rows with no corpus behind them
+count their own decoys and are named in the test, so neither can quietly look pinned.

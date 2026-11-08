@@ -25,8 +25,18 @@ export interface Confidence {
    * underneath a claim it was never measured on.
    */
   command: string;
-  /** What it got wrong on real code, and how much real code. */
+  /**
+   * What it got wrong on real code, and how much real code.
+   *
+   * Prose, and unlike `measured` nothing re-derives it. `recall` is held to its harness by
+   * engine/test/confidence-is-current.test.ts; a precision sentence is only as current as the last
+   * person who ran the thing. Where the figure comes from the corpus, `pinnedIn` names the repos it
+   * was read on, and `npm run corpus` re-derives it - which is the only form of this claim worth
+   * putting in a signed document.
+   */
   precision: string;
+  /** The corpus repositories this precision figure is pinned on, where it is pinned at all. */
+  pinnedIn?: string[];
   /** What it found of a published list, and how long that list was. */
   recall: string;
   /** The harness that re-derives the recall figure. */
@@ -49,7 +59,8 @@ export const MEASURED: Confidence[] = [
   {
     check: 'secure',
     command: 'secure',
-    precision: '0 findings across 18,617 files of real code',
+    precision: '0 credentials wrongly called actionable across 9 real projects, pinned in the corpus',
+    pinnedIn: ['keycloak', 'bitwarden-server', 'saleor', 'govuk-frontend', 'firefly-iii', 'ripgrep', 'nocodb', 'immich', 'n8n'],
     recall: '20 of 20 credential shapes found and kept by triage, 0 of 5 decoys wrongly accused',
     from: 'eval/secure-recall.ts',
     measured: { found: 20, of: 20, accused: 0, decoys: 5 },
@@ -58,7 +69,8 @@ export const MEASURED: Confidence[] = [
   {
     check: 'schema',
     command: 'schema',
-    precision: '0 false positives across 14 real projects',
+    precision: '0 false positives across 14 real projects, pinned in the corpus',
+    pinnedIn: ['keycloak', 'openmrs-core', 'bitwarden-server', 'saleor', 'govuk-frontend', 'firefly-iii', 'discourse', 'ripgrep', 'angular-components', 'nocodb', 'immich', 'gin', 'dispatch', 'n8n'],
     recall: '15 of 15 harmful migrations named, 0 of 4 safe ones accused',
     from: 'eval/schema-recall.ts',
     measured: { found: 15, of: 15, accused: 0, decoys: 4 },
@@ -67,7 +79,8 @@ export const MEASURED: Confidence[] = [
   {
     check: 'access',
     command: 'access',
-    precision: "0 barriers on Google's Compose samples",
+    precision: '0 barriers wrongly reported across 8 real projects, pinned in the corpus',
+    pinnedIn: ['keycloak', 'bitwarden-server', 'govuk-frontend', 'angular-components', 'nocodb', 'immich', 'gin', 'n8n'],
     recall: '11 of 11 documented failures noticed, 0 of 11 documented fixes accused',
     from: 'eval/access-recall.ts',
     measured: { found: 11, of: 11, accused: 0, decoys: 11 },
@@ -76,7 +89,8 @@ export const MEASURED: Confidence[] = [
   {
     check: 'agent',
     command: 'agent',
-    precision: '0 findings across 1,691 files of real agent code',
+    precision: '0 invented tools and 0 invented flows across 16,654 files of real code, pinned in the corpus',
+    pinnedIn: ['n8n', 'nocodb', 'immich', 'saleor', 'gin'],
     recall: '10 of 10 tool shapes read, 0 of 4 decoys invented',
     from: 'eval/agent-recall.ts',
     measured: { found: 10, of: 10, accused: 0, decoys: 4 },
@@ -108,7 +122,8 @@ export const MEASURED: Confidence[] = [
   {
     check: 'vouch',
     command: 'vouch',
-    precision: '0 of 157 sound tests wrongly accused',
+    precision: '0 of 157 sound tests wrongly accused, and pinned across 10 real projects in the corpus',
+    pinnedIn: ['keycloak', 'openmrs-core', 'bitwarden-server', 'saleor', 'govuk-frontend', 'firefly-iii', 'discourse', 'ripgrep', 'angular-components', 'gin'],
     recall: '48 of 64 (75.0%) tests that provably lost their check were named',
     from: 'eval/vouch-recall.ts',
     measured: { found: 48, of: 64, accused: 0, decoys: 157 },

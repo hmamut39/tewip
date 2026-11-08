@@ -19,11 +19,12 @@ import { vouchAll } from '../engine/vouch/vouch-command.ts';
 import { findBarriers } from '../engine/access/access-command.ts';
 import { migrationsUnder, readMigration } from '../engine/schema/schema-command.ts';
 import { scanSecrets } from '../engine/secure/secrets.ts';
+import { scanAgent } from '../engine/agent/scan.ts';
 import { sourceFiles } from '../engine/walk.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 
 interface Expectation { [key: string]: number }
-interface Check { command: 'vouch' | 'schema' | 'access' | 'secrets'; expect: Expectation; verified: string }
+interface Check { command: 'vouch' | 'schema' | 'access' | 'secrets' | 'agent'; expect: Expectation; verified: string }
 interface Repo { name: string; url: string; commit: string; why: string; checks: Check[] }
 
 const MANIFEST = resolve('corpus/expected.json');
@@ -114,6 +115,29 @@ function measure(command: Check['command'], root: string): Expectation {
       out[verdict] = (out[verdict] ?? 0) + 1;
       if (verdict === 'real-risk') out['needs-someone'] += 1;
     }
+    return out;
+  }
+  if (command === 'agent') {
+    // The flagship check, and until now the one with no pinned number on real code at all.
+    //
+    // Its recall is measured three ways against published shapes - tools, guards and
+    // prompt-injection flows - and `engine/test/confidence-is-current.test.ts` re-derives each of
+    // those in CI. Its *precision* was a sentence in confidence.ts: "0 findings across 1,691 files
+    // of real agent code", true when somebody ran it once and unguarded ever since. Three phases
+    // of changes to this check went in against that sentence.
+    //
+    // Counted the way the other commands are: by the thing a person is told, not by how many
+    // patterns matched. `tools` and `guards` are what the report shows, and `injections` is the
+    // one where a wrong number is an accusation.
+    const scan = scanAgent(root);
+    const out: Expectation = {
+      filesRead: scan.filesRead,
+      tools: scan.tools.length,
+      injections: scan.injections.length,
+      guards: scan.guards.length,
+    };
+    for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;
+    for (const t of scan.tools) out[`reach-${t.reach}`] = (out[`reach-${t.reach}`] ?? 0) + 1;
     return out;
   }
   if (command === 'access') {

@@ -1,5 +1,5 @@
 {
-  "note": "Real projects at a pinned commit, with answers somebody checked by hand. Run with `npm run corpus`. A number that moves is not automatically a bug - a real fix moves numbers - but it must be re-verified and explained, never recorded blindly. `verified` says how each one was checked; an expectation with no verification behind it is not evidence, it is what the tool said that day.",
+  "note": "Real projects at a pinned commit, with answers somebody checked by hand. Run with `npm run corpus`. A number that moves is not automatically a bug - a real fix moves numbers - but it must be re-verified and explained, never recorded blindly. `verified` says how each one was checked; an expectation with no verification behind it is not evidence, it is what the tool said that day. Phase 155 added agent, which had no pinned number on real code at all - the flagship check, changed in four consecutive phases, with a precision figure that was a sentence in engine/evidence/confidence.ts nobody re-derived. Five repositories cover both directions a check can fail: nocodb has 13 real MCP tools whose reach comes from the authors own destructiveHint and readOnlyHint annotations, n8n carries 91 guards of all four kinds across 11,053 files, immich has exactly one, saleor is 2,627 Python files of nothing and must stay that way, and gin reads nought files because this check opens only .py, .ts, .js, .tsx and .jsx - pinned as a zero so that adding a Go reader has to change it deliberately.",
   "repos": [
     {
       "name": "keycloak",
@@ -189,6 +189,16 @@
             "not-reachable": 2
           },
           "verified": "read by hand on 2026-10-18, every finding opened in the file. Saleor's six: four noise (three url-credentials on example.com, which RFC 2606 reserves so it cannot be anybody's system, and one user==password stand-in) and two not-reachable (RSA private keys in test fixtures, conftest.py:149 and tests/settings.py:60, both deliberate). Nothing needs anybody. Before this phase the same checkout reported six needing someone now, at high severity, each told to revoke it at the issuer - three of them the Django postgres://saleor:saleor@localhost default, one on a commented-out line. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
+        },
+        {
+          "command": "agent",
+          "expect": {
+            "filesRead": 2627,
+            "tools": 0,
+            "injections": 0,
+            "guards": 0
+          },
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. 2,627 Python files and nothing to report, which is the answer. Pinned as the case where this check must stay quiet: two Saleor migrations were reported as gating an agent tools in Phase 153 because a pattern fragment matched \"list\"."
         }
       ]
     },
@@ -427,6 +437,20 @@
             "not-reachable": 4
           },
           "verified": "2026-10-31. 14 findings in 4 classes, every class read, and 12 of them are one file: swagger-v2.json, an OpenAPI schema whose whole job is to show the shape of a token. Eight are caught by the key above them saying example; the other four sit three levels deep under \"Example 1\" where a one-line lookback cannot see, and are caught because the file itself is a schema. The remaining two are a `${...}` variable and a value reading example. needs-someone 0. filesRead 3730 is the whole project - nothing was capped here."
+        },
+        {
+          "command": "agent",
+          "expect": {
+            "filesRead": 2202,
+            "tools": 13,
+            "injections": 0,
+            "guards": 0,
+            "reach-reads": 8,
+            "reach-writes": 2,
+            "reach-destructive": 2,
+            "reach-not-sure": 1
+          },
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does."
         }
       ]
     },
@@ -468,6 +492,17 @@
             "not-reachable": 5
           },
           "verified": "2026-10-31. 8 findings in 6 classes, every class read: three Postgres connection strings in administration docs, a private key in packages/e2e-auth-server/test-keys.ts, two URLs pointing at example.com, and a `${...}` variable in a GitHub workflow. needs-someone 0. filesRead 3141 is the whole project. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
+        },
+        {
+          "command": "agent",
+          "expect": {
+            "filesRead": 772,
+            "tools": 0,
+            "injections": 0,
+            "guards": 1,
+            "dry-run": 1
+          },
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. One guard, the dryRun flag on the immich CLI, which is all that file declares. Pinned as the smallest non-zero case."
         }
       ]
     },
@@ -502,6 +537,16 @@
             "findings": 0
           },
           "verified": "2026-10-31. A zero with a reason, recorded so it is not mistaken for the Phase 129 bug returning. gin holds exactly two markup-ish files, testdata/template/hello.tmpl and raw.tmpl, and a Go `.tmpl` is not a format Tewip claims to read. Nothing was skipped by a budget here; there is nothing in scope to read. | 2026-11-07, Phase 149: three aria-hidden-focusable false positives removed. The rule told you to take the element out of the tab order with tabindex=\"-1\" and then reported it anyway, because a <button> was flagged for being interactive whatever its tabindex said. Angular Material writes its carousel arrows aria-hidden=\"true\" tabindex=\"-1\", the documented correct pattern, and both were called barriers. Read by hand at docs carousel.html:2 and :16. Found by planting the W3C sufficient technique beside its documented failure in eval/access-recall.ts - real code does not usually contain the textbook fix, which is why no repository caught it."
+        },
+        {
+          "command": "agent",
+          "expect": {
+            "filesRead": 0,
+            "tools": 0,
+            "injections": 0,
+            "guards": 0
+          },
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. Zero files read, because this check opens .py, .ts, .js, .tsx and .jsx and gin is Go. Pinned precisely because it is a zero: adding a Go reader has to change this number deliberately rather than quietly."
         }
       ]
     },
@@ -563,6 +608,22 @@
             "not-reachable": 15
           },
           "verified": "2026-10-31. 34 findings in 8 classes, every class read. The noise is a deliberate fixture file - evaluations/computer-use/fixtures/leaked-credentials.txt, which exists to hold fake credentials - plus values whose own text says example. The not-reachable are tokens inside __tests__ files and a documented example in an eslint rule's markdown. needs-someone 0. | 2026-10-31, platform drift removed: these counts were recorded on Windows and the Linux corpus run disagreed, because git writes a symlink it cannot create as a small regular file - so Windows read a handful of files Linux skipped. The walker no longer follows symlinks, the corpus deletes the stand-ins git left, and the walk is sorted so a capped scan reads the same 5,000 files everywhere. Both platforms now derive these numbers identically. needs-someone stays 0, which is the class that matters."
+        },
+        {
+          "command": "agent",
+          "expect": {
+            "filesRead": 11053,
+            "tools": 5,
+            "injections": 0,
+            "guards": 91,
+            "dry-run": 28,
+            "step-budget": 33,
+            "tool-allow-list": 21,
+            "asks-a-person": 9,
+            "reach-not-sure": 3,
+            "reach-reads": 2
+          },
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. All nine asks-a-person findings read by hand: n8n planner agent calls interrupt({type:\"plan\"}) and its credential, data-table and execution tools each compute needsApproval. Before Phase 153 this repo reported one guard kind and Tewip said it asked a person nothing. injections 0 is the number that matters most: it was 3 before Phase 152 and all three were false."
         }
       ]
     }

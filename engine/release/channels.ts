@@ -60,6 +60,28 @@ export interface ChannelReading {
 /** A gap younger than this is a release in flight, not a release that failed. */
 export const PATIENCE_HOURS = 12;
 
+/**
+ * The tracked pathspecs whose contents end up inside the npm tarball.
+ *
+ * Takes the three lists that actually decide it - `files` from package.json, and `include` and
+ * `exclude` from tsconfig.build.json - rather than naming paths here. A hand-written list would be
+ * correct today and would silently stop covering new code the first time somebody added a build
+ * root, which is the same defect as the one the npm content check exists to catch: a check that
+ * keeps passing after it has stopped looking at everything.
+ *
+ * `dist/` is dropped. It is a build output, untracked, and already represented by the sources that
+ * compile into it; asking git about it would return nothing and read as "nothing changed".
+ * package.json is added, because it ships, so a dependency edit after a bump is a content change.
+ */
+export function shippedPathspecs(pkgFiles: string[], include: string[], exclude: string[]): string[] {
+  const docs = pkgFiles.map((f) => f.replace(/[/\\]+$/, '')).filter((f) => f !== 'dist');
+  const kept = [...new Set([...docs, ...include, 'package.json'])];
+  // `glob` magic so `**` means what it means in a .gitignore. Without it git matches the pattern
+  // with `*` crossing directory separators, which happens to work for `**/test/**` and is luck
+  // rather than intent.
+  return kept.concat(exclude.map((p) => `:(exclude,glob)${p}`));
+}
+
 export type Verdict = 'current' | 'behind' | 'waiting' | 'ahead' | 'unverified' | 'stale-content';
 
 export interface ChannelVerdict extends ChannelReading {

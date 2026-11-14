@@ -10,7 +10,9 @@
 // `current`. Folding an unanswered query into "fine" is the whole failure.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compareVersions, judge, renderChannels, type ChannelReading } from '../release/channels.ts';
+import { readFileSync } from 'node:fs';
+import { compareVersions, judge, renderChannels, shippedPathspecs, type ChannelReading } from '../release/channels.ts';
+import { npmChannel } from '../../scripts/channels.ts';
 
 const NL = String.fromCharCode(10);
 const reading = (over: Partial<ChannelReading> = {}): ChannelReading =>
@@ -224,5 +226,90 @@ describe('a channel can carry the right version and the wrong content', () => {
     const { text, stale } = renderChannels([reading({ name: 'Open VSX', contentProblem: 'a shallow clone cannot answer this' })]);
     assert.equal(stale, 0, 'not knowing is not the same as being stale');
     assert.match(text, /whether their content is current could not be checked: Open VSX/);
+  });
+});
+
+// Phase 176. The content check above existed only for the editor extension, so `npm run channels`
+// compared npm's version against package.json's version - the same string until somebody bumps it -
+// and printed "every one has this release" while seventeen commits sat unshipped, two of them fixes
+// for silent wrong answers on Windows and one a ten-point correction to the README that ships in
+// the tarball. These tests are about what the npm check is allowed to stop looking at.
+describe('which files npm is held to', () => {
+  const build = JSON.parse(readFileSync('tsconfig.build.json', 'utf8'));
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+
+  it('covers every source root the tarball is built from', () => {
+    const specs = shippedPathspecs(pkg.files ?? [], build.include ?? [], build.exclude ?? []);
+    assert.ok((build.include ?? []).length > 0, 'the build config has to name its roots for this to mean anything');
+    for (const root of build.include) {
+      assert.ok(specs.includes(root), `${root} compiles into dist/ but nothing would notice it changing`);
+    }
+  });
+
+  it('holds the documents that ship beside the code, by name', () => {
+    const specs = shippedPathspecs(pkg.files ?? [], build.include ?? [], build.exclude ?? []);
+    // Named rather than derived. These two carried the accuracy figure that was ten points high for
+    // six days on npm, and a test that only checks "whatever files says" would have passed on the
+    // day somebody dropped one of them from the list.
+    for (const doc of ['README.md', 'TEAM-GUIDE.md']) {
+      assert.ok(pkg.files.includes(doc), `${doc} must ship in the npm package`);
+      assert.ok(specs.includes(doc), `${doc} ships, so a change to it makes npm stale`);
+    }
+    assert.ok(specs.includes('package.json'), 'package.json ships, so a dependency change is a content change');
+  });
+
+  it('asks git about sources rather than about the build output', () => {
+    const specs = shippedPathspecs(['README.md', 'dist/'], ['engine'], []);
+    assert.deepEqual(specs, ['README.md', 'engine', 'package.json']);
+    assert.ok(!specs.includes('dist'), 'dist/ is untracked, so git would answer "nothing changed" about it');
+  });
+
+  it('excludes tests the way a .gitignore would, not the way luck would', () => {
+    const specs = shippedPathspecs([], ['engine'], ['**/test/**', '**/*.test.ts']);
+    assert.deepEqual(specs.slice(-2), [':(exclude,glob)**/test/**', ':(exclude,glob)**/*.test.ts']);
+  });
+
+  it('extends itself when a build root is added, with nobody editing this check', () => {
+    const before = shippedPathspecs([], ['engine'], []);
+    const after = shippedPathspecs([], ['engine', 'brand-new-root'], []);
+    assert.ok(!before.includes('brand-new-root'));
+    assert.ok(after.includes('brand-new-root'), 'a hand-written list is the defect this check exists to catch');
+  });
+
+  // The tests above cover the derivation and the verdict. Neither covers the wiring between them,
+  // and the wiring is what was actually missing: `shippedPathspecs` can be perfect and npm will
+  // still report ok if the reading does not carry its result.
+  //
+  // The first version of this guard read the script as text and asserted it mentioned
+  // `changedSince`. Stripping the two fields out of the returned object left that guard green and
+  // npm back to "ok" - it had matched the line that destructures the value, not the line that uses
+  // it. So this calls the real function with a stubbed registry instead.
+  it('hands npm its content check, so a stale tarball cannot report ok', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ 'dist-tags': { latest: '9.9.9' } }), { status: 200 })) as typeof fetch;
+    try {
+      const reading = await npmChannel({ changedSince: ['README.md', 'engine/iac/compose.ts'] });
+      assert.deepEqual(reading.changedSince, ['README.md', 'engine/iac/compose.ts'], 'the reading has to carry what changed');
+      // The version is made to match so the only thing that can make it stale is the content.
+      const verdict = judge({ ...reading, expected: '9.9.9' });
+      assert.equal(verdict.verdict, 'stale-content');
+      assert.match(verdict.says, /2 file\(s\) changed since that version was set/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('passes on a content check nobody could make, rather than calling it clean', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ 'dist-tags': { latest: '9.9.9' } }), { status: 200 })) as typeof fetch;
+    try {
+      const reading = await npmChannel({ contentProblem: 'a shallow clone cannot answer this' });
+      assert.equal(reading.contentProblem, 'a shallow clone cannot answer this');
+      const verdict = judge({ ...reading, expected: '9.9.9' });
+      assert.equal(verdict.verdict, 'current');
+      assert.match(verdict.says, /could not be checked: a shallow clone cannot answer this/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

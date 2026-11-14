@@ -124,6 +124,29 @@ describe('what a compose file hands a container', () => {
     assert.ok(both[0].evidence.includes('cap_add'), `the finding should point at the grant, not the drop: ${both[0].evidence}`);
   });
 
+  // `readCompose` and `readDockerfile` are exported, so their contract has to hold for whatever
+  // text a caller hands them - not only for text that `scanIac` has already normalised.
+  //
+  // Worth stating explicitly because the parity test cannot see this: `iac-command.ts` turns every
+  // file into LF before either reader is called, so putting the old newline-only split back changes
+  // nothing it measures. Sabotaging it proved exactly that, which is how this test came to exist.
+  it('reads a CRLF file the same as an LF one, called directly', () => {
+    const CR = String.fromCharCode(13);
+    const both = (lines: string[]) => [
+      rules(readCompose('c.yml', lines.join(String.fromCharCode(10)) + String.fromCharCode(10))),
+      rules(readCompose('c.yml', lines.join(CR + String.fromCharCode(10)) + CR + String.fromCharCode(10))),
+    ];
+    for (const lines of [
+      ['services:', '  a:', '    cap_add:', '      - SYS_ADMIN'],
+      ['services:', '  a:', '    cap_add: ["SYS_ADMIN"]'],
+      ['services:', '  a:', '    privileged: true'],
+      ['services:', '  a:', '    cap_drop:', '      - SYS_ADMIN'],
+    ]) {
+      const [lf, crlf] = both(lines);
+      assert.deepEqual(crlf, lf, `CRLF and LF disagree on ${JSON.stringify(lines)}`);
+    }
+  });
+
   it('does not read a rule written in a comment as a finding', () => {
     assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    # never set privileged: true here', '    image: x:1'))), []);
   });

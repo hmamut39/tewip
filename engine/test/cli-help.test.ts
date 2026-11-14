@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { HELP } from '../../cli/help.ts';
+import { lf } from '../lines.ts';
 
 const CLI_DIR = join(import.meta.dirname, '..', '..', 'cli');
 const cli = readFileSync(join(CLI_DIR, 'tewip.ts'), 'utf8');
@@ -109,7 +110,7 @@ describe('the cost line', () => {
 // catch a sentence that is merely out of date, but it catches every invented verb, and an
 // invented verb is the version of this that wastes a reader's afternoon.
 describe('the README', () => {
-  const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+  const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
   /**
    * Verbs the CLI really answers, read from its own switch and from every verb module.
    *

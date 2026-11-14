@@ -19,6 +19,8 @@
  * A real one is `Dockerfile`, `Dockerfile.prod`, or `something.dockerfile`. None of those ends in
  * a code extension.
  */
+import { lines as splitLines } from '../lines.ts';
+
 const CODE = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|php|swift|md|txt|snap)$/i;
 export const isDockerfile = (name: string): boolean =>
   !CODE.test(name) && (/^dockerfile($|[.-])/i.test(name) || /\.dockerfile$/i.test(name));
@@ -46,7 +48,7 @@ interface Instruction {
 /** Instructions, with continuations joined, because a RUN can span twenty lines. */
 export function instructionsOf(source: string): Instruction[] {
   const out: Instruction[] = [];
-  const lines = source.split(String.fromCharCode(10));
+  const lines = splitLines(source);
   for (let i = 0; i < lines.length; i += 1) {
     const raw = lines[i];
     if (/^\s*(#|$)/.test(raw)) continue;

@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { PROJECT_ROOT } from '../../reporters/store.ts';
 import { FLOOR, isBehind, parts } from '../../extensions/vscode/version-compare.js';
+import { lf } from '../lines.ts';
 
 const DIR = join(PROJECT_ROOT, 'extensions', 'vscode');
 const manifest = JSON.parse(readFileSync(join(DIR, 'package.json'), 'utf8')) as {
@@ -196,7 +197,7 @@ describe("the README's count of what the extension adds", () => {
     };
     const contributed = manifest.contributes?.commands?.length ?? 0;
     assert.ok(contributed > 0, 'the extension contributes no commands at all');
-    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
     // Every occurrence, not the first. Phase 166: this guard matched `exec`, so it held the count in
     // the front table and never saw the install section forty lines later, which said the extension
     // "adds two commands" and named two of the 23. A guard that checks one of two copies of a fact
@@ -215,7 +216,7 @@ describe("the README's count of what the extension adds", () => {
   it('states that count as a numeral everywhere, so nothing can hide from the guard above', () => {
     // The stale copy escaped by being spelled out: "adds two commands" is not `adds (\d+) commands`
     // to any regex. Numbers in words cannot be re-derived, so this file refuses them for this claim.
-    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
     const spelled = [...readme.matchAll(/adds (two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)[ -]?\w* commands/gi)];
     assert.deepEqual(
       spelled.map((m) => m[0]),
@@ -227,7 +228,7 @@ describe("the README's count of what the extension adds", () => {
   it('points at a release link that cannot go stale', () => {
     // It pointed at `releases/tag/vscode-0.5.0`, published 23 September, while the extension was at
     // 0.14.2 - nine minor versions and seven weeks behind, for anybody who clicked it.
-    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
     assert.doesNotMatch(readme, /releases\/tag\/vscode-[\d.]+/, 'a pinned release link in the README will be wrong by the next release');
   });
 });

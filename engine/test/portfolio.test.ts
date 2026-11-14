@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { checkoutsUnder, examine } from '../portfolio/portfolio-command.ts';
 import { CHECKS, renderPortfolio, worstFirst, type RepoRow } from '../portfolio/portfolio.ts';
+import { lf } from '../lines.ts';
 
 const NL = String.fromCharCode(10);
 const row = (name: string, cells: RepoRow['cells']): RepoRow => ({ name, path: `/x/${name}`, cells, seconds: 0 });
@@ -111,7 +112,7 @@ describe('finding and reading the checkouts', () => {
 // The same shape as "fifteen tools" against 25 served, found in the same sweep.
 describe("the README's count of what portfolio runs", () => {
   it('is the number of checks there actually are', () => {
-    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
     const claimed = /`portfolio`\*\* runs (\d+) checks/.exec(readme);
     assert.ok(claimed, 'the README no longer says how many checks `portfolio` runs');
     assert.equal(Number(claimed[1]), CHECKS.length, `the README says ${claimed[1]} checks and CHECKS has ${CHECKS.length}: ${CHECKS.join(', ')}`);

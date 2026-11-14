@@ -8,6 +8,7 @@
 // files are full of `${VAR}` interpolation that a strict parser rejects, and adding a dependency
 // to this project to read four keys would be the wrong trade. Comments are stripped first, so a
 // rule written in prose above a service does not become a finding about it.
+import { lines as splitLines } from '../lines.ts';
 import type { IacFinding } from './dockerfile.ts';
 
 /** The line with `#` comments removed, unless the `#` is inside quotes. */
@@ -86,7 +87,7 @@ const RULES: Rule[] = [
 
 export function readCompose(file: string, source: string): IacFinding[] {
   const found: IacFinding[] = [];
-  const lines = source.split(String.fromCharCode(10));
+  const lines = splitLines(source);
   // `cap_add:` is the only place a capability name means what the rule says. The same word under
   // `cap_drop:` is the opposite - a container dropping SYS_ADMIN is doing the right thing, and
   // reporting that as a finding would be exactly backwards.

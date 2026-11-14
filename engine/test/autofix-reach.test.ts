@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { LLM_CONFIDENCE_CEILING } from '../llm/llm-diagnose.ts';
 import { FIX_NEEDS } from '../../eval/autofix-reach.ts';
+import { lf } from '../lines.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const ruleConfidence = () => {
@@ -47,7 +48,7 @@ describe('how far fix --code can reach', () => {
   });
 
   it('says in the README that it fires on nothing, because it does', () => {
-    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(ROOT, 'README.md'), 'utf8'));
     assert.match(readme, /0 \(0\.00%\)/, 'the measured reach is not stated where the capability is advertised');
     assert.match(readme, /node eval\/autofix-reach\.ts/, 'the README does not name the harness that re-derives it');
   });

@@ -16,6 +16,7 @@ import { after, before, describe, it } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { PROJECT_ROOT } from '../../reporters/store.ts';
+import { lf } from '../../engine/lines.ts';
 
 const NL = String.fromCharCode(10);
 const AT = '2026-10-16T08:00:00.000Z';
@@ -109,7 +110,7 @@ describe('MCP server', () => {
   // source undercounted by seven, which is how the figure would go stale again.
   it('is the number of tools the README promises', async () => {
     const { tools } = await client.listTools();
-    const readme = readFileSync(join(PROJECT_ROOT, 'README.md'), 'utf8');
+    const readme = lf(readFileSync(join(PROJECT_ROOT, 'README.md'), 'utf8'));
     const claimed = /`tewip mcp`: (\d+) tools/.exec(readme);
     assert.ok(claimed, 'the README no longer states how many tools the MCP server serves, which is worse than stating it wrongly');
     assert.equal(

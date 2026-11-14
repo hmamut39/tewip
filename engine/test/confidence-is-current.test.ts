@@ -27,6 +27,7 @@ import { measure as injectionRecall } from '../../eval/injection-recall.ts';
 import { measure as schemaRecall } from '../../eval/schema-recall.ts';
 import { measure as secureRecall } from '../../eval/secure-recall.ts';
 import { MEASURED, type Confidence } from '../evidence/confidence.ts';
+import { lf } from '../lines.ts';
 
 interface Counts {
   found: number;
@@ -220,7 +221,7 @@ describe('where a precision figure is pinned', () => {
 // stale - the sentence was true when it was written and had nothing re-deriving it, which is the
 // shape of every defect found this week.
 describe("the README's table of measured checks", () => {
-  const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+  const readme = lf(readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8'));
 
   it('lists every check that carries a measured number', () => {
     const table = /\| check \| precision \| recall \|[\s\S]*?\n\n/.exec(readme);

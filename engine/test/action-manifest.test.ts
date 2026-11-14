@@ -13,8 +13,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { CHECKS } from '../../ci/check.ts';
+import { lf } from '../lines.ts';
 
-const manifest = readFileSync('action.yml', 'utf8');
+const manifest = lf(readFileSync('action.yml', 'utf8'));
 const lines = manifest.split(String.fromCharCode(10));
 
 describe('action.yml is loadable', () => {

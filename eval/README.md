@@ -766,3 +766,52 @@ identifier that moves between versions is wrong for most readers.
 
 What this still cannot settle is whether a base image is itself sound. That needs the built image,
 not the file naming it.
+
+## The same file, written on Windows and on Linux (Phase 169)
+
+Every workflow in this repository ran on `ubuntu-latest`. The repository is written on Windows.
+Neither half of that gap was ever covered, and the author's own working tree had LF endings, so the
+author's machine could not reveal it either. Phase 168 added a three-platform matrix; it failed on
+Windows on its first run.
+
+`node eval/crlf-parity.ts`
+
+| | agree | answer differently |
+|---|---|---|
+| 10 checks, one fixture project written twice | **10 (100%)**, up from 9 | **0**, down from 1 |
+
+**What `infra` was doing on a Windows checkout.** Two separate bugs, in the same check:
+
+- `readCompose` split on `\n` and left a `\r` at the end of every line. Because `.` does not match
+  `\r` in JavaScript, the pattern `/^\s*cap_add\s*:(.*)$/` never matched, the flag it sets was never
+  set, and the `dangerous-capability` rule reported **nothing at all** — not an error, nothing.
+- Every Kubernetes finding came back **one line early**. The `m` flag treats a lone `\r` as a line
+  terminator, so `^` matches *between* the `\r` and the `\n`; `\s` then matches a newline, so `^\s*`
+  runs forward across the break, matches the content of the next line, and reports the index of the
+  previous one.
+
+The second one is sloppy on Unix too — `^\s*` should never have been allowed to cross a line
+boundary — and CRLF only made it visible.
+
+**Why this is the worst class of bug this product can have.** A rule that reads a line ending as
+content does not report an error. It reports nothing. The whole argument here is that absence is not
+approval: a check that could not run says so, in words. A rule finding zero on every Windows
+checkout says "nothing here" in the only language a report has, to the people most likely to be
+running Windows.
+
+**The fix is at the boundary, not per rule.** `iac-command.ts` normalises each file to LF before any
+rule sees it, because getting `\s` versus `[ \t]` right in every pattern written from here on is a
+thing to be silently wrong about. `reporters/store.ts` does the same for hand-written files, which
+are the likeliest to be CRLF in real life — a person writes them in whatever editor they have.
+
+**What was suspected and was not true.** Accepted-findings lists looked like the next victim: they
+split on `\n` and a stale `\r` would stop a judged finding matching, so it would come back and keep
+coming back. Measured, and it holds — every caller happens to `.trim()` each entry. The normalising
+went in anyway, because surviving on a `.trim()` somebody wrote for another purpose is not a
+property to build on. Nine of the ten checks were already correct; the measurement is what
+distinguishes the one that was not from the eight suspicions that were wrong.
+
+What this does not settle is whether the fixture exercises every rule in every check. It plants
+something real for all ten — a check finding nothing agrees with itself for free, and the second
+half of `engine/test/crlf.test.ts` fails if any check finds nothing — but "agrees on what it was
+shown" is the claim, not "agrees on everything".

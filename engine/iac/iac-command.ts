@@ -9,6 +9,7 @@
 // teach a reader to skim both. It is still shown, below, because somebody has to decide that -
 // the same shape as a credential in a test file.
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { lf } from '../lines.ts';
 import { dirname, join, relative, resolve } from 'node:path';
 import { isDockerfile, readDockerfile, type IacFinding } from './dockerfile.ts';
 import { readCompose } from './compose.ts';
@@ -76,7 +77,18 @@ export function scanIac(root: string): IacScan {
       if (info.size > 1_000_000) continue;
       let source: string;
       try {
-        source = readFileSync(full, 'utf8');
+        // Normalised to LF before any rule sees it, which is the one place that can be done once.
+        //
+        // Phase 169: every rule here is anchored with `/^\s*.../gm`, and on a CRLF file that is
+        // wrong twice over. JavaScript's `m` flag treats a lone `\r` as a line terminator, so `^`
+        // matches between the `\r` and the `\n`; and `\s` matches a newline, so `^\s*` then runs
+        // forward across the break and matches content on the *next* line while reporting the
+        // index of the previous one. Every Kubernetes finding came back one line early on Windows,
+        // and `readCompose` missed `cap_add` entirely because `.` does not match `\r`.
+        //
+        // Fixing it per rule would mean getting `\s` versus `[ \t]` right in every pattern written
+        // from here on, and being wrong would be silent. Measured by `eval/crlf-parity.ts`.
+        source = lf(readFileSync(full, 'utf8'));
       } catch {
         continue;
       }

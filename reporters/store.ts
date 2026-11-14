@@ -1,6 +1,7 @@
 // JSONL persistence shared by the reporter, the history script and future layers.
 import { openSync, readSync, closeSync, fstatSync, appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { lf } from '../engine/lines.ts';
 import type { RunSummary, TriageRecord } from './types.ts';
 
 export const PROJECT_ROOT = join(import.meta.dirname, '..');
@@ -19,9 +20,16 @@ export const RUNS_FILE = join(COLLECT_DIR, 'runs.jsonl');
  * matching the finding it was written to accept - so a judged finding comes back and keeps coming
  * back, with nothing anywhere saying why. Every file this project reads **because a person wrote it
  * by hand** goes through here.
+ *
+ * Line endings are normalised for the same reason: a person wrote this in whatever editor they
+ * have, and on Windows that writes CRLF. Every caller today happens to `.trim()` each entry and so
+ * survives without it - measured rather than assumed, in `eval/crlf-parity.ts` - but surviving
+ * because of a `.trim()` somebody wrote for another purpose is not a property to build on, and the
+ * next hand-written format read here will not come with one. Phase 169 found `infra` reporting
+ * nothing at all about capabilities on a Windows checkout for exactly this reason.
  */
 export function readHandWritten(file: string): string {
-  return readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+  return lf(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 }
 
 export function appendJsonl(file: string, rows: readonly unknown[]): void {

@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 import { REACHED_OUT } from './no-network.ts';
+import { lf } from '../lines.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 // A file:// URL, not a path: `--import c:\...` is rejected by the ESM loader on Windows, and a
@@ -162,7 +163,7 @@ describe('the five commands the README calls rules-only', () => {
     // If the README's list grows, this test has to grow with it, or the new command ships with the
     // claim and nothing behind it. The list is read out of the README rather than kept in step by
     // hand, for the reason every other guard in this project exists.
-    const text = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const text = lf(readFileSync(join(ROOT, 'README.md'), 'utf8'));
     // Anchored on what the block contains, not on how far it sits from the sentence above it.
     // The first version allowed 400 characters between the two, and adding a paragraph about this
     // very test to the README pushed the block out of range - the guard broke on the commit that

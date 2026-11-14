@@ -182,3 +182,34 @@ describe('the packaged extension', () => {
     assert.deepEqual(zipEntries(vsix).filter((n) => n.endsWith('.vsix')), [], 'a .vsix inside the .vsix doubles the download for nothing');
   });
 });
+
+// Phase 163: the README's count of the extension's commands, held to the extension.
+//
+// It said "adds six commands" and the extension contributes 23. True when somebody wrote it, never
+// re-derived, and understating the thing by four times - the same shape as `tewip start` telling
+// every new user there were "all eleven commands" while the command line dispatched 41. A count in
+// prose is a claim, and a claim needs something that re-derives it or it rots in place.
+describe("the README's count of what the extension adds", () => {
+  it('matches the number of commands the extension actually contributes', () => {
+    const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'extensions', 'vscode', 'package.json'), 'utf8')) as {
+      contributes?: { commands?: unknown[] };
+    };
+    const contributed = manifest.contributes?.commands?.length ?? 0;
+    assert.ok(contributed > 0, 'the extension contributes no commands at all');
+    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const claimed = /adds (\d+) commands/.exec(readme);
+    assert.ok(claimed, 'the README no longer states how many commands the extension adds');
+    assert.equal(
+      Number(claimed[1]),
+      contributed,
+      `the README says ${claimed[1]} commands and the extension contributes ${contributed}. One of them has moved; a count nobody re-derives is a claim that rots.`,
+    );
+  });
+
+  it('points at a release link that cannot go stale', () => {
+    // It pointed at `releases/tag/vscode-0.5.0`, published 23 September, while the extension was at
+    // 0.14.2 - nine minor versions and seven weeks behind, for anybody who clicked it.
+    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    assert.doesNotMatch(readme, /releases\/tag\/vscode-[\d.]+/, 'a pinned release link in the README will be wrong by the next release');
+  });
+});

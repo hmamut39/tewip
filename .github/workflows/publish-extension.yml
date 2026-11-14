@@ -31,7 +31,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # to attach the built .vsix to the release
+  contents: write # to create the release and attach the built .vsix to it
   id-token: write # how Open VSX knows this really is hmamut39/tewip
 
 jobs:
@@ -156,14 +156,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" ./*.vsix --clobber
-            echo "Attached to release $tag. To publish to the Visual Studio Marketplace, download it"
-            echo "and upload it at https://marketplace.visualstudio.com/manage/publishers/hmamut39"
-          else
-            echo "No release exists for $tag yet, so there is nothing to attach it to."
-            echo "Create the release and re-run this workflow, or upload the artifact below by hand."
+          # Create the release when there is none, rather than reporting that there is none.
+          #
+          # Releases were made by hand, and v0.81.0 and v0.82.0 never got one - so this step printed
+          # "nothing to attach it to" twice, the .vsix was never published for either, and the
+          # Releases page sat at v0.80.1 while npm served 0.82.0. A reader comparing the two would
+          # have concluded the project had stopped. The step was honest about what it did; nobody
+          # was reading it, which is the difference between a message and a mechanism.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            echo "No release for $tag, creating one."
+            gh release create "$tag" --title "Tewip ${tag#v}" --generate-notes
           fi
+          gh release upload "$tag" ./*.vsix --clobber
+          echo "Attached to release $tag. To publish to the Visual Studio Marketplace, download it"
+          echo "and upload it at https://marketplace.visualstudio.com/manage/publishers/hmamut39"
 
       - name: Keep the built extension on the run
         if: always()

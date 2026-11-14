@@ -917,3 +917,66 @@ be fully compared — `contracts` needs git, and "git was missing" should not re
 coverage, and a stray carriage return in a hash chain would be the kind of thing that matters.
 It turned out to be safe — `verify` re-stringifies each parsed entry before hashing, so a trailing
 carriage return never reaches the hash — but that is now measured rather than reasoned about.
+
+## "More than 500 real messages from public projects" (Phase 173)
+
+The README said the rules for Selenium, WebdriverIO, Cypress, Testing Library, Vue Test Utils,
+jest-dom and Jasmine were checked against more than 500 real messages from public projects. That
+figure appears nowhere else in this repository — not in ROADMAP.md, not here, not in a data file.
+It was measured once during development and never written down, which makes it indistinguishable
+from a number somebody felt was about right.
+
+`node eval/driver-wordings.ts`
+
+| | messages found |
+|---|---|
+| 12 datasets, 8,041 records, 7,984 of them carrying an error message | **0**, across the six countable tools |
+
+**The zero is the finding, and it is worth publishing.** Not because the rules are untested — because
+this is the wrong place to look for evidence about them. Every labelled dataset on disk was harvested
+from a Playwright project, so a Selenium or Cypress message could not be in one. The rules are
+checked against the wording each tool really prints, captured in `engine/test/driver-errors.test.ts`
+with variants taken from public issue threads, and those run on every commit. That is a smaller and
+true claim in place of a larger one nothing supported, and it is what the README now says.
+
+**One tool cannot be counted this way at all.** jest-dom's matchers are `toBeVisible`,
+`toBeInTheDocument` and `toHaveTextContent` — and Playwright's own expect API uses the same names, so
+a match proves nothing about which library produced it. The first version of this harness counted
+1,210 of them as jest-dom and would have published that number as evidence. The `ambiguous` field
+exists so the harness says "not countable here, and why" rather than reporting a figure it cannot
+stand behind.
+
+What this cannot settle: whether the wordings captured in the tests are still the current ones. A
+tool that changed its message would break these rules silently, and nothing watches for that. It
+would need a real suite per tool in CI — which is what the polyglot workflow does for the eight test
+runners and does not do for these seven.
+
+### The guard I wrote in Phase 172 failed on all three CI platforms
+
+Worth recording in full, because it is the mistake this project most often finds in other people's
+code and I made it in the guard against making it.
+
+`engine/test/readme-references.test.ts` asserted that every repo path the README names exists, with
+`existsSync`. It passed here and went red on ubuntu, windows and macos at once: the README names
+`data/triage.jsonl`, `data/runs.jsonl` and `data/llm-cache.jsonl`, which exist on this machine only
+because Tewip has been run on it. `.gitignore` has `data/*`, so a fresh checkout has none of them.
+
+"It passes on the author's machine" is the sentence the tests workflow was created to stop, in
+Phase 61. The matrix added in Phase 168 caught it on the commit that introduced it, which is the
+best possible timing and still one red build.
+
+It now asks **git** for the tracked files rather than the filesystem, which is strictly stronger: a
+tracked file that gets renamed drops out of `git ls-files` and is still caught, while a file that
+only exists because something ran here never appears. The three runtime files are named one by one
+in `WRITTEN_AT_RUNTIME`, and a second assertion fails if one of them becomes tracked or stops being
+mentioned — an allowlist nobody prunes is an allowlist that grows.
+
+**A second failure of the same kind was hiding behind the first.** CI stopped at the `existsSync`
+assertion and never reached the one asserting `records > 1000` from `eval/driver-wordings.ts` — and
+`data/*` being gitignored means that harness reads **nothing** on a clean checkout. It would have
+gone red on the next push. It now skips with a stated reason when there is no labelled data, rather
+than failing or passing quietly.
+
+Verified the way it should have been the first time: `git clone --depth 1` of this repository into a
+temporary directory, the three changed files copied in, and the test run there. 9 pass, 0 fail, 1
+skipped with its reason printed.

@@ -15,9 +15,11 @@
 // in a scheduled workflow rather than the unit suite; and the prose claims, which are the bulk of
 // the document and have to be taken one at a time.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { measure as wordings } from '../../eval/driver-wordings.ts';
 import { MEASURED } from '../evidence/confidence.ts';
 import { lf } from '../lines.ts';
 
@@ -29,8 +31,20 @@ const TOP = readdirSync(ROOT, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
   .map((e) => e.name);
 
+/**
+ * Files the README names that git does not track, because Tewip writes them when it runs.
+ *
+ * Named one by one rather than matched by directory. The first version of the test below asked
+ * `existsSync` instead, which passed on the machine it was written on and failed on all three CI
+ * platforms at once: these three exist here only because this project has been run here, and a
+ * fresh checkout has none of them. A guard that depends on the author's working directory is the
+ * exact thing the three-platform matrix was added to catch, and it caught this one on the commit
+ * that introduced it.
+ */
+const WRITTEN_AT_RUNTIME = ['data/triage.jsonl', 'data/runs.jsonl', 'data/llm-cache.jsonl'];
+
 describe('every file the README points at', () => {
-  it('exists', () => {
+  it('is tracked in this repository, or is one Tewip writes', () => {
     // Only references that look like a path into this repository. The README also names files the
     // reader creates - `infra.md` and `quality.md` are `--out` arguments - and bare basenames like
     // `evaluate.ts`, and asserting those exist would be asserting something false about the
@@ -40,8 +54,29 @@ describe('every file the README points at', () => {
       .map((m) => m[1])
       .filter((p) => p.includes('/') && TOP.includes(p.split('/')[0]));
     assert.ok(refs.length > 10, `only ${refs.length} repo paths found in the README, so this test is not reading it properly`);
-    const missing = [...new Set(refs)].filter((p) => !existsSync(join(ROOT, p)));
-    assert.deepEqual(missing, [], `the README points at files that are not there: ${missing.join(', ')}`);
+
+    // Git's own list, not the filesystem. A tracked file that was renamed stops being in it, which
+    // is the case worth catching; a file that exists only because something ran here never was.
+    const tracked = new Set(
+      spawnSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', timeout: 60_000 })
+        .stdout.split(String.fromCharCode(10))
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
+    assert.ok(tracked.size > 100, `git listed ${tracked.size} tracked files, so this test cannot check anything`);
+
+    const missing = [...new Set(refs)].filter((p) => !tracked.has(p) && !WRITTEN_AT_RUNTIME.includes(p));
+    assert.deepEqual(
+      missing,
+      [],
+      `the README points at files this repository does not contain: ${missing.join(', ')}. ` +
+        'If one is written when Tewip runs, add it to WRITTEN_AT_RUNTIME and say so there.',
+    );
+
+    // The allowlist has to stay honest in the other direction too: an entry that becomes tracked,
+    // or stops being mentioned, is an entry nobody needs any more.
+    const stale = WRITTEN_AT_RUNTIME.filter((p) => tracked.has(p) || !README.includes(p));
+    assert.deepEqual(stale, [], `these are allowlisted as runtime files and no longer need to be: ${stale.join(', ')}`);
   });
 });
 
@@ -169,5 +204,60 @@ describe("the README's list of test runners", () => {
     );
     assert.match(README, /native TestNG/, 'the README should say plainly that a native TestNG report is not a format it reads');
     assert.match(README, /Kotlin is not among the runners CI exercises/, 'the README should say plainly that Kotlin is unexercised');
+  });
+});
+
+// Phase 173: "checked against more than 500 real messages from public projects".
+//
+// That figure appears nowhere else in this repository - not in ROADMAP.md, not in eval/README.md,
+// not in a data file. It was measured once during development and never written down, which makes
+// it indistinguishable from a number somebody felt was about right.
+//
+// What is true, and measurable: the wordings are real, they are in driver-errors.test.ts with
+// variants taken from public issue threads, and they run on every commit. What is also true, and
+// was not said: none of these tools' wordings appears in the labelled failure data at all - the
+// collected records are from Playwright projects, so a measured zero.
+describe("the README's account of the browser and component-test tools", () => {
+  const drivers = lf(readFileSync(join(ROOT, 'engine', 'test', 'driver-errors.test.ts'), 'utf8'));
+
+  it('names only tools whose real wording is actually exercised', () => {
+    const tools = ['Selenium', 'WebdriverIO', 'Cypress', 'Testing Library', 'Vue Test Utils', 'jest-dom', 'Jasmine'];
+    const claimed = tools.filter((t) => README.includes(t));
+    assert.equal(claimed.length, tools.length, `the README no longer names: ${tools.filter((t) => !README.includes(t)).join(', ')}`);
+    const untested = claimed.filter((t) => !drivers.includes(t));
+    assert.deepEqual(untested, [], `the README names these tools and driver-errors.test.ts does not cover them: ${untested.join(', ')}`);
+  });
+
+  it('is right that none of their wordings is in the labelled data', (t) => {
+    // Re-derived, not asserted. The point of publishing a zero is that somebody can get it back,
+    // and the harness also refuses to count jest-dom at all - Playwright's own expect API uses the
+    // same matcher names, so a match there says nothing about which library printed it. The first
+    // version of that harness counted 1,210 of them as jest-dom and would have published it.
+    //
+    // The collected data is gitignored - `data/*` in .gitignore, and nothing under `data/real` is
+    // tracked - so this can only run where a harvest has happened. It skips with a reason rather
+    // than failing, and rather than passing quietly: the first version asserted `records > 1000`
+    // and would have gone red on every CI platform the moment it was pushed, which is what the
+    // assertion above it had just done for the same reason.
+    const counted = wordings();
+    if (counted.datasets.length === 0) {
+      t.skip('no labelled data on this machine (data/* is gitignored); run `node eval/driver-wordings.ts` where a harvest exists');
+      return;
+    }
+    assert.ok(counted.records > 1000, `only ${counted.records} records read across ${counted.datasets.length} datasets, so this proves little`);
+    const present = counted.tools.filter((tool) => !tool.ambiguous && tool.found > 0).map((tool) => `${tool.tool} (${tool.found})`);
+    assert.deepEqual(present, [], `these wordings do appear in the labelled data, so the README's zero is wrong: ${present.join(', ')}`);
+    assert.match(
+      README,
+      new RegExp(`zero across the ${counted.records.toLocaleString('en-US')} records`),
+      `the README's record count has drifted from the ${counted.records} on disk`,
+    );
+  });
+
+  it('no longer claims a figure nothing re-derives', () => {
+    assert.ok(
+      !README.includes('more than 500 real messages'),
+      'that figure has no provenance anywhere in this repository; say where the wordings are instead',
+    );
   });
 });

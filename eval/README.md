@@ -685,3 +685,28 @@ The fifth was the real trap. The regex ended in `\x08` — a literal backspace �
 replacement wrote `\b` into a non-raw string. `sed`, `grep` and every other rendering display that
 character as nothing, so four readings of the line said it was correct while it matched nothing.
 Only `repr()` of the raw bytes showed it. **Reading a regex is not verifying it.**
+
+## infra's Terraform rules, measured against what AWS publishes (Phase 165)
+
+Phase 160 measured the Kubernetes half of `infra` and found two real gaps. The Terraform rules —
+the ones the plan document called "the single highest-value week of work available", covering a
+public bucket, a security group open to the world, an IAM role with `*` on `*`, storage in the
+clear and logging switched off — had no recall number at all.
+
+`node eval/terraform-recall.ts`
+
+| | noticed | recommended shapes accused |
+|---|---|---|
+| 7 published AWS controls | **7 (100%)** | **0** of 7 |
+
+Clean, unlike Kubernetes. The nought accused is the half that proves the harness discriminates
+rather than firing on anything it is shown: the safe form of every control produces no finding
+while the risky form produces one.
+
+**CIS AWS Foundations numbers were checked first and refused**, for the same reason Phase 160
+refused the CIS Kubernetes ones. The security-group control alone is **4.1** in v1.2.0, **5.02** in
+v1.4.0 and v2.0, and **6.03** in v6.0. An identifier cited here would be wrong for most readers, so
+the ground truth is AWS's own guidance named rather than numbered: blocking public access to S3,
+security group rules, least privilege in IAM, encryption at rest, CloudTrail logging.
+
+Still unmeasured: the Compose and Dockerfile rules, which have their own published lists.

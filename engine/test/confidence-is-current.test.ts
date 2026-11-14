@@ -21,6 +21,7 @@ import { measure as accessRecall } from '../../eval/access-recall.ts';
 import { measure as agentRecall } from '../../eval/agent-recall.ts';
 import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
+import { measure as terraformRecall } from '../../eval/terraform-recall.ts';
 import { measure as injectionRecall } from '../../eval/injection-recall.ts';
 import { measure as schemaRecall } from '../../eval/schema-recall.ts';
 import { measure as secureRecall } from '../../eval/secure-recall.ts';
@@ -76,6 +77,10 @@ const HARNESSES: Record<string, () => Counts> = {
       accused: decoys.filter((d) => d.found).length,
       decoys: decoys.length,
     };
+  },
+  terraform: () => {
+    const all = terraformRecall();
+    return { found: all.filter((m) => m.noticed).length, of: all.length, accused: all.filter((m) => m.accused).length, decoys: all.length };
   },
   infra: () => {
     const all = infraRecall();
@@ -192,6 +197,36 @@ describe('where a precision figure is pinned', () => {
     // The two harness-backed rows count their own decoys, which the test above re-derives, so they
     // need no corpus. Any other unpinned row is a precision claim with nothing behind it.
     const unpinned = MEASURED.filter((r) => !r.pinnedIn).map((r) => r.check);
-    assert.deepEqual(unpinned, ['agent (the guards)', 'agent (prompt-injection flows)'], `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`);
+    assert.deepEqual(unpinned, ['infra (Terraform)', 'agent (the guards)', 'agent (prompt-injection flows)'], `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`);
+  });
+});
+
+// Phase 164: the README's own table of measured checks, held to the one the pack prints.
+//
+// It listed five checks under the heading "Every check now has a recall number" while
+// confidence.ts carried eight: `infra`, `agent (the guards)` and `agent (prompt-injection flows)`
+// had all been measured since, and the table said nothing about them. Stale by omission is still
+// stale - the sentence was true when it was written and had nothing re-deriving it, which is the
+// shape of every defect found this week.
+describe("the README's table of measured checks", () => {
+  const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+
+  it('lists every check that carries a measured number', () => {
+    const table = /\| check \| precision \| recall \|[\s\S]*?\n\n/.exec(readme);
+    assert.ok(table, 'the README no longer has a table of measured checks');
+    const missing = MEASURED.filter((row) => !table[0].includes(`\`${row.check}\``)).map((r) => r.check);
+    assert.deepEqual(
+      missing,
+      [],
+      `confidence.ts measures ${missing.join(', ')} and the README's table does not mention them. A reader counting the checks would undercount the work.`,
+    );
+  });
+
+  it('lists no check that carries no number', () => {
+    const table = /\| check \| precision \| recall \|[\s\S]*?\n\n/.exec(readme)![0];
+    const listed = [...table.matchAll(/^\| `([^`]+)`/gm)].map((m) => m[1]);
+    const known = new Set(MEASURED.map((r) => r.check));
+    const invented = listed.filter((name) => !known.has(name));
+    assert.deepEqual(invented, [], `the README's table claims a measured number for ${invented.join(', ')}, which nothing measures`);
   });
 });

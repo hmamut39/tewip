@@ -97,7 +97,7 @@ export const MEASURED: Confidence[] = [
     groundTruth: "the shape each framework's own quickstart declares a tool in",
   },
   {
-    check: 'infra',
+    check: 'infra (Kubernetes)',
     command: 'infra',
     precision: '0 of 8 compliant manifests accused, and 0 findings invented across 4 real repositories in the corpus',
     pinnedIn: ['bitwarden-server', 'keycloak', 'immich', 'gin'],
@@ -106,6 +106,16 @@ export const MEASURED: Confidence[] = [
     measured: { found: 8, of: 8, accused: 0, decoys: 8 },
     groundTruth:
       "the Kubernetes project's own Pod Security Standards, which names the field and the allowed value for every control - each planted twice, once as the manifest the standard forbids and once as the one it allows",
+  },
+  {
+    check: 'infra (Terraform)',
+    command: 'infra',
+    precision: '0 of 7 recommended configurations accused',
+    recall: '7 of 7 published AWS controls found',
+    from: 'eval/terraform-recall.ts',
+    measured: { found: 7, of: 7, accused: 0, decoys: 7 },
+    groundTruth:
+      "AWS's own guidance, named rather than numbered - blocking public access to S3, security group rules, least privilege in IAM, encryption at rest, CloudTrail logging - each planted twice, in the shape AWS warns against and the shape it recommends. CIS AWS Foundations numbers were checked and refused: the security-group control alone is 4.1 in v1.2.0, 5.02 in v1.4.0 and v2.0, and 6.03 in v6.0",
   },
   {
     // Split from the row above rather than folded into it. `agent` reports three things - the tools,

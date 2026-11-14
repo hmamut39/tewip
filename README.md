@@ -1253,11 +1253,19 @@ of them means anything:
 
 | check | precision | recall |
 |---|---|---|
-| `vouch` | 0 of 157 sound tests accused | 75.0%, judged by execution |
-| `secure` | 0 findings on 18,617 real files | 100% of 20 published credential shapes |
-| `schema` | 0 false positives on 14 projects | 100% of 15 documented harms |
-| `access` | 0 barriers on Google's Compose samples | 100% of 11 WCAG failures, 0 of 11 documented fixes accused |
-| `agent` | 0 findings on 1,691 real files | 100% of 10 framework shapes, 0 of 4 decoys invented |
+| `secure` | 0 credentials wrongly called actionable across 9 real projects | 20 of 20 credential shapes found |
+| `schema` | 0 false positives across 14 real projects | 15 of 15 harmful migrations named, 0 of 4 safe ones accused |
+| `access` | 0 barriers wrongly reported across 8 real projects | 11 of 11 documented failures noticed, 0 of 11 documented fixes accused |
+| `agent` | 0 invented tools | 10 of 10 tool shapes read, 0 of 4 decoys invented |
+| `agent (the guards)` | 0 of 4 decoys counted as a gate | 14 of 14 documented gates found, up from 5 |
+| `agent (prompt-injection flows)` | 0 of 5 decoys accused, every one real code this check had reported | 8 of 8 documented flows found, up from 6 |
+| `infra (Kubernetes)` | 0 of 8 compliant manifests accused | 8 of 8 Pod Security Standards controls found, up from 6 |
+| `infra (Terraform)` | 0 of 7 recommended configurations accused | 7 of 7 published AWS controls found |
+| `vouch` | 0 of 157 sound tests wrongly accused here, 0 of 74 on a stranger's Python suite | 48 of 64 (75.0%), and JavaScript only - see eval/README.md |
+
+Every row is re-derived in CI by `engine/test/confidence-is-current.test.ts`, which runs the
+harnesses and fails if any figure here has drifted from what they return. The table above is held
+to `engine/evidence/confidence.ts`, which is what the evidence pack prints.
 
 Each number came with a defect. The `access` one is the clearest: `aria-hidden-focusable` told you
 to take the element out of the tab order with `tabindex="-1"` and then reported it anyway - so

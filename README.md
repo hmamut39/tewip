@@ -1538,6 +1538,12 @@ ways every time: prose read as code, or code read as prose.
 Five commands that produce evidence rather than a judgement. All five are rules-only: no model is
 called, nothing leaves the machine, and every number is re-derivable by running the command again.
 
+**That is tested, not asserted.** `engine/test/rules-only.test.ts` runs all five with every way out
+of the process replaced by one that throws — `fetch`, `http`, `https`, `net`, `tls` and DNS — and
+with `OPENAI_API_KEY` set to a real-looking value, so any branch that would call a model is live
+rather than skipped. If a command reaches for the network, it fails there. The test also reads the
+list of commands out of the block below, so a sixth command cannot join it and inherit the claim.
+
 ```bash
 tewip sbom                  # what shipped, and which licences need a decision
 tewip infra                 # what the containers and compose files let in

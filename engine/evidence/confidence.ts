@@ -97,6 +97,17 @@ export const MEASURED: Confidence[] = [
     groundTruth: "the shape each framework's own quickstart declares a tool in",
   },
   {
+    check: 'infra',
+    command: 'infra',
+    precision: '0 of 8 compliant manifests accused, and 0 findings invented across 4 real repositories in the corpus',
+    pinnedIn: ['bitwarden-server', 'keycloak', 'immich', 'gin'],
+    recall: '8 of 8 Pod Security Standards controls found, up from 6',
+    from: 'eval/infra-recall.ts',
+    measured: { found: 8, of: 8, accused: 0, decoys: 8 },
+    groundTruth:
+      "the Kubernetes project's own Pod Security Standards, which names the field and the allowed value for every control - each planted twice, once as the manifest the standard forbids and once as the one it allows",
+  },
+  {
     // Split from the row above rather than folded into it. `agent` reports three things - the tools,
     // the guards, and untrusted text glued into a prompt - and only the tools had ever been
     // measured. The pack printed that one number under all three, which is a figure standing in for
@@ -134,7 +145,6 @@ export const MEASURED: Confidence[] = [
 /** Checks that carry no measured recall yet, named rather than left out of the table. */
 export const NOT_MEASURED: Array<{ check: string; why: string }> = [
   { check: 'sbom', why: 'it reads a lockfile rather than deciding anything, so there is nothing to be right or wrong about - what it cannot read is listed in its own report' },
-  { check: 'infra', why: 'measured for precision on three real infrastructure repositories; its recall has no published list to measure against yet' },
   { check: 'contract', why: 'the comparison is exact once both versions parse; what is unmeasured is how many real descriptions the YAML reader can read, and the report says when it cannot read one' },
 ];
 

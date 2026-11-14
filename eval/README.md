@@ -550,3 +550,51 @@ The figures are recorded in `engine/measured.ts` with their provenance, and ever
 carries them instead of a link. `engine/test/triage-measured.test.ts` holds the sentence to the
 record, checks the record adds up, and fails if refusals ever stop outnumbering wrong causes — the
 point at which the engine would have started guessing where it used to decline.
+
+## infra, measured against Kubernetes' own Pod Security Standards (Phase 160)
+
+`infra` was pinned in the corpus for precision — four repositories, and it invents nothing. Nothing
+measured what it **missed**, which is the half that matters for the check that tells an IT
+department what their infrastructure permits. The guards half of `agent` had exactly this gap a
+week earlier and the answer turned out to be 5 of 14.
+
+`node eval/infra-recall.ts`
+
+| | noticed | compliant manifests accused |
+|---|---|---|
+| 8 Pod Security Standards controls | **8 (100%)**, from 6 | **0** of 8 |
+
+Each control is planted twice, as `eval/access-recall.ts` plants the W3C's failures beside their
+sufficient techniques: once as the manifest the standard forbids, once as the manifest it allows. A
+checker that cannot tell the forbidden shape from the permitted one teaches people to switch it off.
+
+**Why Pod Security Standards and not CIS.** CIS Kubernetes Benchmark numbers were the obvious
+ground truth and were rejected after checking them: `allowPrivilegeEscalation` is 5.2.5 in v1.5 and
+5.2.6 in v1.10 and v1.23, and `hostPath` is 5.2.11 in one implementation and 5.2.12 in another. A
+ground truth whose identifiers move cannot be cited. Kubernetes publishes the Pod Security
+Standards itself, it names the exact field and allowed value for every control, and it does not
+drift.
+
+**Two real gaps, both now closed.**
+
+`dangerous-capability` read only the block form — `add:` alone on its line with `- SYS_ADMIN`
+beneath it. The inline form `add: ["SYS_ADMIN"]`, which is how the Kubernetes documentation itself
+writes it, fell through to the branch that treats any other key as the end of the list, so a pod
+granting SYS_ADMIN inline was reported as granting nothing. The hardening case still has to stay
+silent and does: `drop: ["ALL"]` inline, `drop` as a block, and `add: [NET_BIND_SERVICE]` are all
+correctly unreported, and an `add` following a `drop ALL` is still caught.
+
+Seccomp had no rule at all. It flags `Unconfined` only, never absence — a pod that says nothing
+about seccomp takes the cluster default, which is a decision made elsewhere, and reporting every
+such pod would accuse most manifests in existence of something their author did not do. Writing
+`Unconfined` is somebody turning the filter off on purpose.
+
+Neither change moved a single corpus number: immich 5, n8n 4, nocodb 5, keycloak 11,
+bitwarden-server 20, saleor 2, before and after.
+
+**The harness was wrong before the code was, again.** Its first run scored 8 of 8 *accused* —
+every compliant manifest reported. The cause was that it counted any finding rather than the rule
+for the control, and every fixture also trips `no-limits`, which is a true and separate finding
+about a pod declaring no resource ceiling. Counting output instead of the answer made a correct
+checker look like it accused everything it saw. The fixtures now declare limits and the harness
+matches the named rule.

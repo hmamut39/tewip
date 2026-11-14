@@ -62,6 +62,21 @@ const RULES: Rule[] = [
   // `dangerous-capability` is NOT in this list: a capability name means the opposite depending on
   // which list it sits in, and this table cannot see that. See `addedCapabilities` below.
   {
+    // The Restricted profile's seccomp control, and the only one of the eight that had no rule at
+    // all when eval/infra-recall.ts first measured this against the standard.
+    //
+    // `Unconfined` only, never absence. A pod that says nothing about seccomp takes the cluster's
+    // default, which is a decision made somewhere else and may well be RuntimeDefault; reporting
+    // every such pod would accuse most manifests in existence of something their author did not
+    // do. Writing `Unconfined` is different: it is somebody turning the filter off on purpose.
+    rule: 'seccomp-off',
+    re: /^\s*type\s*:\s*["']?Unconfined["']?\s*$/gm,
+    what: 'seccomp is turned off for this workload',
+    because:
+      'seccomp is what stops a container issuing the system calls it has no business issuing. Unconfined removes that filter, so a process that escapes the application has the kernel’s whole surface to work with.',
+    risk: 'medium',
+  },
+  {
     rule: 'host-path',
     re: /^\s*hostPath\s*:/gm,
     what: 'a directory from the node is mounted in',
@@ -81,19 +96,42 @@ const MUTABLE_IMAGE = /^\s*image\s*:\s*["']?([^"'\s]+:latest|[^"'\s:]+)["']?\s*$
  * microservices-demo, every one of them pointing at the thing the file does right. A list item
  * carries no meaning on its own; the key above it does, so the key has to be found.
  */
+/** The capabilities worth reporting when a pod spec adds one. One list, read by both shapes. */
+const DANGEROUS = /^(?:SYS_ADMIN|SYS_PTRACE|SYS_MODULE|SYS_BOOT|NET_ADMIN|NET_RAW|DAC_READ_SEARCH|ALL)$/;
+
 function addedCapabilities(text: string): Array<{ index: number; name: string; line: string }> {
   const lines = text.split(NL);
   const out: Array<{ index: number; name: string; line: string }> = [];
   let adding = false;
   let at = 0;
   for (const line of lines) {
+    // `add: ["SYS_ADMIN"]` on one line, which is how the Kubernetes documentation writes it.
+    //
+    // Only the block form was read - `add:` alone on its line, then `- SYS_ADMIN` beneath it - so
+    // the inline form fell through to the branch below, which treats any other key as the end of
+    // the list, and a pod granting SYS_ADMIN inline was reported as granting nothing. Found by
+    // eval/infra-recall.ts: 6 of the 8 Pod Security Standards controls were seen, and this was one
+    // of the two that were not. `drop: ["ALL"]` has to stay unreported here, for the same reason
+    // the block form does - it is the strongest hardening a pod spec can state.
+    const inline = /^\s*(add|drop)\s*:\s*\[([^\]]*)\]/.exec(line);
+    if (inline) {
+      adding = false;
+      if (inline[1] === 'add') {
+        for (const raw of inline[2].split(',')) {
+          const name = raw.trim().replace(/^["']|["']$/g, '');
+          if (DANGEROUS.test(name)) out.push({ index: at, name, line });
+        }
+      }
+      at += line.length + 1;
+      continue;
+    }
     const key = /^\s*(add|drop)\s*:\s*$/.exec(line);
     if (key) adding = key[1] === 'add';
     // Any other key at this level ends the list, so a later `- ALL` is not still inside `add:`.
     else if (/^\s*[\w.-]+\s*:/.test(line)) adding = false;
     else if (adding) {
       const item = /^\s*-\s*["']?([A-Z_]+)["']?\s*$/.exec(line);
-      if (item && /^(?:SYS_ADMIN|SYS_PTRACE|SYS_MODULE|SYS_BOOT|NET_ADMIN|NET_RAW|DAC_READ_SEARCH|ALL)$/.test(item[1])) {
+      if (item && DANGEROUS.test(item[1])) {
         out.push({ index: at, name: item[1], line });
       }
     }

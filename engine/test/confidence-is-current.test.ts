@@ -20,6 +20,7 @@ import { describe, it } from 'node:test';
 import { measure as accessRecall } from '../../eval/access-recall.ts';
 import { measure as agentRecall } from '../../eval/agent-recall.ts';
 import { measure as guardRecall } from '../../eval/guard-recall.ts';
+import { measure as infraRecall } from '../../eval/infra-recall.ts';
 import { measure as injectionRecall } from '../../eval/injection-recall.ts';
 import { measure as schemaRecall } from '../../eval/schema-recall.ts';
 import { measure as secureRecall } from '../../eval/secure-recall.ts';
@@ -74,6 +75,15 @@ const HARNESSES: Record<string, () => Counts> = {
       of: frameworks.length,
       accused: decoys.filter((d) => d.found).length,
       decoys: decoys.length,
+    };
+  },
+  infra: () => {
+    const all = infraRecall();
+    return {
+      found: all.filter((m) => m.noticed).length,
+      of: all.length,
+      accused: all.filter((m) => m.accused).length,
+      decoys: all.length,
     };
   },
   guard: () => {

@@ -31,6 +31,43 @@ export interface GroundTruthLabel {
 /** Categories with fewer labelled cases than this are reported but not trusted. */
 const MIN_CASES_PER_CATEGORY = 5;
 
+export interface Verdict {
+  balanced: number | null;
+  weak: Array<{ recall: number; name: string }>;
+  overallMet: boolean;
+  balancedMet: boolean;
+  met: boolean;
+  /**
+   * Nothing was scored, which is neither a pass nor a failure.
+   *
+   * penpot had no failing CI run in the window, so it harvested nought cases and the old line read
+   * `0/0 = n/a (target >= 80%: MISSED)`. A quiet week at somebody else's project is not this agent
+   * scoring badly, and reporting it as a miss teaches whoever reads these runs to ignore the word.
+   */
+  nothingMeasured: boolean;
+}
+
+/**
+ * Whether a run counts, from all three figures rather than the headline one.
+ *
+ * Pulled out so it can be measured. The gutenberg shadow run printed "96.4% (target >= 80%: MET)"
+ * over REAL_BUG at 24.6% and LOCATOR_DRIFT at 8.3%, because 92.5% of that dataset is TIMING: a
+ * classifier that recognised nothing but flaky timeouts would have cleared the target. The test
+ * beside this feeds it those exact numbers.
+ */
+export function verdictOf(right: number, total: number, recalls: number[], measured: string[]): Verdict {
+  const balanced = recalls.length > 0 ? recalls.reduce((a, b) => a + b, 0) / recalls.length : null;
+  const weak = recalls.map((recall, i) => ({ recall, name: measured[i] ?? '?' })).filter((r) => r.recall < FLOOR_PER_CATEGORY);
+  const overallMet = total > 0 && right / total >= ACCURACY_TARGET;
+  const balancedMet = balanced !== null && balanced >= BALANCED_TARGET;
+  const nothingMeasured = total === 0;
+  return { balanced, weak, overallMet, balancedMet, met: !nothingMeasured && overallMet && balancedMet && weak.length === 0, nothingMeasured };
+}
+/** The mean recall across categories a run has to reach, so a big easy category cannot carry it. */
+const BALANCED_TARGET = 0.6;
+/** No measured category may sit under this, however well the others do. */
+const FLOOR_PER_CATEGORY = 0.3;
+
 interface Case {
   record: TriageRecord;
   label: GroundTruthLabel;
@@ -102,6 +139,9 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
 
   console.log('\nPer category (recall = labelled cases classified correctly):');
   const recalls: number[] = [];
+  // The names ride alongside, so a category under the floor can be named in the verdict instead of
+  // disappearing into a mean.
+  const measured: string[] = [];
   for (const cat of ROOT_CAUSES) {
     const withLabel = cases.filter((c) => c.label.label === cat);
     if (withLabel.length === 0) {
@@ -109,7 +149,10 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
       continue;
     }
     const got = withLabel.filter(correct).length;
-    if (withLabel.length >= MIN_CASES_PER_CATEGORY) recalls.push(got / withLabel.length);
+    if (withLabel.length >= MIN_CASES_PER_CATEGORY) {
+      recalls.push(got / withLabel.length);
+      measured.push(cat);
+    }
     const wrong = withLabel.filter((c) => !correct(c)).map((c) => c.diagnosis.category);
     const confusions = [...new Set(wrong)].map((w) => `${w} x${wrong.filter((x) => x === w).length}`).join(', ');
     const tooFew = withLabel.length < MIN_CASES_PER_CATEGORY ? `   (only ${withLabel.length} case(s): too few to trust)` : '';
@@ -140,14 +183,36 @@ function printReport(cases: Case[], labels: GroundTruthLabel[], file: string, mo
   // Measured on the held-out set: three runs of identical code scored 142, 143 and 144 of 166.
   // Anything smaller than that is the model's sampling, not a change worth keeping or reverting.
   console.log('Model sampling moves this score by about +-1 case per 150; treat smaller differences as noise, not as a result.');
+  // The verdict rests on the balanced figure as well as the overall one, and on neither alone.
+  //
+  // It used to be overall accuracy by itself, and on gutenberg that printed "96.4% (target >= 80%:
+  // MET)" over a run where REAL_BUG scored 24.6% and LOCATOR_DRIFT 8.3%. Both are true: 92.5% of
+  // that dataset is TIMING, so a classifier that only recognised flaky timeouts would clear the
+  // target comfortably while being no use for the two questions somebody actually opens this for.
+  // A headline that reads as a pass because the easiest category is most of the data is the same
+  // defect as a check that goes quiet and is read as a clean result.
+  //
+  // So MET now needs both, and a category with enough cases to be trusted that scores below
+  // FLOOR_PER_CATEGORY is named in the verdict rather than averaged away.
+  const { balanced, weak, overallMet, balancedMet, met, nothingMeasured } = verdictOf(right, cases.length, recalls, measured);
   console.log(
-    `Phase 3 metric, overall accuracy: ${right}/${cases.length} = ${percent(right, cases.length)}  ` +
-      `(target >= ${ACCURACY_TARGET * 100}%: ${cases.length > 0 && right / cases.length >= ACCURACY_TARGET ? 'MET' : 'MISSED'})`,
+    `Phase 3 metric, overall accuracy: ${right}/${cases.length} = ${percent(right, cases.length)} ` +
+      `(target >= ${ACCURACY_TARGET * 100}%: ${overallMet ? 'met' : 'MISSED'})`,
   );
-  if (recalls.length > 0) {
-    const balanced = recalls.reduce((a, b) => a + b, 0) / recalls.length;
-    console.log(`Balanced accuracy (mean recall over ${recalls.length} categories with >= ${MIN_CASES_PER_CATEGORY} cases): ${(balanced * 100).toFixed(1)}%`);
+  if (balanced !== null) {
+    console.log(
+      `Balanced accuracy (mean recall over ${recalls.length} categories with >= ${MIN_CASES_PER_CATEGORY} cases): ` +
+        `${(balanced * 100).toFixed(1)}% (target >= ${BALANCED_TARGET * 100}%: ${balancedMet ? 'met' : 'MISSED'})`,
+    );
   }
+  for (const w of weak) {
+    console.log(`  ${w.name} recall ${(w.recall * 100).toFixed(1)}% is below the ${FLOOR_PER_CATEGORY * 100}% floor every measured category has to clear.`);
+  }
+  console.log(
+    nothingMeasured
+      ? 'VERDICT: NOTHING MEASURED — no failing run was harvested in this window, so this says nothing about the agent either way.'
+      : `VERDICT: ${met ? 'MET' : 'MISSED'} — a run counts only when the overall figure, the balanced figure and every measured category clear their mark.`,
+  );
   console.log(`Reality Check Gate: ${realCount}/${REALITY_GATE_SIZE} real labelled failures${realCount >= REALITY_GATE_SIZE ? '' : ' (gate not passed; Phase 4 stays blocked)'}.`);
 }
 
@@ -155,7 +220,12 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const dataAt = args.indexOf('--data');
   const dataDir = dataAt >= 0 ? args[dataAt + 1] : undefined;
-  const file = args.find((a, i) => !a.startsWith('--') && i !== dataAt + 1);
+  // `i !== dataAt + 1` was the whole of this, and with no `--data` the index is -1, so it excluded
+  // position 0 - the filename. `node eval/evaluate.ts labels.jsonl` could therefore never run, and
+  // said so with a usage line listing `--data` as optional. It went unseen because the workflow
+  // always passes `--data`. The value's position is only skipped when there is a value there.
+  const consumed = dataAt >= 0 ? dataAt + 1 : -1;
+  const file = args.find((a, i) => !a.startsWith('--') && i !== consumed);
   if (!file) throw new Error('usage: node eval/evaluate.ts <labels.jsonl> [--data <dataset dir>] [--no-llm] [--verbose]');
   if (!existsSync(resolve(file))) {
     console.log(`No labels file at ${file}. See eval/README.md for how to create one.`);

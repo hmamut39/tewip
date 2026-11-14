@@ -238,8 +238,15 @@ for a feature costs roughly $0.50 to $1.50 in OpenAI usage.
 
 ## 8. How good is it, honestly
 
-On six sets of real failures from public projects (WordPress Gutenberg, Supabase, JupyterLab and
-others), Tewip's answers were right **86% to 99.7%** of the time, depending on the project.
+On eight sets of real failures from public projects (WordPress Gutenberg, Supabase, JupyterLab,
+Penpot, LXD UI), Tewip's deterministic rules were right **72.9% to 100%** of the time, depending on
+the project — measured on 14 November 2026, and the lowest of those is the held-out Gutenberg set
+while the highest is Penpot on only five cases. The per-project table is in `engine/measured.ts`.
+
+This document previously said **86% to 99.7%**. That range was measured with the AI layer switched
+on, and none of it reproduces: no model is pinned, the one behind those figures has been replaced,
+and when that happened nothing failed because the labelled data is not in the repository for any
+test to re-measure. The rules themselves had not changed at all.
 
 Two caveats the project states openly:
 

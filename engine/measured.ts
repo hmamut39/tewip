@@ -55,3 +55,63 @@ export const triageReliability = (): string =>
   TRIAGE_RECALL.map((c) => `${share(c.found, c.of)} of ${c.category}`).join(', ') +
   `. Where it cannot tell it answers UNKNOWN rather than guessing - ${share(TRIAGE_REFUSED, TRIAGE_REFUSED + TRIAGE_MISREAD)} of what it gets wrong is a refusal, ` +
   `not a wrong cause. Re-derive with \`node eval/triage-recall.ts\`.`;
+
+/**
+ * Overall accuracy per labelled dataset, rules only.
+ *
+ * The README published six figures - 96.4%, 86.1%, 93.4%, 97.9%, 89.0%, 99.7% - and said accuracy
+ * "ranges from 86.1% to 99.7%". Those were measured with the model layer on, and on 14 November
+ * 2026 not one of them reproduced. On the fresh set, which is the one the README put in front:
+ *
+ *   published                93.4%
+ *   with the model, today    83.6%
+ *   rules only               80.3%
+ *
+ * The rules layer was identical to what was published - right on 171 of the 174 it decided, the
+ * same 171 of 174 recorded when the figure was written. The whole gap is the model layer, which
+ * decided 39 of the 213 cases and got 7 right. Reaching 93.4% needs about 28 of those 39.
+ *
+ * So the figures here are rules only, for three reasons, in order of weight:
+ *
+ *  1. The product does not act on a model verdict anyway. The LLM layer is capped below the
+ *     escalation threshold, so every verdict it produces routes to a person - which means the
+ *     published headline counted decisions a user never sees acted on.
+ *  2. They are deterministic. No key, no cost, no network, and the same answer on every machine.
+ *  3. They do not move when a provider replaces a model. No model is pinned in this project, so a
+ *     figure that includes one is a figure with a silent dependency on somebody else's release
+ *     schedule - which is exactly how the published range came to be wrong with nothing failing.
+ *
+ * Re-derive the whole table with `node eval/dataset-accuracy.ts`. It needs the labelled data,
+ * which is gitignored (`data/*`), so it runs only where a harvest exists - a clean checkout cannot
+ * reproduce these, and saying so is the point.
+ */
+export interface DatasetAccuracy {
+  dataset: string;
+  labels: string;
+  data: string;
+  right: number;
+  of: number;
+}
+
+/** Measured 14 November 2026, rules only, with `--no-llm`. */
+export const DATASET_ACCURACY: DatasetAccuracy[] = [
+  { dataset: 'gutenberg (dev)', labels: 'eval/ground-truth.jsonl', data: 'data/real/gutenberg', right: 221, of: 251 },
+  { dataset: 'gutenberg (held-out)', labels: 'eval/ground-truth.holdout.jsonl', data: 'data/real/gutenberg-holdout', right: 121, of: 166 },
+  { dataset: 'gutenberg (fresh)', labels: 'eval/ground-truth.fresh.jsonl', data: 'data/real/gutenberg-fresh', right: 171, of: 213 },
+  { dataset: 'gutenberg (Aug 27-31)', labels: 'eval/ground-truth.aug2.jsonl', data: 'data/real/gutenberg-aug2', right: 406, of: 473 },
+  { dataset: 'Supabase', labels: 'eval/ground-truth.supabase.jsonl', data: 'data/real/supabase', right: 735, of: 743 },
+  { dataset: 'JupyterLab', labels: 'eval/ground-truth.jupyterlab.jsonl', data: 'data/real/jupyterlab', right: 34, of: 41 },
+  { dataset: 'Penpot', labels: 'eval/ground-truth.penpot.jsonl', data: 'data/real/penpot', right: 5, of: 5 },
+  { dataset: 'LXD UI', labels: 'eval/ground-truth.lxdui.jsonl', data: 'data/real/lxdui', right: 63, of: 69 },
+];
+
+const pct = (n: number, of: number) => (of === 0 ? 'n/a' : `${((n / of) * 100).toFixed(1)}%`);
+
+/** The accuracy of one dataset, as the README prints it. */
+export const accuracyOf = (d: DatasetAccuracy): string => pct(d.right, d.of);
+
+/** Lowest and highest, so a range can be stated without anybody recomputing it by hand. */
+export const ACCURACY_RANGE = {
+  lowest: DATASET_ACCURACY.reduce((a, b) => (b.right / b.of < a.right / a.of ? b : a)),
+  highest: DATASET_ACCURACY.reduce((a, b) => (b.right / b.of > a.right / a.of ? b : a)),
+};

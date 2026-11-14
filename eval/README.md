@@ -980,3 +980,51 @@ than failing or passing quietly.
 Verified the way it should have been the first time: `git clone --depth 1` of this repository into a
 temporary directory, the three changed files copied in, and the test run there. 9 pass, 0 fail, 1
 skipped with its reason printed.
+
+## The headline accuracy figure was wrong by ten points (Phase 174)
+
+The README's most prominent number: *"On fresh real Gutenberg CI failures, with the pipeline frozen
+before labelling, accuracy is 93.4%; across six real datasets it ranges from 86.1% to 99.7%."*
+
+Measured on 14 November 2026, on the same datasets and the same labels, not one of the six
+reproduced.
+
+`node eval/dataset-accuracy.ts`
+
+| dataset | rules only | published |
+|---|---|---|
+| gutenberg (dev) | 221/251 = **88.0%** | 96.4% |
+| gutenberg (held-out) | 121/166 = **72.9%** | 86.1% |
+| gutenberg (fresh) | 171/213 = **80.3%** | 93.4% |
+| gutenberg (Aug 27–31) | 406/473 = **85.8%** | 89.0% |
+| Supabase | 735/743 = **98.9%** | 97.9% |
+| JupyterLab | 34/41 = **82.9%** | — |
+| Penpot | 5/5 = **100%** | — |
+| LXD UI | 63/69 = **91.3%** | — |
+
+**The rules layer had not drifted at all.** On the fresh set it was right on 171 of the 174 cases it
+decided — the same 171 of 174 this document recorded when the figure was written. The entire gap is
+the model layer: it decided the other 39 and got **7** right, where 93.4% of 213 needs about 28 of
+them. With the model on, the fresh set scores 83.6% today, not 93.4%.
+
+**No model is pinned in this project.** `engine/llm/providers.ts` falls back to a provider default,
+so the published range had a silent dependency on somebody else's release schedule — and when that
+changed, nothing failed. That is the whole mechanism, and it is worth naming: the figure was not
+edited, not approximated and not mistaken when written. It simply stopped being true while the
+sentence stayed still.
+
+**Nothing could have caught it, in either direction.** The labelled data is gitignored (`data/*`), so
+no CI job can run this measurement and no test did. And a reader cloning this repository gets
+`eval/ground-truth.synthetic.jsonl` — five labels — and an empty `data/`. The most prominent number
+in the document was the least checkable thing in it, and the document did not say so. It does now.
+
+**The figures are rules-only from here, and the first reason is not determinism.** The product caps a
+model verdict below the escalation threshold, so every verdict the model produces routes to a person
+with the evidence attached. The published headline was therefore counting decisions a user never
+sees acted on. Rules-only is what Tewip actually commits to; it is also deterministic, free, and
+unmoved by a provider's release notes.
+
+What this still does not settle: the model layer scoring 7 of 39 where it once scored around 28 is
+a finding in its own right, and this phase did not chase it. It could be the model, the prompt, or a
+stale `llm-cache.jsonl`. What matters for the published figure is that the number no longer depends
+on the answer.

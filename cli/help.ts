@@ -92,7 +92,11 @@ Usage:
                                     Opt-in: for failures diagnosed as a real bug, propose the
                                     smallest change to application code, and keep it only if the
                                     failing test then passes AND the whole suite still passes. The
-                                    change is written as a patch; nothing is committed or merged.
+                                    change is a patch; nothing is committed or merged. It needs a
+                                    0.85 diagnosis and no rule here reaches that, so on a real CI
+                                    report it reports nothing eligible: measured 0 of 2,358 real
+                                    failures (node eval/autofix-reach.ts). That is the gate, not a
+                                    fault - code is not changed on a guess.
   tewip design <figma link | frame.json> [--url <page>] [--frame "<name>"] [--out drift.md]
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says

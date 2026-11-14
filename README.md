@@ -599,6 +599,31 @@ Every change is small (1 to 16 lines, median 4) and most are what the developers
 **No wrong fix was offered**: anything that could not be proved was thrown away and the file put
 back byte for byte.
 
+### How often this fires on a real CI report: never, so far
+
+That table measures the patch — given a failure that really is a bug, can Tewip find the file and
+prove a change. It does not measure how often a real CI report gets that far, and those are
+different questions. `node eval/autofix-reach.ts` measures the second, over 2,358 labelled failures
+from seven datasets:
+
+| | |
+|---|---|
+| diagnosed a real bug at all | 36 (1.53%) |
+| **confident enough to change code (0.85+)** | **0 (0.00%)** |
+
+Every one of those 36 sits below 0.70. The reason is deliberate and measured: the only rule that
+reports a real bug is calibrated at **0.40**, because that is how often it is right (10 of 26), and
+the model layer is capped at 0.45 so that its answers always route to a person. Nothing in a CI
+report reaches 0.85, so on real failures this command reports that nothing is eligible and points
+you at `tewip explain` instead.
+
+**That is the gate working, not failing.** Phase 56 measured why, over 471 labelled failures: a real
+bug sits at its 3–6% base rate in *every* bucket of the evidence visible when a test fails. Nothing
+there separates a real bug from flakiness well enough to justify editing somebody's code, so the
+honest answer is to decline. The machinery is built and proved; it stays dormant until a diagnosis
+good enough to act on exists. If you want it to run today, supply the diagnosis yourself — it fires
+on what **it** is confident about, and it is confident about very little, on purpose.
+
 ## The one document an auditor asks for (Phase 151, new)
 
 ```bash

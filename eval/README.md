@@ -598,3 +598,39 @@ for the control, and every fixture also trips `no-limits`, which is a true and s
 about a pod declaring no resource ceiling. Counting output instead of the answer made a correct
 checker look like it accused everything it saw. The fixtures now declare limits and the harness
 matches the named rule.
+
+## how far `tewip fix --code` can reach (Phase 161)
+
+`fix --code` is the one command that writes to somebody's application code, and the one a reader
+remembers. Every other dangerous path here has a harness — `flaky-safety.ts`, `pick-safety.ts` —
+and this one did not.
+
+`node eval/autofix-reach.ts`, over 2,358 labelled failures from seven datasets:
+
+| | |
+|---|---|
+| diagnosed a real bug at all | 36 (1.53%) |
+| **confident enough to change code (0.85+)** | **0 (0.00%)** |
+| of those, in the 0.70–0.80 band | 0 |
+| of those, under 0.70 | 36 |
+
+**It never fires on a real CI report, and that is by construction.** Exactly one code path emits
+REAL_BUG, at a hardcoded 0.40 — `REAL_BUG_ASSERTION_CONFIDENCE`, set to the rule's own measured
+accuracy of 10 in 26. The model layer is capped at 0.45 so that its verdicts always route to a
+person. The gate needs 0.85. No input can open it.
+
+**This is not the same question the README's 16/16 table answers.** That table replays 16 real bug
+fixes from unjs/ufo and python-humanize/humanize at the commit before each fix, with only that fix's
+tests, so the bug genuinely reproduces — and measures the *patch*: 16 of 16 proved by the tests, 16
+of 16 in the right file, no wrong fix offered. That is a real result about the machinery. It says
+nothing about how often a CI report gets that far, which is what this harness measures, and the
+answer is never.
+
+Both numbers are now stated where the capability is advertised. The command itself was already
+honest — it prints "None of the N failure(s) is a real bug Tewip is confident enough about to touch
+code for (REAL_BUG 0.40, TIMING 0.75)" and sends you to `tewip explain`. Only the documentation
+oversold it, by not saying that this is the normal outcome rather than an edge case.
+
+**The gate stays where it is.** Phase 56 measured why over 471 labelled failures: a real bug sits at
+its 3–6% base rate in every bucket of the evidence visible when a test fails. Lowering 0.85, or
+inflating the rule's 0.40, would buy a feature that fires by making a number untrue.

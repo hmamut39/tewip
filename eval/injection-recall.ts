@@ -262,4 +262,7 @@ function report(): void {
   );
 }
 
-if (process.argv[1]?.includes('injection-recall')) report();
+// `import.meta.main`, not a substring of argv[1]: a test file named after this harness
+// made `process.argv[1].includes('injection-recall')` true, so importing it to read its exports ran the
+// whole measurement - minutes of work, on a module that was only being imported.
+if (import.meta.main) report();

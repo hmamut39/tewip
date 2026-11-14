@@ -82,9 +82,23 @@ describe('the same project, written on Windows and on Linux', () => {
   it('finds something in the fixture, so agreement is not two checks both finding nothing', () => {
     // The way this test would most easily lie: an empty fixture, every check returning nothing,
     // perfect agreement, and no information at all.
+    //
+    // It did lie, for two checks, and the first version of this test passed anyway. The count was
+    // the length of the answer's JSON for anything that was not itself an array, so `approvals`
+    // scored on the strength of `{"entries":[],"edited":[],...}` being a non-empty string. Counting
+    // entries across every array instead showed `approvals` and `contracts` both finding nothing:
+    // the fixture had no audit log and no API description, and `contracts` additionally needs git
+    // history or every description it sees is simply new to it.
     const all = measure();
     const empty = all.filter((p) => p.found === 0).map((p) => p.check);
     assert.deepEqual(empty, [], `these checks found nothing in the fixture, so they prove nothing here: ${empty.join(', ')}`);
+  });
+
+  it('compares what each check needs, rather than reporting agreement it could not test', () => {
+    // `contracts` needs a git repository with a commit to compare against. If git is missing or
+    // the commit fails, that is worth printing rather than counting as a pass.
+    const unable = measure().filter((p) => !p.compared).map((p) => p.check);
+    assert.deepEqual(unable, [], `these checks could not be fully compared here: ${unable.join(', ')}`);
   });
 });
 

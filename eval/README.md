@@ -885,3 +885,35 @@ What this does not settle: a parser can agree on this fixture and differ on text
 branch the fixture does not. Agreement here is agreement on what it was shown — and `vouchFile`
 returning the same verdicts either way is the honest reason the `--changed` fix is recorded as
 consistency rather than as a bug reproduced.
+
+## Two checks in the parity harness were proving nothing (Phase 171)
+
+A correction to Phase 169, found by tightening its own vacuity guard rather than by anything going
+wrong.
+
+That harness has two halves: the checks must agree across line endings, **and** each must find
+something, because two checks that both find nothing agree perfectly and say nothing. The second
+half counted the length of the answer's JSON for anything that was not itself an array — so
+`approvals`, which returns an object, scored on the strength of
+`{"entries":[],"edited":[],"broken":[],"unreadable":[]}` being a non-empty string. The guard against
+vacuous agreement was itself vacuous, for one check.
+
+Counting entries across every array in the answer instead showed **two** checks finding nothing:
+
+- **`approvals`** — the fixture had no audit log at all. It now has a real hash chain, three entries
+  long, built in the harness with the same algorithm `record` uses so both trees get byte-identical
+  text. The first attempt called `record` in the LF tree and copied the file across, and the two
+  answers differed: every entry stores the project path it was recorded under, so the CRLF tree's
+  log named the LF tree's directory. That looked exactly like a line-ending bug in a tamper-evident
+  hash chain, and was a bug in the fixture.
+- **`contracts`** — no API description, and no git history even once one was added, so every
+  description landed in `isNew` and the comparison the check exists for never ran. The fixture is
+  now a real repository with a commit and a removed endpoint.
+
+Both now find something, all ten still agree, and a third assertion reports when a check could not
+be fully compared — `contracts` needs git, and "git was missing" should not read as "it agrees".
+
+`audit.ts` was the reason for looking: it is the one remaining line-splitting reader that had no
+coverage, and a stray carriage return in a hash chain would be the kind of thing that matters.
+It turned out to be safe — `verify` re-stringifies each parsed entry before hashing, so a trailing
+carriage return never reaches the hash — but that is now measured rather than reasoned about.

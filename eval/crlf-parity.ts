@@ -13,143 +13,18 @@
 // So this measures it, per check, rather than auditing 40 call sites by eye. Each check gets a
 // fixture project written twice - once with LF, once with CRLF - and the two answers are compared.
 // Any check that answers differently is reading line endings as content.
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { CHECK_RUNNERS, type CheckName } from '../engine/evidence/checks.ts';
+import { FIXTURE } from './crlf-fixture.ts';
 
 const LF = String.fromCharCode(10);
 const CR = String.fromCharCode(13);
 
 /** One file in the fixture, written as a list of lines so the ending can be chosen per run. */
-interface Fixture {
-  path: string;
-  lines: string[];
-}
-
-/**
- * A project holding something for every check to find.
- *
- * Deliberately something real in each file rather than an empty project: two checks that both find
- * nothing agree perfectly and prove nothing, which is the way this harness would most easily lie.
- */
-const FIXTURE: Fixture[] = [
-  {
-    path: 'package.json',
-    lines: ['{', '  "name": "fixture",', '  "version": "1.0.0",', '  "dependencies": { "left-pad": "1.3.0" }', '}'],
-  },
-  {
-    path: 'package-lock.json',
-    lines: [
-      '{',
-      '  "name": "fixture",',
-      '  "version": "1.0.0",',
-      '  "lockfileVersion": 3,',
-      '  "packages": {',
-      '    "node_modules/left-pad": { "version": "1.3.0", "license": "WTFPL" }',
-      '  }',
-      '}',
-    ],
-  },
-  {
-    path: 'Dockerfile',
-    lines: ['FROM node:latest', 'ADD https://example.com/pkg.tgz /tmp/', 'RUN curl -sSL https://example.com/i.sh | sh', 'COPY . /app'],
-  },
-  {
-    path: 'compose.yaml',
-    lines: [
-      'services:',
-      '  app:',
-      '    image: nginx:1.27',
-      '    privileged: true',
-      '    network_mode: host',
-      '    cap_add:',
-      '      - SYS_ADMIN',
-      '    volumes:',
-      '      - /var/run/docker.sock:/var/run/docker.sock',
-    ],
-  },
-  {
-    path: 'deploy/app.yaml',
-    lines: [
-      'apiVersion: apps/v1',
-      'kind: Deployment',
-      'spec:',
-      '  template:',
-      '    spec:',
-      '      hostNetwork: true',
-      '      containers:',
-      '        - name: app',
-      '          image: nginx:1.27',
-      '          securityContext:',
-      '            privileged: true',
-      '            runAsUser: 0',
-    ],
-  },
-  {
-    path: 'infra/main.tf',
-    lines: [
-      'resource "aws_security_group" "ssh" {',
-      '  ingress {',
-      '    from_port   = 22',
-      '    to_port     = 22',
-      '    protocol    = "tcp"',
-      '    cidr_blocks = ["0.0.0.0/0"]',
-      '  }',
-      '}',
-      'resource "aws_db_instance" "main" {',
-      '  storage_encrypted = false',
-      '}',
-    ],
-  },
-  {
-    // A credential shape and a request value reaching a shell, for `secrets`.
-    path: 'src/server.js',
-    lines: [
-      'const AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";',
-      'import { execSync } from "node:child_process";',
-      'export function run(req) {',
-      '  return execSync("ls " + req.query.dir);',
-      '}',
-    ],
-  },
-  {
-    // An agent tool declaration, for `agent`.
-    path: 'src/agent.py',
-    lines: [
-      'from langchain.tools import tool',
-      '',
-      '@tool',
-      'def delete_everything(path: str) -> str:',
-      '    """Delete a path for good."""',
-      '    import shutil',
-      '    shutil.rmtree(path)',
-      '    return "gone"',
-    ],
-  },
-  {
-    // A destructive migration, for `schema`.
-    path: 'migrations/0001_drop.sql',
-    lines: ['ALTER TABLE orders DROP COLUMN total;', 'CREATE INDEX idx_orders_user ON orders (user_id);'],
-  },
-  {
-    // Two hand-written files, for `accepted`. These are the ones most likely to be CRLF in real
-    // life: a person writes them in whatever editor they have, and on Windows that writes CRLF.
-    // Without them `accepted` returned nothing and agreed with itself for free, which the vacuity
-    // half of engine/test/crlf.test.ts caught.
-    path: '.tewip/security-accepted.txt',
-    lines: ['# reviewed by the security team', 'a1b2c3d4 - the example key from the AWS docs', 'e5f6a7b8 - a test fixture, not a credential'],
-  },
-  {
-    path: '.tewip/access-accepted.txt',
-    lines: ['# judged already', 'image-no-alt src/page.html:3 - decorative, marked aria-hidden in the template'],
-  },
-  {
-    // Markup with a barrier, for `access`.
-    path: 'src/page.html',
-    lines: ['<html>', '  <body>', '    <img src="a.png">', '    <button></button>', '  </body>', '</html>'],
-  },
-];
 
 function write(root: string, eol: string): void {
   for (const f of FIXTURE) {
@@ -157,6 +32,73 @@ function write(root: string, eol: string): void {
     mkdirSync(dirname(at), { recursive: true });
     writeFileSync(at, f.lines.join(eol) + eol, 'utf8');
   }
+}
+
+/**
+ * A real audit chain, for `approvals`, which verifies each entry's hash and its link to the one
+ * before it.
+ *
+ * Built here rather than by calling `record`, so that both trees get byte-identical text and
+ * differ in exactly the thing under test. The first version did call `record` - in the LF tree,
+ * then copied the file across - and the two answers differed because every entry stores the
+ * project path it was recorded under, so the CRLF tree's log named the LF tree's directory. That
+ * looked exactly like a line-ending bug in the hash chain and was a bug in this fixture.
+ *
+ * `project` is a fixed string for the same reason: a real path differs between the two temporary
+ * directories, and it is covered by the hash, so it cannot simply be scrubbed afterwards.
+ */
+function auditChain(): string {
+  const hashOf = (entry: unknown) => createHash('sha256').update(JSON.stringify(entry)).digest('hex');
+  let previous = '';
+  const out: string[] = [];
+  for (const [i, outcome] of ['read 9 files', 'found 2 things', 'wrote nothing'].entries()) {
+    const body = {
+      at: `2026-01-0${i + 1}T00:00:00.000Z`,
+      who: 'fixture',
+      command: 'infra',
+      arguments: ['.'],
+      project: '<fixture>',
+      outcome,
+      seconds: 1,
+      previous,
+    };
+    const hash = hashOf(body);
+    out.push(JSON.stringify({ ...body, hash }));
+    previous = hash;
+  }
+  return out.join(LF) + LF;
+}
+
+/**
+ * Commit the fixture, then take an endpoint out of the API description.
+ *
+ * Without this, `contracts` found nothing: `git show HEAD:<path>` fails in a directory that is not
+ * a repository, so every description landed in `isNew` and the comparison that this check exists
+ * for never ran. The tightened vacuity count in `entriesIn` is what surfaced that - the earlier
+ * version counted JSON length and reported the empty answer as a finding.
+ *
+ * Identity is passed with `-c` rather than configured, because a CI runner has no git user and the
+ * commit would fail. Returns false when git is not available, and the caller says so rather than
+ * reporting a measurement it did not take.
+ */
+function commitAndBreak(root: string, eol: string): boolean {
+  const run = (args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout: 60_000 });
+  if (run(['init', '-q']).status !== 0) return false;
+  run(['add', '-A']);
+  const committed = run(['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'the api as it was']);
+  if (committed.status !== 0) return false;
+  // The second version, with `/orders/{id}` gone - a removed endpoint is the change `contracts`
+  // is for, and it is the one a caller of the API would notice first.
+  const after = FIXTURE.find((f) => f.path === 'api/openapi.yaml');
+  if (!after) return false;
+  const shorter = after.lines.slice(0, after.lines.indexOf('  /orders/{id}:'));
+  writeFileSync(join(root, 'api', 'openapi.yaml'), shorter.join(eol) + eol, 'utf8');
+  return true;
+}
+
+function writeAudit(root: string, eol: string): void {
+  mkdirSync(join(root, '.tewip'), { recursive: true });
+  writeFileSync(join(root, '.tewip', 'audit.jsonl'), auditChain().split(LF).join(eol), 'utf8');
 }
 
 export interface Parity {
@@ -167,6 +109,23 @@ export interface Parity {
   agrees: boolean;
   /** How much the check found at all. A check finding nothing agrees with itself for free. */
   found: number;
+  /** False when something the check needed was unavailable, so its agreement means less. */
+  compared: boolean;
+}
+
+/**
+ * How much a check actually found, counted as entries across every array in its answer.
+ *
+ * The first version of this used the length of the JSON for anything that was not itself an array,
+ * so `approvals` - which returns an object - counted as "found something" on the strength of
+ * `{"entries":[],"edited":[],"broken":[],"unreadable":[]}` being a non-empty string. The vacuity
+ * half of this harness exists so that two checks finding nothing cannot agree for free, and for
+ * one check it was doing the opposite of that.
+ */
+function entriesIn(value: unknown): number {
+  if (Array.isArray(value)) return value.length + value.reduce<number>((n, v) => n + entriesIn(v), 0);
+  if (value && typeof value === 'object') return Object.values(value).reduce<number>((n, v) => n + entriesIn(v), 0);
+  return 0;
 }
 
 /** The answer a check gives about one tree, as comparable text. Paths differ per run, so they go. */
@@ -178,8 +137,7 @@ function answer(check: CheckName, root: string): { text: string; found: number }
     .join('<root>')
     .split(root.split('\\').join('/'))
     .join('<root>');
-  const found = Array.isArray(raw) ? raw.length : text.length;
-  return { text, found };
+  return { text, found: entriesIn(raw) };
 }
 
 export function measure(): Parity[] {
@@ -188,11 +146,14 @@ export function measure(): Parity[] {
   try {
     write(lfRoot, LF);
     write(crlfRoot, CR + LF);
+    writeAudit(lfRoot, LF);
+    writeAudit(crlfRoot, CR + LF);
+    const compared = commitAndBreak(lfRoot, LF) && commitAndBreak(crlfRoot, CR + LF);
     const out: Parity[] = [];
     for (const check of Object.keys(CHECK_RUNNERS) as CheckName[]) {
       const lf = answer(check, lfRoot);
       const crlf = answer(check, crlfRoot);
-      out.push({ check, lf: lf.text, crlf: crlf.text, agrees: lf.text === crlf.text, found: lf.found });
+      out.push({ check, lf: lf.text, crlf: crlf.text, agrees: lf.text === crlf.text, found: lf.found, compared: check !== 'contracts' || compared });
     }
     return out;
   } finally {
@@ -212,6 +173,10 @@ function report(): void {
       '',
       `Checks that answer the same:      ${all.length - differ.length} of ${all.length}`,
       `Checks that answer differently:   ${differ.length}`,
+      '',
+      ...(all.some((p) => !p.compared)
+        ? [`**Not fully compared**: ${all.filter((p) => !p.compared).map((p) => p.check).join(', ')} - something each needed was unavailable here, so its agreement says less.`]
+        : []),
       '',
       '## Checks that read a line ending as content',
       '',

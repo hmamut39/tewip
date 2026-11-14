@@ -12,6 +12,22 @@
 #
 # It also typechecks, because the source is .ts run directly by Node with types stripped: nothing
 # else would ever catch a type error.
+#
+# Phase 168: three operating systems, not one.
+#
+# This repository is written on Windows and was tested only on Linux, so neither half of the gap
+# was ever covered. Two bugs have reached main that only appeared on Linux - found by a stranger's
+# machine rather than by CI - and in the same session that added this matrix, a new test failed on
+# Windows for the opposite reason: `node --import` rejects `c:\...` and needs a file:// URL, which
+# a Linux-only CI would have waved through to every Windows user of the package.
+#
+# It is an npm package an IT department installs on whatever they already run. "It passes on the
+# author's machine" was the thing this workflow was created to stop; "it passes on one of the three
+# platforms we ship to" is the same sentence with a larger machine.
+#
+# Public repository, so Windows and macOS runners cost nothing but wall-clock, and all three run at
+# once. `fail-fast: false` because "Windows is broken" and "everything is broken" are different
+# findings and one run should distinguish them.
 name: tests
 
 on:
@@ -25,7 +41,12 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
@@ -48,7 +69,10 @@ jobs:
       # next bug hides. Test files are exempt, because a thorough one is long by nature.
       # One pipeline and one awk, deliberately: a `while read` loop fed by a pipe counts in a
       # subshell and loses the result, which is how a check like this passes while finding things.
+      # Once, not three times: this reads the files in git and is the same answer on every
+      # platform, so running it on all three would only buy three copies of one result.
       - name: Every source file under 300 lines
+        if: matrix.os == 'ubuntu-latest'
         run: |
           git ls-files '*.ts' '*.js' \
             | grep -Ev '(^|/)(node_modules|dist|out|fixtures)/' \

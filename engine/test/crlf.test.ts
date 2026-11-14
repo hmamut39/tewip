@@ -21,6 +21,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { measure } from '../../eval/crlf-parity.ts';
+import { measure as readers } from '../../eval/crlf-readers.ts';
+import { readStandard, check as checkStandards } from '../standards/standards.ts';
 import { lf, lines, unterminated } from '../lines.ts';
 
 const CR = String.fromCharCode(13);
@@ -83,5 +85,61 @@ describe('the same project, written on Windows and on Linux', () => {
     const all = measure();
     const empty = all.filter((p) => p.found === 0).map((p) => p.check);
     assert.deepEqual(empty, [], `these checks found nothing in the fixture, so they prove nothing here: ${empty.join(', ')}`);
+  });
+});
+
+describe('the same text, through every parser that splits it into lines', () => {
+  it('gets the same answer with Unix and Windows endings', () => {
+    const all = readers();
+    const differ = all.filter((r) => !r.agrees);
+    assert.deepEqual(
+      differ.map((r) => `${r.name} (${r.from})`),
+      [],
+      `these parsers read a line ending as content: ${differ.map((r) => r.name).join(', ')}. Run \`node eval/crlf-readers.ts\`.`,
+    );
+  });
+
+  it('shows every parser finding something, so none agrees for free', () => {
+    const empty = readers().filter((r) => r.empty).map((r) => r.name);
+    assert.deepEqual(empty, [], `these parsers found nothing in their fixture, so they prove nothing: ${empty.join(', ')}`);
+  });
+});
+
+// The concrete damage, stated as a test rather than as a number, because this one is not about a
+// count or a line number - it is about a team's own rules not being enforced and nothing saying so.
+describe('a standards file written on Windows', () => {
+  const CR = String.fromCharCode(13);
+  const NL = String.fromCharCode(10);
+  const FRONT = ['---', 'name: house style', 'forbid: /console[.]log/ in src/ because logs hide assertions', 'applies-to: src/', '---', '', '# House style'];
+  const read = (eol: string) => readStandard('house.md', FRONT.join(eol) + eol);
+
+  it('enforces its rules, as the same file with Unix endings does', () => {
+    // Before Phase 170: 0 rules on CRLF and 1 on LF. The key pattern ends `(.*)$` and `.` does not
+    // match a carriage return, so every front-matter line but the last was skipped outright - and
+    // the last one only escaped because the front-matter pattern's own optional carriage return
+    // consumed it.
+    assert.equal(read(NL).rules.length, 1, 'the LF file states one rule');
+    assert.equal(read(CR + NL).rules.length, 1, 'and so does the identical CRLF file');
+  });
+
+  it('keeps the scope its author wrote, so the rule does not fire everywhere', () => {
+    // The other direction, and the one that produces false positives rather than silence: with
+    // `applies-to` dropped, the rule applied to every file in the repository.
+    assert.deepEqual(read(CR + NL).appliesTo, ['src/']);
+    const offending = `console.log("x");${NL}`;
+    assert.equal(checkStandards([read(CR + NL)], 'src/a.js', offending).length, 1, 'inside the scope it fires');
+    assert.equal(checkStandards([read(CR + NL)], 'docs/demo.js', offending).length, 0, 'outside the scope it does not');
+  });
+
+  it('keeps the name its author wrote, rather than falling back to the filename', () => {
+    assert.equal(read(CR + NL).name, 'house style');
+  });
+
+  it('would have said so, if it still could not read a rule', () => {
+    // `unusable` is the field that exists so silent rule loss cannot happen, and under CRLF it
+    // stayed empty while every rule vanished - the failure it was built to announce, unannounced.
+    // This checks it still speaks up, so the fix above has not simply muted it.
+    const broken = ['---', 'forbid: /unclosed(/ because reasons', 'name: x', '---'].join(CR + NL) + CR + NL;
+    assert.match(readStandard('bad.md', broken).unusable, /could not be read/);
   });
 });

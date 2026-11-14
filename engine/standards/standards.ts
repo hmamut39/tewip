@@ -17,6 +17,7 @@
 //
 // That split is the whole honesty of the feature. "We have a standard" and "the standard was enforced"
 // are different claims, and a tool that blurs them turns a policy document into a comfort blanket.
+import { lf } from '../lines.ts';
 export interface Rule {
   kind: 'forbid' | 'require';
   /** The pattern, as the team wrote it. */
@@ -75,8 +76,22 @@ export function readStandard(file: string, rawText: string): Standard {
   // standards file was rewritten by a PowerShell command and four working rules stopped being
   // enforced with no error anywhere. For a team on Windows that is total, silent rule loss - the
   // exact thing `unusable` exists to prevent, happening in the one place it could not report.
-  const text = rawText.replace(/^﻿/, '');
-  const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  // Line endings normalised here as well as the byte-order mark, and for the identical reason.
+  //
+  // Phase 170: on a CRLF file every front-matter line except the last one was silently dropped.
+  // The key pattern below ends `(.*)$`, and `.` does not match `\r` in JavaScript, so a line with a
+  // carriage return on it is not an entry at all and is skipped by the `continue`. Only the last
+  // line escaped, because the `\r?\n` in the front-matter pattern above eats its carriage return.
+  //
+  // What that cost: a file whose `forbid:` was not the last line enforced **no rules at all**, and
+  // `unusable` - the field that exists so silent rule loss cannot happen - stayed empty, because
+  // the line was never recognised as a rule to fail on. A file whose `applies-to:` was not last
+  // lost its scope instead, and the rule then fired on every file in the repository.
+  //
+  // This is the second time this function has lost every rule on Windows for an invisible
+  // character. The note below is about the first.
+  const text = lf(rawText.replace(/^﻿/, ''));
+  const front = /^---\n([\s\S]*?)\n---/.exec(text);
   const body = front ? text.slice(front[0].length).trim() : text.trim();
   const standard: Standard = { name, description: '', appliesTo: [], rules: [], guidance: body, unusable: '' };
   if (!front) {

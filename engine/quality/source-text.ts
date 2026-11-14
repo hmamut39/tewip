@@ -13,6 +13,7 @@
 // A BOM goes too. It is invisible, it sits before the first character of the file, and it stops a
 // pattern anchored at the start of the text from matching the first line.
 import { readFileSync } from 'node:fs';
+import { lf } from '../lines.ts';
 
 /** The file's text with line endings normalised, or '' when it cannot be read. */
 export function sourceText(file: string): string {
@@ -23,8 +24,15 @@ export function sourceText(file: string): string {
   }
 }
 
-/** Normalised, for text that has already been read. */
+/**
+ * Normalised, for text that has already been read.
+ *
+ * The line-ending half is `lf` from `engine/lines.ts` rather than a second copy of it here. Phase
+ * 170 wrote that second copy without noticing this file already existed - in a project whose
+ * recurring finding is that a fact kept in two places drifts, which is a better argument for
+ * consolidating than anything that could be written about it. `lf` also handles a lone carriage
+ * return, which the version here did not.
+ */
 export function normalise(text: string): string {
-  const withoutBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  return withoutBom.includes(String.fromCharCode(13)) ? withoutBom.split(String.fromCharCode(13) + String.fromCharCode(10)).join(String.fromCharCode(10)) : withoutBom;
+  return lf(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
 }

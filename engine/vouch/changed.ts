@@ -7,6 +7,7 @@
 // people learn to scroll past.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { normalise } from '../quality/source-text.ts';
 import { CANNOT_FAIL, vouchFile, type Judgement } from './vouch.ts';
 
 export interface ChangedTests {
@@ -32,7 +33,13 @@ export function vouchChanged(root: string, changed: string[]): ChangedTests {
     if (!existsSync(full)) continue; // deleted in this change, so there is nothing to read
     let text: string;
     try {
-      text = readFileSync(full, 'utf8');
+      // Normalised, like the sibling path in vouch-command.ts. Phase 44 found the same pinned
+      // commit of Keycloak giving 0 swallows-failure findings on Windows and 3 on Linux, which is
+      // why that helper exists; this path was reading raw text and so could disagree with it. Not
+      // reproduced on a fixture - vouchFile returns the same verdicts either way on everything
+      // tried - but one of two sibling readers skipping the boundary is a difference waiting for
+      // the rule that cares.
+      text = normalise(readFileSync(full, 'utf8'));
     } catch {
       continue;
     }

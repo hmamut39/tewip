@@ -6,6 +6,7 @@
 // believes an unenforceable rule is being enforced is worse off than a team with no tool at all.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { readHandWritten } from '../../reporters/store.ts';
 import { changeSummary } from '../quality/grounding.ts';
 import { check, readStandard, renderViolations, type Standard, type Violation } from './standards.ts';
 
@@ -28,7 +29,11 @@ export function loadStandards(root: string): Standard[] {
   const out: Standard[] = [];
   for (const entry of readdirSync(dir).filter((f) => /\.(md|markdown)$/i.test(f)).sort()) {
     try {
-      out.push(readStandard(entry, readFileSync(join(dir, entry), 'utf8')));
+      // `readHandWritten`, not `readFileSync`. A standards file is the most hand-written file in
+      // this product - a team types it - and that helper exists for exactly these, strips the
+      // byte-order mark Windows editors add and normalises line endings. Its own docstring names a
+      // standards file as the motivating example, and this call was not using it.
+      out.push(readStandard(entry, readHandWritten(join(dir, entry))));
     } catch {
       out.push({ name: entry, description: '', appliesTo: [], rules: [], guidance: '', unusable: 'the file could not be read' });
     }

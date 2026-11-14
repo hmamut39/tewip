@@ -815,3 +815,73 @@ What this does not settle is whether the fixture exercises every rule in every c
 something real for all ten — a check finding nothing agrees with itself for free, and the second
 half of `engine/test/crlf.test.ts` fails if any check finds nothing — but "agrees on what it was
 shown" is the claim, not "agrees on everything".
+
+## The same text, through every parser that splits it (Phase 170)
+
+`eval/crlf-parity.ts` drives the ten checks the evidence pack runs. That is the right level for
+what it covers and it cannot reach the rest: there were 40 line-splitting sites across 23 files, and
+ten checks touch about half of them. `vouch` — the flagship command, which reads a stranger's test
+files line by line and has 13 splitting sites across 5 files — does not appear in it at all, because
+answering its question means running a real test suite rather than reading a tree.
+
+So this works one level down, on the parsers themselves.
+
+`node eval/crlf-readers.ts`
+
+| | agree | answer differently |
+|---|---|---|
+| 14 parsers, each called twice on the same text | **14 (100%)**, up from 12 | **0**, down from 2 |
+
+**The real find was `standards`, and it is the worst one yet.** A team's own rules, in their own
+file, silently not enforced:
+
+- The front-matter key pattern ends `(.*)$`, and `.` does not match a carriage return. So on a CRLF
+  file **every front-matter line but the last was skipped outright** — not rejected, skipped. The
+  last line escaped only because the optional carriage return in the front-matter pattern consumed
+  it.
+- A file whose `forbid:` was not the last line enforced **no rules at all**, and `unusable` — the
+  field that exists precisely so that silent rule loss cannot happen — **stayed empty**, because the
+  line was never recognised as a rule to fail on. The failure it was built to announce, unannounced.
+- A file whose `applies-to:` was not last lost its scope instead, so the rule fired on **every file
+  in the repository**. False positives, not silence, in the other direction.
+
+The comment directly above that code describes the same function losing every rule on Windows once
+before, for a byte-order mark, and calls it "the exact thing `unusable` exists to prevent, happening
+in the one place it could not report". It happened again, through a different invisible character,
+in the same six lines.
+
+**Measured on this repository's own standards file.** `.tewip/standards/suite-integrity.md` states
+four enforced rules. Checked out on Windows, the original code read **1 of the 4** — and the one
+that survived lost its `applies-to`, so a rule scoped to `engine/` applied to every file in the
+repository. `unusable` was empty. The three that vanished are the ones that keep this project's own
+suite able to fail: no `.only`, no `waitForTimeout`, and every test file must import an assertion.
+
+Re-derived by checking out the original `readStandard` from git and running it against the real
+file with its endings converted — not by reverting the fix, which gave **0 of 4** because the
+front-matter pattern was tightened in the same change. The honest number is 1, and the difference
+between the two is the kind of overstatement this document exists to avoid.
+
+**The lesson had already been learned, twice.** `engine/quality/source-text.ts` has normalised file
+text at the boundary since **Phase 44**, when the corpus harness found the same pinned commit of
+Keycloak giving 0 swallows-failure findings on Windows and 3 on Linux. Three readers never used it:
+`iac` (Phase 169), `standards`, and `vouch`'s `--changed` path — which normalised in one of its two
+sibling file readers and not the other. `loadStandards` read the most hand-written file in the
+product with a plain `readFileSync`, bypassing the helper whose own docstring names a standards file
+as its motivating example.
+
+**A mistake of mine, recorded because it is the same mistake.** Phase 169 added `engine/lines.ts`
+without noticing `source-text.ts` already existed — a second copy of a fact, in a project whose
+recurring finding is that a fact kept in two places drifts. `normalise` now delegates to `lf`, so
+there is one implementation; it gained lone-carriage-return handling in the process.
+
+**What is not a bug, named rather than quietly skipped.** Two parsers hand back a slice of the text
+they were given — `testsIn` returns each test's body, `withoutComments` returns the whole file with
+comments blanked. With CRLF input, that text contains CRLF. Their names, line numbers and verdicts
+are identical, so their answers are compared with the endings inside quoted text collapsed, and the
+harness prints which parsers that applied to. An exemption nobody can see is how a harness stops
+measuring.
+
+What this does not settle: a parser can agree on this fixture and differ on text that reaches a
+branch the fixture does not. Agreement here is agreement on what it was shown — and `vouchFile`
+returning the same verdicts either way is the honest reason the `--changed` fix is recorded as
+consistency rather than as a bug reproduced.

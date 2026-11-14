@@ -244,9 +244,14 @@ the project — measured on 14 November 2026, and the lowest of those is the hel
 while the highest is Penpot on only five cases. The per-project table is in `engine/measured.ts`.
 
 This document previously said **86% to 99.7%**. That range was measured with the AI layer switched
-on, and none of it reproduces: no model is pinned, the one behind those figures has been replaced,
-and when that happened nothing failed because the labelled data is not in the repository for any
-test to re-measure. The rules themselves had not changed at all.
+on, and none of it reproduces. The rules themselves have not changed where the project recorded
+them: on the fresh Gutenberg set they decide 174 cases and get 171 right, exactly as noted when the
+old figure was published. The weak part today is the AI layer — right on 7 of the 39 cases it
+decides there, and 12 of 36 on the held-out set.
+
+Why is not established, and the project will not guess at it here. What *is* established is that
+nothing noticed, because the labelled failures are not in the repository and so no test can
+re-measure any of this. That is why the figures above are the deterministic rules only.
 
 Two caveats the project states openly:
 

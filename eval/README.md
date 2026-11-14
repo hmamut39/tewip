@@ -1003,15 +1003,47 @@ reproduced.
 | LXD UI | 63/69 = **91.3%** | — |
 
 **The rules layer had not drifted at all.** On the fresh set it was right on 171 of the 174 cases it
-decided — the same 171 of 174 this document recorded when the figure was written. The entire gap is
-the model layer: it decided the other 39 and got **7** right, where 93.4% of 213 needs about 28 of
-them. With the model on, the fresh set scores 83.6% today, not 93.4%.
+decided — the same 171 of 174 this document recorded when the figure was written. With the model on,
+the fresh set scores 83.6% today, not 93.4%, and the model layer accounts for the difference: it
+decided the other 39 cases and got **7** right.
 
-**No model is pinned in this project.** `engine/llm/providers.ts` falls back to a provider default,
-so the published range had a silent dependency on somebody else's release schedule — and when that
-changed, nothing failed. That is the whole mechanism, and it is worth naming: the figure was not
-edited, not approximated and not mistaken when written. It simply stopped being true while the
-sentence stayed still.
+How much it should have got is the part the fresh set cannot settle, and the next section says why.
+
+**A correction to the first version of this section.** It said the cause was an unpinned model being
+replaced by its provider. That is not supportable and has been withdrawn: `data/llm-cache.jsonl`
+holds answers from `gpt-5.4-mini` and `gpt-5.5` only, and `gpt-5.4-mini` is what is configured now,
+so the model behind those figures is the model running today. Asserting a cause I had not measured,
+inside a section about claims nobody re-derives, is the same defect one level up.
+
+**What is measured, and what is inference.** Measured on 14 November 2026:
+
+| set | rules decided | rules right | model decided | model right | overall | published |
+|---|---|---|---|---|---|---|
+| fresh | 174 | 171 | 39 | **7** (18%) | 178/213 = 80.3–83.6% | 93.4% |
+| held-out | 130 | 121 | 36 | **12** (33%) | 133/166 = 80.1% | 86.1% |
+
+The rules half is solid: 171 of 174 on the fresh set is *exactly* the figure recorded above when
+93.4% was published, so the rules have not drifted. The model half today is weak on both sets.
+
+What is **not** measured is what the model scored when those figures were published. The obvious
+subtraction — published total minus today's rules — only works if the rules scored the same then,
+and this document recorded the rules split for the fresh set alone. A first draft of this section
+did that subtraction for the held-out set and reported "22 of 36, now 12 of 36" as though it were
+measured. It is withdrawn. **Why is not established.** Candidates not ruled out: a prompt revision -
+this document records several, llm-1 through llm-5 - or a change in which cases reach the model at
+all. The answer cache is keyed per model and per prompt, so a prompt change silently invalidates
+every entry and the next run calls live with the current wording.
+
+**The fresh set does not decide between those.** Its published 93.4% is exactly 171/183, and the
+rules get exactly 171 right today out of 213 labels - so either thirty labels were added since, or
+the denominator was 213 all along and the model contributed 28 of 39 where it now contributes 7.
+The labelled data is gitignored, so there is no history to settle which, and this document will not
+pick the flattering one.
+
+**What the mechanism definitely is.** The published range was measured with a layer whose output is
+not deterministic and is not re-derived by anything, over data that is not in the repository. The
+figure was not edited, not approximated and not mistaken when written. It stopped being true while
+the sentence stayed still, and nothing anywhere was able to notice.
 
 **Nothing could have caught it, in either direction.** The labelled data is gitignored (`data/*`), so
 no CI job can run this measurement and no test did. And a reader cloning this repository gets

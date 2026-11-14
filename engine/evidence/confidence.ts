@@ -118,6 +118,16 @@ export const MEASURED: Confidence[] = [
       "AWS's own guidance, named rather than numbered - blocking public access to S3, security group rules, least privilege in IAM, encryption at rest, CloudTrail logging - each planted twice, in the shape AWS warns against and the shape it recommends. CIS AWS Foundations numbers were checked and refused: the security-group control alone is 4.1 in v1.2.0, 5.02 in v1.4.0 and v2.0, and 6.03 in v6.0",
   },
   {
+    check: 'infra (Docker)',
+    command: 'infra',
+    precision: '0 of 8 recommended configurations accused, including a container that drops a capability rather than adding one',
+    recall: '8 of 8 published Docker controls found, up from 7',
+    from: 'eval/container-recall.ts',
+    measured: { found: 8, of: 8, accused: 0, decoys: 8 },
+    groundTruth:
+      "Docker's own documentation, named rather than numbered - USER rather than root, a pinned base image, COPY rather than ADD from a URL, no script piped into a shell, no privileged container, no daemon socket mounted in, no host network, no capability that undoes the sandbox - each planted twice, in the shape Docker warns against and the shape it recommends. Measuring it found the capability rule reading only the block list, so `cap_add: [\"SYS_ADMIN\"]`, the form Compose's own reference uses, was missed",
+  },
+  {
     // Split from the row above rather than folded into it. `agent` reports three things - the tools,
     // the guards, and untrusted text glued into a prompt - and only the tools had ever been
     // measured. The pack printed that one number under all three, which is a figure standing in for

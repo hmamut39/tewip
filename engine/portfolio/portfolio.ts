@@ -22,7 +22,7 @@ export type Cell = { ran: true; count: number; detail: string } | { ran: false; 
 export const CHECKS = ['secrets', 'injection', 'agent tools', 'containers', 'licences', 'access', 'migrations', 'hollow tests'] as const;
 export type Check = (typeof CHECKS)[number];
 
-/** What each column counts, so the header is not seven words a reader has to guess at. */
+/** What each column counts, so the header is not a row of words a reader has to guess at. */
 export const COUNTS: Record<Check, string> = {
   secrets: 'credentials that need somebody to act now',
   injection: 'request values reaching a query or a shell',

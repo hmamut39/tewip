@@ -14,7 +14,7 @@ It works for every stack: Node.js (node:test, Jest, Vitest, Mocha), Python (pyte
 |---|---|
 | **Terminal** | `npm install -g tewip-ai`, then `tewip explain report.xml`, `tewip ci owner/repo --pr 12`, `tewip mcp` |
 | **VS Code, Cursor, Windsurf, VSCodium** | the Tewip extension ([download](https://github.com/hmamut39/tewip/releases/latest)): registers Tewip with the editor's AI assistant and adds 23 commands - explain a report, why CI failed on this branch, the risk review of your change, which flaky tests to quarantine, the security check, what a migration will do to a live database, whether everybody can use the interface, and the rest |
-| **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp`: fifteen tools, including *has this happened here before?*, *is this requirement covered and passing?* and *what should be done next about this goal?* (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
+| **JetBrains, Claude, other AI assistants** | add the MCP server `tewip mcp`: 25 tools, including *has this happened here before?*, *is this requirement covered and passing?* and *what should be done next about this goal?* (see [editor setup](#use-it-from-your-editor-any-ide-that-speaks-mcp)) |
 | **Any model, including none** | OpenAI, Claude, Gemini, Azure, or a model on your own machine with Ollama - no account, no key, and no source code leaving the building: `TEWIP_PROVIDER=ollama`. Three quarters of what Tewip answers calls no model at all. [How](#running-with-no-data-leaving-the-building) |
 | **GitHub CI** | the Tewip Action: a comment on every pull request, an optional merge gate, verified fix PRs ([QUICKSTART](QUICKSTART.md)) |
 
@@ -292,7 +292,7 @@ Setup, after `npm install`:
 
 ## Use it from your editor (any IDE that speaks MCP)
 
-**VS Code, Cursor, Windsurf and VSCodium:** install the Tewip extension (`extensions/vscode`, packaged as `tewip-<version>.vsix`: *Extensions → … → Install from VSIX*). It registers Tewip as an MCP server by itself, so the assistant can use it with no configuration, and adds two commands: *Tewip: Explain a test report…* and *Tewip: Why did CI fail on this branch?*
+**VS Code, Cursor, Windsurf and VSCodium:** install the Tewip extension (`extensions/vscode`, packaged as `tewip-<version>.vsix`: *Extensions → … → Install from VSIX*). It registers Tewip as an MCP server by itself, so the assistant can use it with no configuration, and adds 23 commands to the palette — *Explain a test report…*, *Why did CI fail on this branch?*, *Is this work done?*, *Could these tests ever fail?*, *What will this migration do to a live database?* and the rest; type "Tewip" to see them all.
 
 **Every other MCP client** (JetBrains IDEs 2025.2+, Claude Code, Claude Desktop, or an editor without the extension) takes one entry. With Tewip installed from its release file (`npm install -g tewip-<version>.tgz`), the command is simply `tewip mcp`; from a checkout, point at `cli/tewip.ts`:
 
@@ -1261,6 +1261,7 @@ of them means anything:
 | `agent (prompt-injection flows)` | 0 of 5 decoys accused, every one real code this check had reported | 8 of 8 documented flows found, up from 6 |
 | `infra (Kubernetes)` | 0 of 8 compliant manifests accused | 8 of 8 Pod Security Standards controls found, up from 6 |
 | `infra (Terraform)` | 0 of 7 recommended configurations accused | 7 of 7 published AWS controls found |
+| `infra (Docker)` | 0 of 8 recommended configurations accused, including a container that drops a capability rather than adding one | 8 of 8 published Docker controls found, up from 7 |
 | `vouch` | 0 of 157 sound tests wrongly accused here, 0 of 74 on a stranger's Python suite | 48 of 64 (75.0%), and JavaScript only - see eval/README.md |
 
 Every row is re-derived in CI by `engine/test/confidence-is-current.test.ts`, which runs the
@@ -1549,10 +1550,14 @@ tewip safety                # what Tewip itself refuses to do
   permissive, weak or strong copyleft, source-available, **not stated**, or **not recorded**. The
   last two are different on purpose: "the package declares none" and "this lockfile does not say"
   are not the same fact, and only the first is the package's doing.
-- **`infra`** reads Dockerfiles and compose files for the settings that matter in what ships -
-  running as root, a privileged container, the docker socket mounted in - and separates them from
-  the devcontainer and test files, where the same setting is usually fine.
-- **`portfolio`** runs seven checks over every checkout under a folder and sorts the worst first.
+- **`infra`** reads Dockerfiles, compose files, Kubernetes manifests and Terraform for the settings
+  that matter in what ships - running as root, a privileged container, the docker socket mounted in,
+  a bucket left public, a security group open to the world, an IAM role with `*` on `*` - and
+  separates them from the devcontainer and test files, where the same setting is usually fine. Each
+  of the four readers carries its own measured recall, against the Pod Security Standards, AWS's
+  published guidance and Docker's own documentation; the figures are in the table above rather than
+  repeated here, because a number written twice is a number that drifts.
+- **`portfolio`** runs 8 checks over every checkout under a folder and sorts the worst first.
   The rule that keeps it honest: **a check that could not run prints a dash, never a 0.** At forty
   rows, a zero meaning "nothing installed" looks exactly like a zero meaning "nothing wrong".
 - **`audit`** appends one line per run to `.tewip/audit.jsonl`, each carrying the hash of the line

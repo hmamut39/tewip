@@ -108,6 +108,22 @@ describe('what a compose file hands a container', () => {
     assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_drop:', '      - SYS_ADMIN'))), []);
   });
 
+  it('reads the inline capability list, which is the form the Compose reference uses', () => {
+    // This was a real miss, found by eval/container-recall.ts: the rule only ever read the block
+    // form, because the line that set the block flag consumed `cap_add:` before any rule saw it.
+    // `cap_add: ["SYS_ADMIN"]` grants exactly what the block form grants.
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_add: ["SYS_ADMIN"]'))), ['dangerous-capability']);
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_add: [SYS_ADMIN, NET_ADMIN]'))), ['dangerous-capability'], 'unquoted, and one finding for the line');
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', "    cap_add: ['SYS_PTRACE']"))), ['dangerous-capability']);
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_add: ["CHOWN"]'))), [], 'CHOWN is not one of the five');
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_add: []'))), [], 'an empty list grants nothing');
+    assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    cap_drop: ["SYS_ADMIN"]'))), [], 'inline, and still the opposite of a grant');
+    // The shape that matters most: hardening and a grant on consecutive lines. Only the grant.
+    const both = readCompose('c.yml', file('services:', '  a:', '    cap_drop: ["ALL"]', '    cap_add: ["NET_ADMIN"]'));
+    assert.deepEqual(rules(both), ['dangerous-capability']);
+    assert.ok(both[0].evidence.includes('cap_add'), `the finding should point at the grant, not the drop: ${both[0].evidence}`);
+  });
+
   it('does not read a rule written in a comment as a finding', () => {
     assert.deepEqual(rules(readCompose('c.yml', file('services:', '  a:', '    # never set privileged: true here', '    image: x:1'))), []);
   });

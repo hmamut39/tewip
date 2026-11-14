@@ -197,12 +197,30 @@ describe("the README's count of what the extension adds", () => {
     const contributed = manifest.contributes?.commands?.length ?? 0;
     assert.ok(contributed > 0, 'the extension contributes no commands at all');
     const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
-    const claimed = /adds (\d+) commands/.exec(readme);
-    assert.ok(claimed, 'the README no longer states how many commands the extension adds');
-    assert.equal(
-      Number(claimed[1]),
-      contributed,
-      `the README says ${claimed[1]} commands and the extension contributes ${contributed}. One of them has moved; a count nobody re-derives is a claim that rots.`,
+    // Every occurrence, not the first. Phase 166: this guard matched `exec`, so it held the count in
+    // the front table and never saw the install section forty lines later, which said the extension
+    // "adds two commands" and named two of the 23. A guard that checks one of two copies of a fact
+    // leaves the other free to rot, and reads in CI exactly like a guard that checks both.
+    const claims = [...readme.matchAll(/adds (\d+) commands/g)];
+    assert.ok(claims.length > 0, 'the README no longer states how many commands the extension adds');
+    for (const claim of claims) {
+      assert.equal(
+        Number(claim[1]),
+        contributed,
+        `the README says ${claim[1]} commands and the extension contributes ${contributed}. One of them has moved; a count nobody re-derives is a claim that rots.`,
+      );
+    }
+  });
+
+  it('states that count as a numeral everywhere, so nothing can hide from the guard above', () => {
+    // The stale copy escaped by being spelled out: "adds two commands" is not `adds (\d+) commands`
+    // to any regex. Numbers in words cannot be re-derived, so this file refuses them for this claim.
+    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const spelled = [...readme.matchAll(/adds (two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)[ -]?\w* commands/gi)];
+    assert.deepEqual(
+      spelled.map((m) => m[0]),
+      [],
+      'a command count written as a word cannot be held to the extension; write it as a numeral',
     );
   });
 

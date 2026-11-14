@@ -709,4 +709,60 @@ v1.4.0 and v2.0, and **6.03** in v6.0. An identifier cited here would be wrong f
 the ground truth is AWS's own guidance named rather than numbered: blocking public access to S3,
 security group rules, least privilege in IAM, encryption at rest, CloudTrail logging.
 
-Still unmeasured: the Compose and Dockerfile rules, which have their own published lists.
+Measured next, in Phase 166 below: the Compose and Dockerfile rules.
+
+## infra's Dockerfile and Compose rules, measured against Docker's own docs (Phase 166)
+
+The last unmeasured part of `infra`, and the last check in the product without a recall number.
+Eight rules — four reading a Dockerfile, four reading a Compose file — had never been pointed at a
+list somebody else wrote.
+
+`node eval/container-recall.ts`
+
+| | noticed | recommended shapes accused |
+|---|---|---|
+| 8 published Docker controls | **8 (100%)**, up from 7 | **0** of 8 |
+
+**The miss was the capability rule, and it was a one-word blind spot.** `cap_add` was matched only
+to set a flag saying "a block list follows", and the line was then skipped before any rule read it:
+
+```yaml
+cap_add:                      # found
+  - SYS_ADMIN
+cap_add: ["SYS_ADMIN"]        # missed - identical grant, and the form the Compose reference uses
+```
+
+The second form grants exactly what the first grants, and Compose's own reference writes short
+lists that way.
+
+**How common is it?** Not measured, and the honest answer is that the corpus cannot say: across the
+14 pinned repositories, `cap_add` appears **zero times in either form**, so this fix changes nothing
+the corpus sees and the corpus cannot show it matters. What can be said is narrower and still worth
+saying — the rule claimed to find a dangerous capability and found only one of the two ways of
+writing one, so anybody using the documented short form got silence that read like approval. The
+first draft of this paragraph called the inline form "the common one"; nothing measured that, so
+the sentence is gone.
+
+**What the safe half proved.** Going in, two defects were suspected: the missing inline form, and
+`cap_drop: SYS_ADMIN` being reported as a dangerous grant when it is hardening. Only the first was
+real. The rule already tracked which key it was under, with a comment saying why. Worth recording,
+because the second suspicion was the stronger one: an earlier version of the Kubernetes capability
+rule reported `drop: ["ALL"]` — the strongest hardening a pod spec can state — as a danger, 57
+times on Google's microservices-demo. Compose was written in the shape that bug had and does not
+have the bug. A suspicion is not a finding either.
+
+Twelve forms were then checked by hand rather than trusting the eight-control figure: inline
+quoted, unquoted, single-quoted, an empty list, a harmless capability inline and in block form,
+`cap_drop` in both forms, a `cap_drop: ["ALL"]` immediately followed by a real `cap_add`, a rule
+written in a comment, and a block list followed by an `environment` entry whose *value* is
+`SYS_ADMIN`. Only the four genuine grants fire, and the finding points at the grant rather than the
+drop above it.
+
+Ground truth is Docker's own documentation, named rather than numbered — USER rather than root, a
+pinned base image, COPY rather than ADD from a URL, no script piped into a shell, no privileged
+container, no daemon socket mounted in, no host network, no capability that undoes the sandbox.
+CIS Docker numbers were refused for the third time, for the reason Phases 160 and 165 give: an
+identifier that moves between versions is wrong for most readers.
+
+What this still cannot settle is whether a base image is itself sound. That needs the built image,
+not the file naming it.

@@ -1,6 +1,9 @@
-// The nine checks the evidence pack runs, as one list that both ways of running them share.
+// The checks the evidence pack runs, as one list that both ways of running them share.
 //
-// They used to be nine inline closures inside `gather`, which was fine while there was one way to
+// Not "the nine checks", which is what this line said while `CHECK_RUNNERS` held ten. A count in a
+// comment is a second copy of a fact, and the paragraph below is about exactly that.
+//
+// They used to be inline closures inside `gather`, which was fine while there was one way to
 // run them. There are now two - in this thread, or in a worker - and two copies of a list is how a
 // check quietly stops being run in one of them. Twice this week something derived from a second
 // copy of a fact drifted from the first, so the list lives here and nothing else has one.

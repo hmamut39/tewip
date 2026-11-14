@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { measure as accessRecall } from '../../eval/access-recall.ts';
 import { measure as agentRecall } from '../../eval/agent-recall.ts';
+import { measure as containerRecall } from '../../eval/container-recall.ts';
 import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
 import { measure as terraformRecall } from '../../eval/terraform-recall.ts';
@@ -80,6 +81,10 @@ const HARNESSES: Record<string, () => Counts> = {
   },
   terraform: () => {
     const all = terraformRecall();
+    return { found: all.filter((m) => m.noticed).length, of: all.length, accused: all.filter((m) => m.accused).length, decoys: all.length };
+  },
+  container: () => {
+    const all = containerRecall();
     return { found: all.filter((m) => m.noticed).length, of: all.length, accused: all.filter((m) => m.accused).length, decoys: all.length };
   },
   infra: () => {
@@ -194,10 +199,16 @@ describe('where a precision figure is pinned', () => {
   }
 
   it('says plainly which figures are not pinned at all', () => {
-    // The two harness-backed rows count their own decoys, which the test above re-derives, so they
-    // need no corpus. Any other unpinned row is a precision claim with nothing behind it.
+    // These rows count their own decoys, which the test above re-derives, so they need no corpus.
+    // Any other unpinned row is a precision claim with nothing behind it. The list is named rather
+    // than counted: a comment saying "the two rows" is the same stale-by-omission shape this file
+    // exists to catch, and it had already drifted to three before anyone looked.
     const unpinned = MEASURED.filter((r) => !r.pinnedIn).map((r) => r.check);
-    assert.deepEqual(unpinned, ['infra (Terraform)', 'agent (the guards)', 'agent (prompt-injection flows)'], `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`);
+    assert.deepEqual(
+      unpinned,
+      ['infra (Terraform)', 'infra (Docker)', 'agent (the guards)', 'agent (prompt-injection flows)'],
+      `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`,
+    );
   });
 });
 

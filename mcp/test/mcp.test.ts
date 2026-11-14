@@ -9,7 +9,7 @@
 // server at it with TRIAGE_DATA_DIR - the same switch the drift lab uses - so they run everywhere
 // and do not depend on whatever happens to be in the author's data directory.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -95,6 +95,29 @@ describe('MCP server', () => {
     assert.ok(tools.filter((t) => !writes.includes(t.name)).every((t) => t.annotations?.readOnlyHint === true), 'every other tool must be read-only');
     assert.ok(tools.filter((t) => writes.includes(t.name)).every((t) => t.annotations?.readOnlyHint === false), 'a tool that writes must not claim to be read-only');
     assert.ok(tools.every((t) => t.annotations?.destructiveHint === false), 'no tool may be destructive');
+  });
+
+  // Phase 166: the README's front table said "fifteen tools" while the server served 25.
+  //
+  // Not a wrong number produced by a rule - a sentence that was true when it was written, in the
+  // first table a reader sees, with nothing re-deriving it. The same shape as "all eleven commands"
+  // against 41 dispatched, and as the README's table of measured checks listing five of eight. Ten
+  // tools of work, built and shipped, that the front door did not mention.
+  //
+  // The count comes from `listTools` over the real protocol rather than from grep: the tools are
+  // registered three different ways - one call each, and two tables looped over - so counting the
+  // source undercounted by seven, which is how the figure would go stale again.
+  it('is the number of tools the README promises', async () => {
+    const { tools } = await client.listTools();
+    const readme = readFileSync(join(PROJECT_ROOT, 'README.md'), 'utf8');
+    const claimed = /`tewip mcp`: (\d+) tools/.exec(readme);
+    assert.ok(claimed, 'the README no longer states how many tools the MCP server serves, which is worse than stating it wrongly');
+    assert.equal(
+      Number(claimed[1]),
+      tools.length,
+      `the README promises ${claimed[1]} tools and the server serves ${tools.length}. ` +
+        'Somebody choosing a tool for their IT department reads that line before anything else.',
+    );
   });
 
   it('refuses to plan for a project path that is not an existing absolute folder', async () => {

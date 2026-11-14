@@ -27,7 +27,39 @@ function bare(line: string): string {
   return out;
 }
 
-const RULES: Array<{ rule: string; re: RegExp; what: string; because: string; risk: 'high' | 'medium' }> = [
+/**
+ * The capability names that matter, as a scanner rather than a line match.
+ *
+ * Used for the inline form `cap_add: ["SYS_ADMIN"]`, which is how Compose's own reference writes a
+ * short list. The block form keeps its own anchored pattern below, because there a bare name on a
+ * line is the whole statement and anchoring is what stops prose matching.
+ */
+const DANGEROUS = /\b(?:SYS_ADMIN|SYS_PTRACE|SYS_MODULE|NET_ADMIN|DAC_READ_SEARCH)\b/g;
+
+interface Rule {
+  rule: string;
+  re: RegExp;
+  what: string;
+  because: string;
+  risk: 'high' | 'medium';
+}
+
+/**
+ * Named rather than looked up out of `RULES` below, which it is also a member of.
+ *
+ * The inline form needs this rule's wording without matching its line pattern, and a
+ * `RULES.find(...)` for it is a lookup that can return undefined - which would make a renamed rule
+ * silently stop reporting rather than fail to compile.
+ */
+const CAPABILITY: Rule = {
+  rule: 'dangerous-capability',
+  re: /^\s*-\s*["']?(SYS_ADMIN|SYS_PTRACE|SYS_MODULE|NET_ADMIN|DAC_READ_SEARCH)["']?\s*$/,
+  what: 'a container is given a capability that undoes the sandbox',
+  because: 'SYS_ADMIN and SYS_MODULE are close to root on the host; SYS_PTRACE and DAC_READ_SEARCH read other processes and files the container should not see',
+  risk: 'medium',
+};
+
+const RULES: Rule[] = [
   {
     rule: 'docker-socket',
     re: /\/var\/run\/docker\.sock/,
@@ -49,13 +81,7 @@ const RULES: Array<{ rule: string; re: RegExp; what: string; because: string; ri
     because: 'it reaches anything bound to localhost on the host, which is usually where the unauthenticated admin ports are',
     risk: 'high',
   },
-  {
-    rule: 'dangerous-capability',
-    re: /^\s*-\s*["']?(SYS_ADMIN|SYS_PTRACE|SYS_MODULE|NET_ADMIN|DAC_READ_SEARCH)["']?\s*$/,
-    what: 'a container is given a capability that undoes the sandbox',
-    because: 'SYS_ADMIN and SYS_MODULE are close to root on the host; SYS_PTRACE and DAC_READ_SEARCH read other processes and files the container should not see',
-    risk: 'medium',
-  },
+  CAPABILITY,
 ];
 
 export function readCompose(file: string, source: string): IacFinding[] {
@@ -67,8 +93,28 @@ export function readCompose(file: string, source: string): IacFinding[] {
   let inCapAdd = false;
   for (const [i, raw] of lines.entries()) {
     const line = bare(raw);
-    if (/^\s*cap_add\s*:/.test(line)) {
-      inCapAdd = true;
+    const capAdd = /^\s*cap_add\s*:(.*)$/.exec(line);
+    if (capAdd) {
+      const inline = capAdd[1].trim();
+      // A block list follows on the next lines only when nothing follows the colon here.
+      inCapAdd = inline === '';
+      // `cap_add: ["SYS_ADMIN"]` grants exactly what the block form grants, and this rule used to
+      // miss it entirely: the `continue` that set the block flag consumed the line before any rule
+      // read it. Measured in eval/container-recall.ts, which is why it is a line of code now.
+      // `.match`, not `.test`: `DANGEROUS` carries the `g` flag, and `.test` on a global regex
+      // advances `lastIndex` between calls, so the second file scanned would get a different
+      // answer from the first. `.match` resets it.
+      if (inline.match(DANGEROUS) !== null) {
+        found.push({
+          file,
+          line: i + 1,
+          rule: CAPABILITY.rule,
+          what: CAPABILITY.what,
+          because: CAPABILITY.because,
+          evidence: line.trim().slice(0, 160),
+          risk: CAPABILITY.risk,
+        });
+      }
       continue;
     }
     if (/^\s*[a-z_]+\s*:/i.test(line) && !/^\s*-/.test(line)) inCapAdd = false;

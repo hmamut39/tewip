@@ -10,7 +10,7 @@
 // "nothing installed" and a zero meaning "nothing wrong" are indistinguishable, and the first one
 // is the one that gets somebody hurt.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -101,5 +101,19 @@ describe('finding and reading the checkouts', () => {
     const cell = examine(join(root, 'api'), true).cells.injection;
     assert.equal(cell.ran, true);
     assert.equal((cell as { count: number }).count, 1);
+  });
+});
+
+// Phase 166: the README said `portfolio` runs seven checks, and `CHECKS` had eight.
+//
+// An eighth column - hollow tests - had been added and the sentence describing the command was
+// never touched. True when written, nothing re-deriving it, and it undersells the work by a column.
+// The same shape as "fifteen tools" against 25 served, found in the same sweep.
+describe("the README's count of what portfolio runs", () => {
+  it('is the number of checks there actually are', () => {
+    const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf8');
+    const claimed = /`portfolio`\*\* runs (\d+) checks/.exec(readme);
+    assert.ok(claimed, 'the README no longer says how many checks `portfolio` runs');
+    assert.equal(Number(claimed[1]), CHECKS.length, `the README says ${claimed[1]} checks and CHECKS has ${CHECKS.length}: ${CHECKS.join(', ')}`);
   });
 });

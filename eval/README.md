@@ -634,3 +634,54 @@ oversold it, by not saying that this is the normal outcome rather than an edge c
 **The gate stays where it is.** Phase 56 measured why over 471 labelled failures: a real bug sits at
 its 3–6% base rate in every bucket of the evidence visible when a test fails. Lowering 0.85, or
 inflating the rule's 0.40, would buy a feature that fires by making a number untrue.
+
+## vouch's recall covered one language, and the harness could not reach the others (Phase 162)
+
+The figure above — 48 of 64, 75.0% — carries a caveat that was true but understated: *"measured on
+this project's own test suite, not on strangers' code."* It was also measured on **one language out
+of the eight `vouch` claims**, and not by choice. The harness ran only Mocha and `node --test`, and
+line 98 hardcoded `languageOf('x.js')`, so every test file was *parsed* as JavaScript whatever its
+extension. Pointing it at Python ran `node --test` on a `.py` file and reported **"0 test(s) ran
+before anything was changed"** — which is how the gap was found.
+
+A pytest runner now exists, keyed by pytest's own `file::test[param]` id because parametrised tests
+share a function name, and the language is read from the filename instead of assumed.
+
+**First run on a stranger's code** — `python-humanize/humanize` at `a950045`, `filesize.py` against
+`test_filesize.py`, 12 mutants:
+
+| | |
+|---|---|
+| tests that ran | 76 |
+| mutants caught (by 56, 3, 6, 68, 68 tests) | 5 of 5 |
+| tests that provably lost their check | **0** |
+| tests that still caught a mutation after the deletion | 74 |
+| **of those, wrongly called unable to fail** | **0** |
+
+**Precision extends to a second language and a stranger's codebase: 0 of 74.** Recall does not, and
+the reason is a limit of the method rather than of `vouch`. The seeding rule drops a test's last
+statement, and humanize's tests are parametrised functions whose whole body is one assertion:
+
+```python
+@pytest.mark.parametrize("test_args, expected", [...])
+def test_naturalsize(test_args, expected):
+    assert humanize.naturalsize(*test_args) == expected
+```
+
+There is nothing to drop except the check itself, so the rule — which deliberately only deletes
+where something is left behind — produces no hollow tests, and with no labels there is no rate. That
+is pytest's dominant style, so **this method cannot measure recall on most Python suites.** Picking
+a Python project whose tests happen to be multi-statement would produce a number, and it would be a
+number about the subject rather than about the tool.
+
+**Four of my own mistakes made this take four attempts, and each one surfaced as an impossible
+number rather than a plausible one:** a relative `PYTHONPATH` resolved against the wrong directory;
+a missing `_version.py` that setuptools-scm generates at build time; `-q` silently overriding `-v`
+so pytest printed dots instead of one line per test; and a `\S+` that stopped at the space inside
+`[test_args0-300 Bytes]` and matched 20 of 76 collected tests. The last one was the worst: a silent
+56-test drop would have produced a smaller, confident, entirely wrong recall figure.
+
+The fifth was the real trap. The regex ended in `\x08` — a literal backspace — because a Python
+replacement wrote `\b` into a non-raw string. `sed`, `grep` and every other rendering display that
+character as nothing, so four readings of the line said it was correct while it matched nothing.
+Only `repr()` of the raw bytes showed it. **Reading a regex is not verifying it.**

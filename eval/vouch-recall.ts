@@ -44,7 +44,46 @@ const NL = String.fromCharCode(10);
  * keying by title silently merged four of them and the first run of this measurement was nonsense.
  */
 function run(root: string, testFile: string): { failed: Set<string>; all: Map<string, string> } {
+  if (/\.py$/i.test(testFile)) return viaPytest(root, testFile);
   return usesMocha(root) ? viaMocha(root, testFile) : viaNode(root, testFile);
+}
+
+/**
+ * pytest, read from its own verbose line per test.
+ *
+ * Until this existed the harness ran `node --test` on whatever it was given, so pointing it at a
+ * Python file ran nothing at all and reported "0 test(s) ran before anything was changed" - which
+ * is honest, and is how the gap was found. `vouch` claims eight languages and its recall figure
+ * covered one of them.
+ *
+ * `-p no:cacheprovider` so a measurement leaves no .pytest_cache behind in somebody else's
+ * repository, and `-q --no-header` to keep the output to the lines that matter. The id pytest
+ * prints - `tests/test_filesize.py::test_naturalsize[1-1 Byte]` - is the full title here, because
+ * parametrised tests share a function name and only the id separates them.
+ */
+function viaPytest(root: string, testFile: string): { failed: Set<string>; all: Map<string, string> } {
+  const ran = spawnSync(
+    'python',
+    // `-v` and no `-q`: together, `-q` wins and pytest prints dots instead of a line per test, so
+    // nothing could be parsed and the harness reported "0 test(s) ran" on a suite of 76 passing
+    // ones. The run itself was fine; only the output was unreadable.
+    ['-m', 'pytest', testFile, '-v', '--tb=no', '--no-header', '-p', 'no:cacheprovider'],
+    { cwd: root, encoding: 'utf8', timeout: 300_000, maxBuffer: 64 * 1024 * 1024 },
+  );
+  const all = new Map<string, string>();
+  const failed = new Set<string>();
+  for (const line of (ran.stdout ?? '').split(NL)) {
+    // The id can hold spaces: pytest prints `test_naturalsize[test_args0-300 Bytes]`, so a `\S+`
+    // stopped at the space and matched 20 of 76 collected tests. Everything up to the status word.
+    const m = /^(\S.*::.*?)\s+(PASSED|FAILED|ERROR|XFAIL|XPASS|SKIPPED)/.exec(line.trim());
+    if (!m) continue;
+    const id = m[1];
+    // The function name without its parameters, which is what `testsIn` reads out of the source.
+    const title = /::([^:[]+)/.exec(id)?.[1] ?? id;
+    all.set(id, title);
+    if (m[2] === 'FAILED' || m[2] === 'ERROR') failed.add(id);
+  }
+  return { failed, all };
 }
 
 const usesMocha = (root: string): boolean => {
@@ -94,8 +133,9 @@ function viaNode(root: string, testFile: string): { failed: Set<string>; all: Ma
  * Hollow tests made by a rule that knows nothing about assertions: drop the last statement of a test.
  * Whether that removed the check is not decided here - execution decides it later.
  */
-function withLastStatementDropped(text: string, only: string[]): { text: string; touched: string[] } {
-  const language = languageOf('x.js')!;
+function withLastStatementDropped(text: string, only: string[], testFile: string): { text: string; touched: string[] } {
+  // Was `languageOf('x.js')` - every test file parsed as JavaScript, whatever it actually was.
+  const language = languageOf(testFile) ?? languageOf('x.js')!;
   const tests = testsIn(language, text);
   const lines = text.split(NL);
   const touched: string[] = [];
@@ -222,7 +262,7 @@ function main(): void {
     // twice would give two different files, and nothing below would be comparable.
     const proved = wholeHigh.filter((j) => j.caught.size > 0).map((j) => j.name);
     process.stderr.write(`${NL}${proved.length} test(s) proved they check something; removing their last statement${NL}`);
-    const seeded = withLastStatementDropped(originalTests, proved);
+    const seeded = withLastStatementDropped(originalTests, proved, testFile);
     hollowed = seeded.touched;
     writeFileSync(testPath, seeded.text, 'utf8');
     process.stderr.write(`${NL}last statement dropped from ${hollowed.length} test(s)${NL}`);

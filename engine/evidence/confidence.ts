@@ -133,12 +133,13 @@ export const MEASURED: Confidence[] = [
   {
     check: 'vouch',
     command: 'vouch',
-    precision: '0 of 157 sound tests wrongly accused, and pinned across 10 real projects in the corpus',
+    precision: '0 of 157 sound tests wrongly accused here, and 0 of 74 on a stranger’s Python suite; pinned across 10 real projects in the corpus',
     pinnedIn: ['keycloak', 'openmrs-core', 'bitwarden-server', 'saleor', 'govuk-frontend', 'firefly-iii', 'discourse', 'ripgrep', 'angular-components', 'gin'],
     recall: '48 of 64 (75.0%) tests that provably lost their check were named',
     from: 'eval/vouch-recall.ts',
     measured: { found: 48, of: 64, accused: 0, decoys: 157 },
-    groundTruth: 'execution - a test that caught a mutation before and catches none now',
+    groundTruth:
+      'execution - a test that caught a mutation before and catches none now. The recall figure is measured on this project’s own suite in JavaScript, and on no other language: until Phase 162 the harness ran only Mocha and node:test and parsed every test file as JavaScript whatever its extension. A pytest runner now exists and extends the *precision* figure to Python, but not the recall one - the seeding rule drops a test’s last statement, and pytest’s commonest shape is a parametrised function whose body is a single assertion, which it cannot hollow out',
   },
 ];
 

@@ -1,6 +1,7 @@
 // Shared pieces of every role's view: how one failure is printed (always with its confidence,
 // data source, next action and evidence), where each category must be routed, and the check
 // behind the phase-4 metric.
+import { triageReliability } from '../engine/measured.ts';
 import type { Diagnosis, DiagnosisCategory } from '../reporters/types.ts';
 import type { TriageItem } from './items.ts';
 
@@ -84,6 +85,14 @@ export function missingFromView(view: View, i: TriageItem): string | null {
   return null;
 }
 
-/** Header line that ties a view's numbers to the dataset they came from. */
+/**
+ * Header line that ties a view's numbers to the dataset they came from, and to how often they are
+ * right.
+ *
+ * This used to end "Measured accuracy on real CI data: see eval/README.md" - a pointer rather than
+ * a figure, and the figure it pointed at was the overall one, which 1,682 TIMING cases out of 2,358
+ * were carrying. A reader acting on a diagnosis deserves the per-category number in front of them,
+ * the weakest one included. See engine/measured.ts.
+ */
 export const sourceNote = (dataset: string) =>
-  `> Data: \`${dataset}\`. Every diagnosis shows its confidence and whether rules or the AI model produced it. Measured accuracy on real CI data: see eval/README.md.`;
+  `> Data: \`${dataset}\`. Every diagnosis shows its confidence and whether rules or the AI model produced it. ${triageReliability()}`;

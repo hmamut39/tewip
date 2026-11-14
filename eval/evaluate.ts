@@ -78,7 +78,7 @@ interface Case {
 const percent = (n: number, d: number) => (d === 0 ? 'n/a' : `${((n / d) * 100).toFixed(1)}%`);
 const correct = (c: Case) => c.diagnosis.category === c.label.label;
 
-function matchLabels(records: TriageRecord[], labels: GroundTruthLabel[]): Array<{ record: TriageRecord; label: GroundTruthLabel }> {
+export function matchLabels(records: TriageRecord[], labels: GroundTruthLabel[]): Array<{ record: TriageRecord; label: GroundTruthLabel }> {
   const unused = labels.filter((l) => !records.some((r) => r.testId === l.testId && (!l.runId || r.runId === l.runId)));
   for (const l of unused) console.warn(`[eval] label matches no collected failure: ${l.testId}${l.runId ? ` @ ${l.runId}` : ''}`);
   const out: Array<{ record: TriageRecord; label: GroundTruthLabel }> = [];

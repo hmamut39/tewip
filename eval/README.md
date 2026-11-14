@@ -508,3 +508,45 @@ it fell back, so two durations can be compared honestly.
 Both paths run the same list from `engine/evidence/checks.ts`. One list, because two copies is how a
 check quietly stops running in one of them, and three times this week something derived from a
 second copy of a fact drifted from the first.
+
+## the triage engine, per category, which only ever published an average (Phase 159)
+
+Every check in this product publishes a measured recall against a published list, re-derived in CI.
+The triage engine — the oldest part, and what `explain`, `done` and the MCP tools are built on —
+published one overall figure, and the reports pointed at this file rather than naming it: *"Measured
+accuracy on real CI data: see eval/README.md."* A pointer is how a weak number stays unread.
+
+`node eval/triage-recall.ts` — 2,358 labelled failures, seven pinned datasets, rules only:
+
+| category | found | refused (UNKNOWN) | put in the wrong category |
+| --- | --- | --- | --- |
+| TIMING | 1575/1682 = **93.6%** | 86 | 21 |
+| ENV | 479/516 = **92.8%** | 24 | 13 |
+| TEST_DATA | 6/8 = 75.0% | 2 | 0 |
+| LOCATOR_DRIFT | 21/33 = 63.6% | 12 | 0 |
+| **REAL_BUG** | **17/119 = 14.3%** | 97 | 5 |
+
+Overall 2098/2358 = 89.0%.
+
+**Why the average was hiding the answer.** 1,682 of those 2,358 cases are TIMING, so an engine that
+recognised nothing but a flaky timeout would score near 70% without answering a single useful
+question. The question a developer opens this tool to ask — is this a real bug — comes back right
+about one time in seven.
+
+**Two facts, and both have to be said.** The engine finds roughly one real bug in seven, which is a
+limitation anybody choosing this tool should weigh. And where it cannot tell, it refuses rather than
+misleads: **221 of its 260 misses are UNKNOWN**, which routes the failure to a person with the
+evidence attached instead of sending them after a bug that is not there. The second is why the first
+is survivable. It is not an answer to it.
+
+That refusal is not an accident of tuning. `LLM_CONFIDENCE_CEILING` is 0.45 and `ESCALATE_BELOW` is
+0.5, so every model verdict is below the action threshold by construction, and `contradictsHistory`
+refuses REAL_BUG outright when it rests on nothing but a timeout. Phase 56 measured why, over 471
+labelled failures: REAL_BUG sits at its 3–6% base rate in **every** bucket of the evidence a
+classifier can see when a test fails. Nothing visible at failure time separates a real bug from
+flakiness, so an engine that scored well on REAL_BUG at failure time would be guessing.
+
+The figures are recorded in `engine/measured.ts` with their provenance, and every triage report now
+carries them instead of a link. `engine/test/triage-measured.test.ts` holds the sentence to the
+record, checks the record adds up, and fails if refusals ever stop outnumbering wrong causes — the
+point at which the engine would have started guessing where it used to decline.

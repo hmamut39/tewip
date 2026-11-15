@@ -86,6 +86,39 @@ function fromNpm(root: string): { components: Component[]; note: string | null }
  * installed metadata is the truth, and it is not in the repository. Saying so is the useful
  * answer; inventing the rest is not.
  */
+/**
+ * Manifest filenames from ecosystems this file handles nowhere else.
+ *
+ * Not a claim to read any of them - a claim to notice them. Every entry here would otherwise be
+ * invisible, and an invisible manifest is how a bill of materials comes back empty and confident
+ * for a project full of dependencies. Anything matched by `OTHER_ECOSYSTEMS` or read outright is
+ * absent from this set, and a test asserts that stays true: a name in both would be reported twice.
+ */
+const UNREAD_MANIFESTS = new Set([
+  'Package.swift',
+  'Package.resolved',
+  'Podfile',
+  'Podfile.lock',
+  'Cartfile',
+  'mix.exs',
+  'rebar.config',
+  'project.clj',
+  'deps.edn',
+  'build.sbt',
+  'stack.yaml',
+  'cabal.project',
+  'Pipfile',
+  'Pipfile.lock',
+  'poetry.lock',
+  'conanfile.txt',
+  'vcpkg.json',
+  'shard.yml',
+  'dub.json',
+  'Project.toml',
+  'renv.lock',
+  'DESCRIPTION',
+]);
+
 const OTHER_ECOSYSTEMS: Array<[matches: (name: string) => boolean, says: string]> = [
   [(n) => n === 'requirements.txt', 'Python: requirements.txt lists what was asked for, not the versions installed or anything transitive, and the installed metadata is not in the repository'],
   [(n) => n === 'pyproject.toml', 'Python: pyproject.toml declares ranges, not the versions that would ship'],
@@ -95,6 +128,7 @@ const OTHER_ECOSYSTEMS: Array<[matches: (name: string) => boolean, says: string]
   [(n) => n === 'build.gradle' || n === 'build.gradle.kts', 'Java: Gradle resolution needs the build, which Tewip does not run'],
   [(n) => n === 'Cargo.lock', 'Rust: Cargo.lock is readable but Tewip does not read it yet'],
   [(n) => n === 'composer.lock', 'PHP: composer.lock is readable but Tewip does not read it yet'],
+  [(n) => n === 'pubspec.yaml' || n === 'pubspec.lock', 'Dart or Flutter: pub resolution is readable but Tewip does not read it yet'],
   // .NET, which the comment above has claimed since this was written and the list never had.
   //
   // Found by pinning `sbom` on bitwarden-server: a large C# server with a `.csproj` in every
@@ -241,5 +275,20 @@ export function inventory(root: string): Inventory {
   }
   const names = manifestNames(root);
   for (const [matches, says] of OTHER_ECOSYSTEMS) if ([...names].some(matches)) notRead.push(says);
+  // Anything that is plainly a dependency manifest and matched nothing above.
+  //
+  // The list above is hand-maintained and has now gone stale twice in the same way: once for .NET
+  // on bitwarden-server, named in the comment above, and once for Dart on a clone of the Flutter
+  // SDK - 141 `pubspec.yaml` files, and this report said "0 package(s)... the section below says
+  // why, and that is the whole answer", listing only a Java gap. Adding Dart fixes Dart and waits
+  // for the next one.
+  //
+  // So a manifest whose name nobody here recognises is reported as exactly that, rather than
+  // falling out of the report. It still cannot be read, and that is not what was wrong: what was
+  // wrong is that it was not mentioned.
+  const unrecognised = [...names].filter((n) => UNREAD_MANIFESTS.has(n)).sort();
+  if (unrecognised.length > 0) {
+    notRead.push(`${unrecognised.join(', ')}: a dependency manifest Tewip does not recognise, so nothing in it is in this list`);
+  }
   return { components: components.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version)), notRead, read };
 }

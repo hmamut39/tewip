@@ -189,6 +189,7 @@ export const PLAIN: Record<string, string> = {
   ruby: 'Ruby',
   php: 'PHP',
   rust: 'Rust',
+  pub: 'Dart or Flutter',
   sql: 'SQL',
   django: 'Django',
   rails: 'Rails',
@@ -217,6 +218,8 @@ const ECOSYSTEM_OF = (name: string): string | null => {
   if (name === 'Cargo.toml') return 'cargo';
   if (name === 'pom.xml' || name === 'build.gradle' || name === 'build.gradle.kts') return 'maven';
   if (name === 'Gemfile') return 'rubygems';
+  // Phase 187: 141 of these in a clone of the Flutter SDK, counted by neither this nor `sbom`.
+  if (name === 'pubspec.yaml') return 'pub';
   if (name === 'composer.json') return 'composer';
   if (/\.(?:cs|fs|vb)proj$/.test(name)) return 'nuget';
   return null;

@@ -229,3 +229,50 @@ describe('an ecosystem Tewip cannot read', () => {
     assert.equal(inventory(root).notRead.join(' ').includes('Rust'), false);
   });
 });
+
+// Phase 187. On a clone of the Flutter SDK - 141 `pubspec.yaml` files - `sbom` said:
+//
+//   0 package(s). Nothing was read. The section below says why, and that is the whole answer
+//   ## What is not in this list
+//   - Java: Gradle resolution needs the build, which Tewip does not run
+//
+// A complete, confident, empty bill of materials for a repository full of Dart dependencies, whose
+// gap list claimed to be the whole answer and omitted the project's primary ecosystem. The comment
+// in `inventory.ts` already records this happening once before, for .NET on bitwarden-server. The
+// list is hand-maintained, so adding Dart fixes Dart and waits for the next one.
+describe('a manifest nobody on the list recognised', () => {
+  it('names Dart rather than passing over it', () => {
+    const root = project({ 'pubspec.yaml': 'name: app\ndependencies:\n  http: ^1.0.0\n' });
+    const { notRead, components } = inventory(root);
+    assert.equal(components.length, 0, 'it still cannot read pub, and does not pretend to');
+    assert.ok(
+      notRead.some((n) => /Dart or Flutter/.test(n)),
+      `the gap list has to name Dart: ${JSON.stringify(notRead)}`,
+    );
+  });
+
+  it('reports a manifest it recognises by name but handles nowhere', () => {
+    // Found on the same repository: Flutter's iOS build uses CocoaPods, which neither the gap list
+    // nor the readers knew. It fell out of the report entirely.
+    const root = project({ 'Podfile': "platform :ios, '12.0'\n" });
+    assert.ok(
+      inventory(root).notRead.some((n) => /Podfile.*does not recognise/.test(n)),
+      'an unrecognised manifest must be named, not dropped',
+    );
+  });
+
+  it('says nothing about a project with no manifests at all', () => {
+    const root = project({ 'README.md': '# nothing here' });
+    assert.deepEqual(inventory(root).notRead, [], 'a report that invents gaps is as bad as one that hides them');
+  });
+
+  it('never reports one manifest twice', () => {
+    // A name in both the recognised-gap list and the unrecognised set would print two lines about
+    // the same file, which reads as two separate problems.
+    const root = project({ 'pubspec.yaml': 'name: app\n', 'go.mod': 'module x\n' });
+    const { notRead } = inventory(root);
+    const dart = notRead.filter((n) => /pubspec|Dart/.test(n));
+    assert.equal(dart.length, 1, `pubspec is reported ${dart.length} times: ${JSON.stringify(dart)}`);
+    assert.ok(!notRead.some((n) => /go\.mod.*does not recognise/.test(n)), 'go.mod is handled, so it is not unrecognised');
+  });
+});

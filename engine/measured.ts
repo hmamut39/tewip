@@ -166,7 +166,7 @@ export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
  */
 export const RULES_MEASURED_AT = {
   /** From `rulesFingerprint()` in engine/fingerprint.ts. */
-  hash: '521a7e0d97fff036',
+  hash: '65eec946969bd959',
   /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
   files: 22,
   at: '2026-11-15',

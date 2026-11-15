@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
-import { SIGNALS, errorOf, wilson } from '../engine/evidence/failure-signals.ts';
+import { SIGNALS, errorOf, isAssertion, mentionsLocator, wilson } from '../engine/evidence/failure-signals.ts';
 import { DATASET_ACCURACY } from '../engine/measured.ts';
 import { readJsonl } from '../reporters/store.ts';
 import { matchLabels, type GroundTruthLabel } from './evaluate.ts';
@@ -185,7 +185,71 @@ function report(all: DatasetSignals[], residueOnly: boolean): void {
   process.stdout.write(lines.join(NL));
 }
 
+/**
+ * Does a tally of the two REAL_BUG signals order the residue usefully?
+ *
+ * Phase 182 asked, because a product that honestly refuses 148 failures could still help by saying
+ * which to look at first. Scoring each case 0-2 on "is an assertion" and "names no element" orders
+ * them beautifully on the seven corpora the signals were found in - 92%, 44%, 25% - and carries no
+ * information at all on the one corpus they were not: 17% at score 2 against 21% at score 1, which
+ * is backwards.
+ *
+ * So there is no ranking in the product, and this is here so the question is not re-opened from
+ * memory. Run with `--rank`.
+ */
+async function rank(root: string, heldOut: string[]): Promise<void> {
+  const groups = new Map<string, Map<number, { n: number; k: number }>>();
+  for (const d of DATASET_ACCURACY.concat(HELD_OUT)) {
+    const labelsAt = join(root, d.labels);
+    const dataAt = join(root, d.data);
+    if (!existsSync(labelsAt) || !existsSync(dataAt)) continue;
+    const dataset = loadDataset(dataAt);
+    const matched = matchLabels(dataset.records, readJsonl<GroundTruthLabel>(labelsAt));
+    if (matched.length === 0) continue;
+    const index = new HistoryIndex(dataset.records, dataset.summaries);
+    const rules = await diagnosePipeline(
+      matched.map((m) => m.record),
+      index,
+      null,
+    );
+    const group = heldOut.includes(d.data) ? 'held out from the signals' : 'the corpora the signals were found in';
+    const by = groups.get(group) ?? new Map();
+    matched.forEach((m, i) => {
+      if (rules[i].category !== 'UNKNOWN') return;
+      const e = errorOf(m.record as never);
+      const score = (isAssertion(e) ? 1 : 0) + (mentionsLocator(e) ? 0 : 1);
+      const at = by.get(score) ?? { n: 0, k: 0 };
+      at.n += 1;
+      if (m.label.label === TARGET) at.k += 1;
+      by.set(score, at);
+    });
+    groups.set(group, by);
+  }
+  const lines = ['# does a signal tally order the residue?', '', '| group | score | cases | real bugs | rate |', '| --- | --- | --- | --- | --- |'];
+  for (const [group, by] of groups) {
+    for (const score of [2, 1, 0]) {
+      const at = by.get(score);
+      if (at) lines.push(`| ${group} | ${score} | ${at.n} | ${at.k} | ${pct(at.k, at.n)} |`);
+    }
+  }
+  lines.push(
+    '',
+    'An ordering that is monotonic where it was found and flat or inverted where it was not is not an',
+    'ordering, it is the shape of the data it came from. There is no ranking in the product for this',
+    'reason, and this harness is what would have to disagree before there is one.',
+    '',
+  );
+  process.stdout.write(lines.join(NL));
+}
+
+/** In `triage-recall.ts`'s corpus but not `DATASET_ACCURACY`, so nothing is tuned on it. */
+const HELD_OUT = [{ dataset: 'gutenberg-local', labels: 'eval/ground-truth.gutenberg-local.jsonl', data: 'data/real/gutenberg-local', right: 0, of: 0 }];
+
 if (import.meta.main) {
-  const residueOnly = process.argv.includes('--residue');
-  report(await measure(process.cwd(), residueOnly), residueOnly);
+  if (process.argv.includes('--rank')) {
+    await rank(process.cwd(), ['data/real/gutenberg-local']);
+  } else {
+    const residueOnly = process.argv.includes('--residue');
+    report(await measure(process.cwd(), residueOnly), residueOnly);
+  }
 }

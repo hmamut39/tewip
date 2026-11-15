@@ -35,8 +35,15 @@
 //
 //   - It fires only where every other rule declined. That is exactly the population it was measured
 //     on, and running it anywhere else would be a different rule with no number behind it.
-//   - One held-out corpus is one. `node eval/real-bug-signal.ts --residue` re-asks the question,
-//     and the next harvest nobody has seen is the test that still matters.
+//   - One held-out corpus is one, and on it this rule fired exactly once. Phase 182 put a number
+//     on how thin that is: on the same corpus the pattern *without* the history guard - assertion,
+//     no element named - is a real bug 3 times in 18. The guard threw away seventeen of those and
+//     kept the one that was, which is the guard working, and it is also a single observation. The
+//     next harvest nobody has seen is the test that still matters.
+//   - Phase 182 also tried to turn these signals into an ordering of the failures the rules refuse,
+//     so a person could be told which to open first. It ranks them 92% / 44% / 25% on the corpora
+//     the signals came from and 17% / 21% on the one they did not, which is backwards. There is no
+//     ranking in the product for that reason: `node eval/real-bug-signal.ts --rank`.
 import { isAssertion, mentionsLocator } from './evidence/failure-signals.ts';
 import type { Evidence } from '../reporters/types.ts';
 

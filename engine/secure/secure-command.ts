@@ -76,7 +76,15 @@ export function renderSecurity(items: SecurityItem[], checked: string[], notChec
 export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
   const root = resolve(cmd.root);
   const accepted = readAccepted(root);
-  const scan = scanSourceFiles(root, cmd.fileLimit);
+  // Everything on disk, not only what git counts as the project.
+  //
+  // Phase 189 taught the shared walk to skip what `.gitignore` excludes, which is right for a
+  // barrier or a dependency: neither is actionable in a downloaded SDK. A credential is not like
+  // that. `.env` is gitignored in almost every project and is exactly where one lives, and the
+  // triage below already tells tracked from untracked - a secret git has never seen is reported
+  // differently, with "keep it that way" rather than "rotate it". Filtering here would have
+  // removed the file this check most needs to see, and called the result a clean scan.
+  const scan = scanSourceFiles(root, cmd.fileLimit, undefined, true);
   const files = scan.files;
   const items: SecurityItem[] = [];
   // Counted, and counted separately from the injection scan below.

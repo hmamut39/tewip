@@ -41,7 +41,7 @@ export function renderSecurity(items: SecurityItem[], checked: string[], notChec
   const accepted = items.filter((i) => i.verdict === 'accepted');
 
   const lines = ['# Tewip security check', ''];
-  lines.push(`Checked: ${checked.length > 0 ? checked.join(', ') : 'nothing ran'}.`);
+  lines.push(`Checked: ${checked.length > 0 ? checked.join('; ') : 'nothing ran'}.`);
   if (notChecked.length > 0) lines.push(`**Not checked**: ${notChecked.join('; ')}.`);
   lines.push('');
   lines.push(`${real.length} need someone now · ${later.length} real but not reachable · ${noise.length} noise · ${accepted.length} accepted earlier.`);
@@ -79,7 +79,15 @@ export async function runSecure(cmd: SecureCommand): Promise<SecurityItem[]> {
   const scan = scanSourceFiles(root, cmd.fileLimit);
   const files = scan.files;
   const items: SecurityItem[] = [];
-  const checked: string[] = ['secrets in the working tree'];
+  // Counted, and counted separately from the injection scan below.
+  //
+  // Phase 188. These two sat in one sentence - "secrets in the working tree, user input reaching a
+  // query or a shell, in 0 JavaScript and TypeScript file(s)" - and the file count at the end read
+  // as though it governed both. On a Dart project that produced a report saying 0 files were
+  // checked and naming a finding in `lib/config.dart` in the same breath. The secrets scan reads
+  // every file whatever the language; only the injection scan is limited to JavaScript and
+  // TypeScript, and the sentence now says which is which.
+  const checked: string[] = [`secrets in the working tree, in ${files.length} file(s) of any language`];
   const notChecked: string[] = [];
 
   // A scan that stopped short is not a scan of the project, and "no secrets found" is the worst

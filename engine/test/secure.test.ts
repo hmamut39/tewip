@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { entropyOf, inATemplate, looksPlanted, redact, scanSecrets } from '../secure/secrets.ts';
+import { renderSecurity } from '../secure/secure-command.ts';
 import { triageDependency, triageSecret, worstFirst, type SecurityItem } from '../secure/triage.ts';
 import type { DepFinding } from '../secure/deps.ts';
 
@@ -150,5 +151,43 @@ describe('deciding what matters', () => {
     ] as SecurityItem[];
     const sorted = [...items].sort(worstFirst).map((i) => `${i.verdict}/${i.severity}`);
     assert.deepEqual(sorted, ['real-risk/critical', 'real-risk/high', 'not-reachable/critical', 'noise/low']);
+  });
+});
+
+// Phase 188. On a Dart project `tewip secure --secrets-only` printed, in one sentence:
+//
+//   Checked: secrets in the working tree, user input reaching a query or a shell, in 0
+//   JavaScript and TypeScript file(s).
+//
+// and named a finding in `lib/config.dart` four lines later. The file count sat at the end of a
+// list joined by commas and read as though it governed both checks, so the report said nothing was
+// scanned and reported something found. Only the injection scan is limited to JavaScript and
+// TypeScript; the secrets scan reads every file whatever the language.
+describe('what the security report says it checked', () => {
+  const line = (items: string[]) => {
+    const page = renderSecurity([], items, [], process.cwd());
+    return page.split(String.fromCharCode(10)).find((l) => l.startsWith('Checked:')) ?? '';
+  };
+
+  it('keeps two checks apart when one counts files and the other does not', () => {
+    const said = line(['secrets in the working tree, in 12 file(s) of any language', 'user input reaching a query or a shell, in 0 JavaScript and TypeScript file(s)']);
+    // Semicolons, because both entries contain commas of their own. With a comma separator the
+    // sentence reads as one list and the final count appears to govern everything before it.
+    assert.match(said, /any language; user input/, 'entries that contain commas must be separated by something else');
+    assert.ok(said.indexOf('12 file(s)') < said.indexOf('0 JavaScript'), 'each count stays with the check it belongs to');
+  });
+
+  it('says the secrets scan is not limited by language', () => {
+    assert.match(line(['secrets in the working tree, in 3 file(s) of any language']), /of any language/);
+  });
+
+  it('separates the same way the not-checked line already did', () => {
+    // `**Not checked**` has joined with '; ' since it was written. The two lines sit next to each
+    // other and read as a pair, so they are punctuated as a pair.
+    const page = renderSecurity([], ['a, with a comma', 'b, with another'], ['c, with a comma', 'd, with another'], process.cwd());
+    const checked = page.split(String.fromCharCode(10)).find((l) => l.startsWith('Checked:')) ?? '';
+    const not = page.split(String.fromCharCode(10)).find((l) => l.startsWith('**Not checked**')) ?? '';
+    assert.match(checked, /comma; b/);
+    assert.match(not, /comma; d/);
   });
 });

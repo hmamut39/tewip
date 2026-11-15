@@ -4628,6 +4628,30 @@ What it cannot check is whether an explanation is *good* - only that one is give
 
 1,187 tests.
 
+## Where this log stops
+
+**The phase log above ends at Phase 83 (2026-10-21). It has not been kept since, and the work did
+not stop.** As of 2026-11-15 the project is at Phase 183: a hundred phases are recorded in the git
+history and nowhere else.
+
+This is written here because the alternative is worse. A document that reads as the plan, and that
+stops a hundred phases short without saying so, is the same defect this project spends its phases
+hunting elsewhere: something stale that looks exactly like something current. A reader opening this
+file to find out where Tewip is would have had no way to tell.
+
+What to read instead, in the order that answers most questions fastest:
+
+- `git log --oneline` — every phase since 83, each commit message naming what was found, what was
+  measured, and how the fix was verified by sabotage. This is the real log.
+- `engine/measured.ts` — the published figures and the rules fingerprint they were measured
+  against, with the harnesses that re-derive each one named in `RULES_MEASURED_AT.harnesses`.
+- `eval/README.md` — how each number was arrived at.
+
+The sections below this one are **not** stale. The planned phases above (15 to 21) each carry their
+own status line and every one of them is built. The design principles, the Reality Check Gate, the
+anti-scope-creep rules and the working agreement are all still in force, and Phase 178 and Phase 183
+were both argued directly from principle 4.
+
 ## Definition of Success
 Two weeks of real team usage with triage time dropping from 3 hours to under 20 minutes.
 

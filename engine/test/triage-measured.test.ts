@@ -26,8 +26,14 @@ describe('what a triage report says about its own reliability', () => {
   });
 
   it('puts the weakest number in front of the reader, not in a file somewhere', () => {
+    // Derived from the record rather than typed in. This assertion used to pin "14% of REAL_BUG",
+    // and when Phase 179 moved that recall to 37% the test failed for a change that had improved
+    // the thing it was guarding. A guard that has to be edited every time the number it watches
+    // moves is a guard people edit without looking, which is how the wrong figure survives.
     const note = sourceNote('data/real/example');
-    assert.match(note, /14% of REAL_BUG/, 'the weakest figure has to be in the report, not behind a link');
+    const weakest = TRIAGE_RECALL.reduce((a, b) => (b.found / b.of < a.found / a.of ? b : a));
+    const rate = `${Math.round((weakest.found / weakest.of) * 100)}% of ${weakest.category}`;
+    assert.ok(note.includes(rate), `the weakest figure is ${rate} and the report does not say it`);
     assert.doesNotMatch(note, /see eval\/README\.md/, 'a pointer is how a weak number stays unread');
   });
 

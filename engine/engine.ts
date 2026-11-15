@@ -8,6 +8,7 @@ import { summarizeTrace } from './trace/trace-summary.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { PROJECT_ROOT } from '../reporters/store.ts';
+import { lastResortDiagnosis } from './last-resort.ts';
 
 /** Bump whenever a rule or threshold changes, so stored diagnoses can be recomputed. */
 export const ENGINE_VERSION = 'rules-9';
@@ -35,6 +36,13 @@ export function diagnose(input: RuleInput, now = new Date()): Diagnosis {
   if (matches.length === 0) {
     // Narrowest rules first: their notes say the most about this particular failure.
     const notes = outcomes.flatMap((x) => x.outcome.evidence).reverse();
+    // Phase 179. The residue is not the featureless set Phase 56 took it for: REAL_BUG runs at 49%
+    // inside it, and an assertion naming no element was a real bug in 24 of 25 distinct tests. This
+    // is the only place that rule may fire, because that is the only population it was measured on.
+    const resort = lastResortDiagnosis(input.record.errorMessage, input.history);
+    if (resort) {
+      return { ...base, category: resort.category, confidence: resort.confidence, ruleId: 'last-resort-assertion', evidence: [...resort.evidence, ...notes] };
+    }
     return {
       ...base,
       category: 'UNKNOWN',

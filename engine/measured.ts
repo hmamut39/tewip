@@ -10,9 +10,10 @@
 // without answering a single useful question. The question a developer opens this tool to ask -
 // is this a real bug - comes back right about one time in seven.
 //
-// Two facts, and both have to be said. The engine finds roughly one real bug in seven, which is a
-// limitation somebody choosing this tool should weigh. And where it cannot tell, it refuses rather
-// than misleads: 221 of its 260 misses are UNKNOWN, which routes the failure to a person with the
+// Two facts, and both have to be said. The engine finds 44 of 119 real bugs - better than one in
+// three since Phase 179, and one in seven before it - which is still the limitation somebody
+// choosing this tool should weigh hardest. And where it cannot tell, it refuses rather than
+// misleads: 194 of its 233 misses are UNKNOWN, which routes the failure to a person with the
 // evidence attached, instead of sending them after a bug that is not there. The second is why the
 // first is survivable; it is not an answer to it.
 //
@@ -33,7 +34,7 @@ export const TRIAGE_RECALL: CategoryRecall[] = [
   { category: 'ENV', found: 479, of: 516, refused: 24, misread: 13 },
   { category: 'TEST_DATA', found: 6, of: 8, refused: 2, misread: 0 },
   { category: 'LOCATOR_DRIFT', found: 21, of: 33, refused: 12, misread: 0 },
-  { category: 'REAL_BUG', found: 17, of: 119, refused: 97, misread: 5 },
+  { category: 'REAL_BUG', found: 44, of: 119, refused: 70, misread: 5 },
 ];
 
 export const TRIAGE_CASES = TRIAGE_RECALL.reduce((a, c) => a + c.of, 0);
@@ -93,14 +94,14 @@ export interface DatasetAccuracy {
   of: number;
 }
 
-/** Measured 14 November 2026, rules only, with `--no-llm`. */
+/** Measured 15 November 2026, rules only, with `--no-llm`. Phase 179 added the last-resort rule. */
 export const DATASET_ACCURACY: DatasetAccuracy[] = [
-  { dataset: 'gutenberg (dev)', labels: 'eval/ground-truth.jsonl', data: 'data/real/gutenberg', right: 221, of: 251 },
+  { dataset: 'gutenberg (dev)', labels: 'eval/ground-truth.jsonl', data: 'data/real/gutenberg', right: 233, of: 251 },
   { dataset: 'gutenberg (held-out)', labels: 'eval/ground-truth.holdout.jsonl', data: 'data/real/gutenberg-holdout', right: 121, of: 166 },
-  { dataset: 'gutenberg (fresh)', labels: 'eval/ground-truth.fresh.jsonl', data: 'data/real/gutenberg-fresh', right: 171, of: 213 },
-  { dataset: 'gutenberg (Aug 27-31)', labels: 'eval/ground-truth.aug2.jsonl', data: 'data/real/gutenberg-aug2', right: 406, of: 473 },
+  { dataset: 'gutenberg (fresh)', labels: 'eval/ground-truth.fresh.jsonl', data: 'data/real/gutenberg-fresh', right: 177, of: 213 },
+  { dataset: 'gutenberg (Aug 27-31)', labels: 'eval/ground-truth.aug2.jsonl', data: 'data/real/gutenberg-aug2', right: 410, of: 473 },
   { dataset: 'Supabase', labels: 'eval/ground-truth.supabase.jsonl', data: 'data/real/supabase', right: 735, of: 743 },
-  { dataset: 'JupyterLab', labels: 'eval/ground-truth.jupyterlab.jsonl', data: 'data/real/jupyterlab', right: 34, of: 41 },
+  { dataset: 'JupyterLab', labels: 'eval/ground-truth.jupyterlab.jsonl', data: 'data/real/jupyterlab', right: 38, of: 41 },
   { dataset: 'Penpot', labels: 'eval/ground-truth.penpot.jsonl', data: 'data/real/penpot', right: 5, of: 5 },
   { dataset: 'LXD UI', labels: 'eval/ground-truth.lxdui.jsonl', data: 'data/real/lxdui', right: 63, of: 69 },
 ];
@@ -165,8 +166,8 @@ export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
  */
 export const RULES_MEASURED_AT = {
   /** From `rulesFingerprint()` in engine/fingerprint.ts. */
-  hash: '0169000f30b1afaf',
+  hash: '521a7e0d97fff036',
   /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
-  files: 20,
+  files: 22,
   at: '2026-11-15',
 };

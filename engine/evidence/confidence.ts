@@ -163,10 +163,24 @@ export const MEASURED: Confidence[] = [
   },
 ];
 
-/** Checks that carry no measured recall yet, named rather than left out of the table. */
+/**
+ * Checks that carry no measured recall yet, named rather than left out of the table.
+ *
+ * Being in this list is the point. A check in neither list renders no line at all, and a missing
+ * honesty line looks exactly like a passing one - which is the failure this whole file exists to
+ * prevent, arriving through the file itself. `audit` was in neither for the eleven phases it has
+ * been part of the evidence pack; `engine/test/confidence.test.ts` now fails when any check the
+ * pack runs is unaccounted for.
+ */
 export const NOT_MEASURED: Array<{ check: string; why: string }> = [
   { check: 'sbom', why: 'it reads a lockfile rather than deciding anything, so there is nothing to be right or wrong about - what it cannot read is listed in its own report' },
   { check: 'contract', why: 'the comparison is exact once both versions parse; what is unmeasured is how many real descriptions the YAML reader can read, and the report says when it cannot read one' },
+  {
+    check: 'audit',
+    why:
+      'the chain either verifies or it does not, so there is no rate to measure: an edited or removed entry breaks every hash after it and the report names the line. ' +
+      'What it cannot detect is the whole log being deleted, or lines removed from the end, and it says so in its own report rather than leaving it to be discovered',
+  },
 ];
 
 export const confidenceFor = (command: string): Confidence | undefined => MEASURED.find((m) => m.command === command);

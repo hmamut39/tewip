@@ -18,7 +18,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
-import { rulesFingerprint } from '../engine/fingerprint.ts';
+import { rulesFingerprint } from './fingerprint.ts';
 import { DATASET_ACCURACY, type DatasetAccuracy } from '../engine/measured.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
 import { readJsonl } from '../reporters/store.ts';

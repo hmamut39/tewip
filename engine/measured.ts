@@ -165,8 +165,8 @@ export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
  * defeats the guard, which is why the harness prints both.
  */
 export const RULES_MEASURED_AT = {
-  /** From `rulesFingerprint()` in engine/fingerprint.ts. */
-  hash: '65eec946969bd959',
+  /** From `rulesFingerprint()` in eval/fingerprint.ts. */
+  hash: 'f66532c651c97277',
   /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
   files: 22,
   at: '2026-11-15',

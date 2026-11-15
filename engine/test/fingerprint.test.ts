@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RULES_ENTRY, fingerprint, importClosure, rulesFingerprint } from '../fingerprint.ts';
+import { RULES_ENTRY, fingerprint, importClosure, rulesFingerprint } from '../../eval/fingerprint.ts';
 import { MODEL_LAYER, MODEL_PRECISION, RULES_MEASURED_AT } from '../measured.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -69,6 +69,67 @@ describe('the figures know which rules they were measured against', () => {
 
       // And the walk has to follow imports, not just hash the entry point.
       assert.deepEqual(importClosure('a.ts', dir), ['a.ts', 'b.ts']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Phase 183. The guard used to hash raw bytes, so editing a comment inside the rules closure
+  // turned it red and cost three harness runs to clear - all of which confirmed the figures
+  // unchanged, as a comment cannot do otherwise. A guard that is expensive to satisfy is one people
+  // learn to satisfy from memory, which is the failure Phase 180 was about.
+  it('ignores a comment, which cannot change what the code does', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-fp-'));
+    try {
+      writeFileSync(join(dir, 'a.ts'), 'export const a = 1;\n');
+      const before = fingerprint(['a.ts'], dir);
+      writeFileSync(join(dir, 'a.ts'), '// an explanation somebody added\nexport const a = 1; /* and a trailing note */\n');
+      assert.equal(fingerprint(['a.ts'], dir), before, 'a comment-only edit must not move the fingerprint');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not mistake a comment marker inside a string for a comment', () => {
+    // The whole risk of stripping comments, and the reason this uses Node's own parser rather than
+    // a regex. If `//` inside a string were treated as a comment, two files differing only in that
+    // string would hash alike - a behaviour change the guard would never report.
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-fp-'));
+    try {
+      writeFileSync(join(dir, 'a.ts'), 'export const url = "https://example.com/one";\n');
+      const one = fingerprint(['a.ts'], dir);
+      writeFileSync(join(dir, 'a.ts'), 'export const url = "https://example.com/two";\n');
+      assert.notEqual(fingerprint(['a.ts'], dir), one, 'text after // inside a string is code, not a comment');
+
+      // And a regex literal containing a comment marker.
+      writeFileSync(join(dir, 'b.ts'), 'export const re = /a\\/\\/b/;\n');
+      const re1 = fingerprint(['b.ts'], dir);
+      writeFileSync(join(dir, 'b.ts'), 'export const re = /a\\/\\/c/;\n');
+      assert.notEqual(fingerprint(['b.ts'], dir), re1, 'a regex is not a comment either');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still moves when the code moves, comments or not', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-fp-'));
+    try {
+      writeFileSync(join(dir, 'a.ts'), '// note\nexport const a = 1;\n');
+      const before = fingerprint(['a.ts'], dir);
+      writeFileSync(join(dir, 'a.ts'), '// note\nexport const a = 2;\n');
+      assert.notEqual(fingerprint(['a.ts'], dir), before, 'stripping comments must not blunt the guard');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an unreadable file in the hash rather than agreeing with every other broken one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tewip-fp-'));
+    try {
+      writeFileSync(join(dir, 'a.ts'), 'export const a = (((;\n');
+      const one = fingerprint(['a.ts'], dir);
+      writeFileSync(join(dir, 'a.ts'), 'export const b = )))\n;');
+      assert.notEqual(fingerprint(['a.ts'], dir), one, 'two files the parser cannot read must not hash alike');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

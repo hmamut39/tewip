@@ -14,7 +14,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
-import { lookAround } from '../start/look.ts';
+import { CANNOT_READ, lookAround } from '../start/look.ts';
+import { languageOf } from '../vouch/tests-in.ts';
 import { renderStart, suggest } from '../start/start-command.ts';
 
 function project(files: Record<string, string>): string {
@@ -214,5 +215,59 @@ describe('pointing the front door at a folder', () => {
     const elsewhere = project({ 'package.json': '{"name":"elsewhere","version":"1.0.0"}', 'Dockerfile': 'FROM node:24-slim\n' });
     const page = renderStart(lookAround(elsewhere), elsewhere);
     assert.match(page, /1 dependency manifest \(1 npm\) and 1 Dockerfile/);
+  });
+});
+
+// Phase 185. Run against the Flutter SDK, this front door reported "at least 5 test files
+// (4 Python, 1 JavaScript or TypeScript)" for a repository of 2,743 Dart tests and 7,748 Dart
+// sources, and recommended `vouch` as though it covered them. `languageOf` returns null for
+// `.dart`, so every Dart file was skipped - and a skipped file is counted nowhere and mentioned
+// nowhere, so the page read exactly as it would for a project Tewip understood.
+describe('a project in a language Tewip cannot read', () => {
+  it('says so, and says the counts exclude it', () => {
+    const root = project({
+      'lib/main.dart': 'void main() {}',
+      'lib/widget.dart': 'class W {}',
+      'test/widget_test.dart': "void main() { test('w', () { expect(1, 1); }); }",
+      'tools/build.py': 'def build(): pass',
+      'tools/build_test.py': 'def test_build(): assert True',
+    });
+    const page = renderStart(lookAround(root), root);
+    assert.match(page, /cannot read \*\*Dart\*\*|\*\*Tewip cannot read Dart\*\*/, 'the language has to be named');
+    assert.match(page, /3 Dart file\(s\)/, 'and counted');
+    assert.match(page, /None of them are in the counts above/, 'and the counts above disowned');
+  });
+
+  it('stays quiet about a project it can read', () => {
+    // A report that names a gap it is not sure about teaches people to skim the gaps.
+    const root = project({ 'src/cart.test.js': A_TEST, 'package.json': '{"name":"x"}', 'README.md': '# x' });
+    const page = renderStart(lookAround(root), root);
+    assert.doesNotMatch(page, /cannot read/, 'nothing here is unreadable, so nothing should be claimed');
+  });
+
+  it('does not warn about documents, config or images', () => {
+    const root = project({
+      'src/cart.test.js': A_TEST,
+      'docs/guide.md': '# guide',
+      'config.yaml': 'a: 1',
+      'data.json': '{}',
+      'logo.png': 'not really a png',
+    });
+    assert.doesNotMatch(renderStart(lookAround(root), root), /cannot read/, 'a README is not a language gap');
+  });
+
+  it('counts by extension without reading the file', () => {
+    // The files it cannot read are counted before the gate that decides what is worth opening,
+    // which is the whole point: that gate is what threw them away.
+    const root = project({ 'a.swift': 'import Foundation', 'b.swift': 'import Foundation', 'c.js': 'export const a = 1;' });
+    assert.equal(lookAround(root).unreadable.get('Swift'), 2);
+  });
+
+  it('never claims to read a language and warn about it at once', () => {
+    // Adding a language to `languageOf` means deleting its line from CANNOT_READ. Claiming both is
+    // worse than either, and nothing but this test would notice.
+    for (const ext of Object.keys(CANNOT_READ)) {
+      assert.equal(languageOf(`file.${ext}`), null, `.${ext} is listed as unreadable but languageOf claims it`);
+    }
   });
 });

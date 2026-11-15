@@ -24,6 +24,19 @@ const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage'
 export interface Found {
   /** Test files, by the language they are written in. */
   tests: Map<string, number>;
+  /**
+   * Source files in a language Tewip cannot read, by that language.
+   *
+   * Phase 185. Run against the Flutter SDK, this front door reported "at least 5 test files
+   * (4 Python, 1 JavaScript or TypeScript)" for a repository holding 2,743 Dart tests and 7,748
+   * Dart sources, and recommended `vouch` as though it covered them. `languageOf` returns null for
+   * `.dart`, so every one of those files was skipped - and a skipped file is counted nowhere and
+   * mentioned nowhere, so the report read exactly as it would for a project Tewip understood.
+   *
+   * Counting them is the whole fix. Nothing here claims to read Dart; it claims to know that it
+   * cannot, which is the difference between a tool that is limited and one that is misleading.
+   */
+  unreadable: Map<string, number>;
   /** Migrations, by the tool that wrote them. */
   migrations: Map<string, number>;
   markup: number;
@@ -58,6 +71,7 @@ export interface Found {
 export function lookAround(root: string, limit = 4000): Found {
   const found: Found = {
     tests: new Map(),
+    unreadable: new Map(),
     migrations: new Map(),
     markup: 0,
     manifests: new Map(),
@@ -133,6 +147,11 @@ export function lookAround(root: string, limit = 4000): Found {
       // Reading a file is only worth it for the two questions a name cannot answer: is this a
       // test, and is this a migration. Both are cheap, and both are often wrong from the path.
       const language = languageOf(entry);
+      // Counted before the `worthReading` gate below, because the whole point is the files that
+      // gate throws away. Nothing is read: the extension is the claim, and a count of files Tewip
+      // cannot parse needs no more than that.
+      const cannotRead = UNREADABLE_OF(entry);
+      if (cannotRead) found.unreadable.set(cannotRead, (found.unreadable.get(cannotRead) ?? 0) + 1);
       const worthReading = (language !== null || /\.(sql|xml)$/i.test(entry)) && info.size < 1_000_000;
       if (!worthReading) continue;
       let text = '';
@@ -179,6 +198,44 @@ export const PLAIN: Record<string, string> = {
   knex: 'Knex',
   efcore: 'EF Core',
   liquibase: 'Liquibase',
+};
+
+/**
+ * Languages Tewip knows exist and cannot read, by extension.
+ *
+ * An explicit list rather than "anything `languageOf` refuses". A denylist of everything Tewip
+ * cannot parse would sweep in every `.md`, `.json`, `.lock` and `.png` in the repository and the
+ * front door would start warning people about their README. This names the cases where somebody
+ * would reasonably expect test support and will not get it, and stays silent otherwise - a report
+ * that names a gap it is not sure about teaches people to skim the gaps.
+ *
+ * Adding a language to `languageOf` means deleting its line here. `engine/test/start.test.ts` fails
+ * if a language appears in both, because claiming to read something and warning that you cannot is
+ * worse than either on its own.
+ */
+export const CANNOT_READ: Record<string, string> = {
+  dart: 'Dart',
+  swift: 'Swift',
+  m: 'Objective-C',
+  c: 'C',
+  cc: 'C++',
+  cpp: 'C++',
+  cxx: 'C++',
+  ex: 'Elixir',
+  exs: 'Elixir',
+  erl: 'Erlang',
+  clj: 'Clojure',
+  hs: 'Haskell',
+  lua: 'Lua',
+  jl: 'Julia',
+  r: 'R',
+  pl: 'Perl',
+};
+
+const UNREADABLE_OF = (name: string): string | null => {
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return null;
+  return CANNOT_READ[name.slice(dot + 1).toLowerCase()] ?? null;
 };
 
 /**

@@ -101,6 +101,21 @@ export function renderStart(found: Found, root: string): string {
         'glance is bounded, so that it stays instant.',
     );
   }
+  // Phase 185. Said before the other limits, because on a project written in a language Tewip
+  // cannot read it is the only one that matters: every count above excludes those files, so a
+  // reader who does not know that is reading a report about a different, much smaller project.
+  const unreadable = [...found.unreadable.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  if (unreadable.length > 0) {
+    const readable = total(found.tests);
+    const biggest = unreadable[0];
+    const rest = unreadable.slice(1, 3).map(([name, n]) => `${n} ${name}`);
+    cannot.push(
+      `**Tewip cannot read ${biggest[0]}**, and found ${biggest[1]} ${biggest[0]} file(s) here` +
+        `${rest.length > 0 ? ` (also ${rest.join(', ')})` : ''}. ` +
+        `None of them are in the counts above, and nothing Tewip says about this project covers them. ` +
+        `${readable === 0 ? 'No test file it can read was found at all.' : `The ${readable} test file(s) above are the ones it can read, and may be a small corner of this project.`}`,
+    );
+  }
   if (total(found.tests) === 0) cannot.push('No test files were found, so nothing can be said about whether your tests could fail or would catch a bug.');
   if (total(found.migrations) === 0) cannot.push('No migrations were found, so nothing is said about your database.');
   if (found.markup === 0) cannot.push('No markup was found, so nothing is said about accessibility.');

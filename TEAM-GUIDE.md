@@ -246,12 +246,24 @@ while the highest is Penpot on only five cases. The per-project table is in `eng
 This document previously said **86% to 99.7%**. That range was measured with the AI layer switched
 on, and none of it reproduces. The rules themselves have not changed where the project recorded
 them: on the fresh Gutenberg set they decide 174 cases and get 171 right, exactly as noted when the
-old figure was published. The weak part today is the AI layer — right on 7 of the 39 cases it
-decides there, and 12 of 36 on the held-out set.
+old figure was published.
 
-Why is not established, and the project will not guess at it here. What *is* established is that
-nothing noticed, because the labelled failures are not in the repository and so no test can
-re-measure any of this. That is why the figures above are the deterministic rules only.
+This document also said the AI layer was "right on 7 of the 39 cases it decides". That was wrong:
+39 is how many it was *asked*. It is asked only what the rules refuse, and it mostly declines. Over
+1,961 labelled failures from seven projects it was asked 174, **answered 42 and refused 132**, and
+**34 of the 42 were right — 81%**. On the fresh set it answered 9 and got 7. Being asked is not
+deciding, and a refusal routes the failure to a person rather than naming a cause nobody can
+support.
+
+It is still not a way to raise the headline, which is why the figures above are the deterministic
+rules only: the layer declines too often to move them. Per cause it is uneven — `REAL_BUG` 16 of 16,
+`ENV` 17 of 23, `TIMING` 1 of 3 — and it named `LOCATOR_DRIFT` or `TEST_DATA` thirteen times while
+being right none of them, so since 15 November 2026 it may not claim either. Accuracy was unchanged
+by that and the wrong causes people see fell from 21 to 8.
+
+What is still true is that nothing noticed any of this for weeks, because the labelled failures are
+not in the repository and so no test can re-measure them. `node eval/model-layer.ts` re-derives the
+figures wherever a harvest exists.
 
 Two caveats the project states openly:
 

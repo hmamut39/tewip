@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ACCURACY_RANGE, DATASET_ACCURACY, TRIAGE_CASES, TRIAGE_FOUND, TRIAGE_MISREAD, TRIAGE_REFUSED, TRIAGE_RECALL, accuracyOf, triageReliability } from '../measured.ts';
+import { ACCURACY_RANGE, DATASET_ACCURACY, MODEL_LAYER, MODEL_PRECISION, TRIAGE_CASES, TRIAGE_FOUND, TRIAGE_MISREAD, TRIAGE_REFUSED, TRIAGE_RECALL, accuracyOf, triageReliability } from '../measured.ts';
 import { lf } from '../lines.ts';
 import { sourceNote } from '../../outlets/view.ts';
 
@@ -115,5 +115,36 @@ describe("the README's accuracy figures", () => {
       assert.ok(d.right <= d.of, `${d.dataset} claims more right than it looked at`);
       assert.ok(d.labels.startsWith('eval/') && d.data.startsWith('data/'), `${d.dataset} does not name where it came from`);
     }
+  });
+
+  // Phase 177. Both documents said the model layer was "right on 7 of the 39 cases it decides".
+  // 39 was how many it was *asked*; it decided 9. The error ran the opposite way to the one
+  // corrected the day before - that overstated the product, this understated it fourfold - and the
+  // shared cause is a number repeated in prose with nothing re-deriving it.
+  it('does not confuse what the model layer was asked with what it decided', () => {
+    const guide = lf(readFileSync(join(import.meta.dirname, '..', '..', 'TEAM-GUIDE.md'), 'utf8'));
+    for (const [name, text] of [
+      ['README.md', readme],
+      ['TEAM-GUIDE.md', guide],
+    ] as const) {
+      assert.ok(!/right on \*\*?7 of the 39\*\*? cases it[\s]+decides/.test(text), `${name} still says the layer decides the 39 it is asked`);
+      assert.ok(
+        text.includes(`${MODEL_LAYER.answered}`) && text.includes(`${MODEL_LAYER.refused}`),
+        `${name} should say it answered ${MODEL_LAYER.answered} and refused ${MODEL_LAYER.refused}, which is what makes the rest readable`,
+      );
+      assert.match(text, /node eval\/model-layer\.ts/, `${name} should name the harness that re-derives this`);
+    }
+  });
+
+  it('keeps the per-cause record arithmetically possible, and refuses what scored zero', () => {
+    for (const row of MODEL_PRECISION) {
+      assert.ok(row.right <= row.said, `${row.category} claims more right than it said`);
+      assert.ok(row.right > 0, `${row.category} is recorded with 0 right, so it belongs in MODEL_REFUSES instead`);
+    }
+    const answered = MODEL_PRECISION.reduce((a, r) => a + r.said, 0);
+    const right = MODEL_PRECISION.reduce((a, r) => a + r.right, 0);
+    assert.equal(answered, MODEL_LAYER.answered, 'the per-cause rows have to add up to what the layer answered');
+    assert.equal(right, MODEL_LAYER.right, 'the per-cause rows have to add up to what it got right');
+    assert.equal(MODEL_LAYER.asked, MODEL_LAYER.answered + MODEL_LAYER.refused, 'asked is answered plus refused, or one of the three is wrong');
   });
 });

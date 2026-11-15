@@ -55,6 +55,44 @@ export function parseLlmOutput(raw: string): LlmOutput {
  */
 export const LLM_CONFIDENCE_CEILING = 0.45;
 
+/**
+ * The two causes this layer has never once been right about, so it is no longer allowed to claim
+ * them.
+ *
+ * Phase 177 measured the layer over 1,961 hand-labelled failures from seven projects, scoring only
+ * the cases the rules refuse - which are the only ones it is ever asked. Per category, counting what
+ * it was right about when it named that cause:
+ *
+ *   REAL_BUG        16 of 16   100%
+ *   ENV             17 of 23    74%
+ *   TIMING           1 of 3
+ *   LOCATOR_DRIFT    0 of 6
+ *   TEST_DATA        0 of 7
+ *
+ * REAL_BUG is 16 of 16 because Phase 56's signal work already refuses the unsupported ones; that
+ * guard works and this changes nothing about it. LOCATOR_DRIFT and TEST_DATA have no such guard, and
+ * between them they are **0 for 13**. In every one of the thirteen the true cause was REAL_BUG or
+ * TIMING: the model reaches for a locator or a fixture when what it is looking at is a bug or a
+ * race.
+ *
+ * Thirteen is a small sample and this comment will not pretend otherwise. What makes it enough to
+ * act on is the direction rather than the size: removing these two costs **nothing measurable**,
+ * because zero of thirteen were right, and removes thirteen wrong causes from the reports people
+ * read. Accuracy over the 1,961 is unchanged at 91.3% either way. If a later run finds this layer
+ * answering one of these two correctly, that is the signal to narrow the rule to the evidence rather
+ * than the category - the same way Phase 56 narrowed REAL_BUG - and the harness that would catch it
+ * is `node eval/model-layer.ts`.
+ *
+ * It refuses rather than rewrites, like every other guard here: "this is not LOCATOR_DRIFT" is not
+ * "this is REAL_BUG", so the case goes to a person with the model's reasoning attached.
+ */
+export const UNEARNED: readonly RootCause[] = ['LOCATOR_DRIFT', 'TEST_DATA'];
+
+export function unearnedCategory(category: RootCause): string | null {
+  if (!UNEARNED.includes(category)) return null;
+  return `refused: across 1,961 labelled failures this layer named ${category} and was right 0 times, so it may not claim it (see eval/model-layer.ts)`;
+}
+
 export function contradictsHistory(category: RootCause, context: FailureContext): string | null {
   if (category !== 'REAL_BUG' && category !== 'LOCATOR_DRIFT') return null;
   // A timeout is not evidence of a bug, and that is measured rather than argued.
@@ -92,7 +130,7 @@ export async function llmDiagnose(context: FailureContext, rules: Diagnosis, cli
   try {
     const raw = await client.complete({ system: SYSTEM_PROMPT, user: JSON.stringify(context), schemaName: OUTPUT_SCHEMA_NAME, schema: OUTPUT_SCHEMA });
     const out = parseLlmOutput(raw);
-    const refused = contradictsHistory(out.category, context);
+    const refused = contradictsHistory(out.category, context) ?? unearnedCategory(out.category);
     if (refused) {
       return {
         category: 'UNKNOWN',

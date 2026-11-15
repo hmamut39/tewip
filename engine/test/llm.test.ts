@@ -1,7 +1,8 @@
 // Unit tests for the LLM layer with a fake client: contract enforcement and routing.
 // No network calls; nothing here measures how well a real model classifies.
 import assert from 'node:assert/strict';
-import { LLM_CONFIDENCE_CEILING, contradictsHistory } from '../llm/llm-diagnose.ts';
+import { LLM_CONFIDENCE_CEILING, UNEARNED, contradictsHistory, unearnedCategory } from '../llm/llm-diagnose.ts';
+import { MODEL_PRECISION, MODEL_REFUSES } from '../measured.ts';
 import { describe, it } from 'node:test';
 import type { Diagnosis, RunSummary, TriageRecord } from '../../reporters/types.ts';
 import { HistoryIndex } from '../history.ts';
@@ -210,5 +211,44 @@ describe('a timeout is not evidence of a bug', () => {
     const timeout = context('TimeoutError: Timeout 30000ms exceeded');
     assert.equal(contradictsHistory('TIMING', timeout), null);
     assert.equal(contradictsHistory('ENV', timeout), null);
+  });
+});
+
+// Phase 177. Measured over 1,961 labelled failures from seven projects, scoring only the residue
+// the rules refuse - the only cases this layer is ever asked. It named LOCATOR_DRIFT six times and
+// TEST_DATA seven, and was right zero times out of the thirteen; in every one the true cause was
+// REAL_BUG or TIMING. Removing both left accuracy over the 1,961 unchanged at 91.3% and cut the
+// wrong causes people are shown from 21 to 8.
+describe('the causes the model layer has not earned', () => {
+  it('refuses the two it has never once been right about', () => {
+    for (const category of ['LOCATOR_DRIFT', 'TEST_DATA'] as const) {
+      const refused = unearnedCategory(category);
+      assert.ok(refused, `${category} is 0 for its sample and must be refused`);
+      assert.match(refused, /right 0 times/);
+      assert.match(refused, /eval\/model-layer\.ts/, 'the refusal has to say what would overturn it');
+    }
+  });
+
+  it('leaves the three it has earned alone', () => {
+    // REAL_BUG is 16 of 16 only because Phase 56's signal guard already refuses the unsupported
+    // ones. This rule must not touch it, or that measurement stops meaning anything.
+    for (const category of ['REAL_BUG', 'ENV', 'TIMING'] as const) {
+      assert.equal(unearnedCategory(category), null, `${category} has answered correctly and must stay allowed`);
+    }
+  });
+
+  it('agrees with the record of what was measured', () => {
+    assert.deepEqual([...MODEL_REFUSES].sort(), [...UNEARNED].sort(), 'the published list and the enforced list are the same list');
+    for (const row of MODEL_PRECISION) {
+      assert.equal(unearnedCategory(row.category as 'REAL_BUG'), null, `${row.category} is recorded as answering, so it cannot also be refused`);
+      assert.ok(row.right > 0, `${row.category} is recorded with 0 right and should have been refused instead`);
+    }
+  });
+
+  it('refuses rather than rewrites, like every other guard here', () => {
+    // "Not LOCATOR_DRIFT" is not "is REAL_BUG". The refusal text must not name a replacement cause,
+    // because that would be swapping one unsupported guess for another.
+    const refused = unearnedCategory('TEST_DATA') ?? '';
+    assert.doesNotMatch(refused, /is (REAL_BUG|TIMING|ENV)/, 'a refusal must not smuggle in a different verdict');
   });
 });

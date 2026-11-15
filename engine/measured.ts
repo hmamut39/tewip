@@ -115,3 +115,36 @@ export const ACCURACY_RANGE = {
   lowest: DATASET_ACCURACY.reduce((a, b) => (b.right / b.of < a.right / a.of ? b : a)),
   highest: DATASET_ACCURACY.reduce((a, b) => (b.right / b.of > a.right / a.of ? b : a)),
 };
+
+/** What the paid layer named, and how often that was the cause. Re-derive: `node eval/model-layer.ts`. */
+export interface ModelPrecision {
+  category: string;
+  /** Times it named this cause, after every guard. */
+  said: number;
+  /** Times that was the hand-labelled cause. */
+  right: number;
+}
+
+/**
+ * Measured 15 November 2026 over 1,961 labelled failures from seven projects, cached (cost $0).
+ *
+ * The model is asked only what the rules refuse, so this scores the residue and nothing else. Of
+ * 174 such cases it now answers 42 and refuses 132, and a refusal routes the failure to a person
+ * rather than naming a cause nobody can support.
+ *
+ * Read `said` before `right`. The README said for a day that this layer was "right on 7 of the 39
+ * cases it decides" on the fresh set; 39 is what it was *asked*. It decided 9 and was right on 7,
+ * which is 78% and not 18% - the mistake understated it fourfold. Being asked is not deciding, and
+ * refusing is not failing.
+ */
+export const MODEL_PRECISION: ModelPrecision[] = [
+  { category: 'REAL_BUG', said: 16, right: 16 },
+  { category: 'ENV', said: 23, right: 17 },
+  { category: 'TIMING', said: 3, right: 1 },
+];
+
+/** Asked, answered and right across those seven projects, for the sentence the README prints. */
+export const MODEL_LAYER = { asked: 174, answered: 42, refused: 132, right: 34, labelled: 1961 };
+
+/** Causes the layer may no longer claim: 0 of 13 right before Phase 177 refused them. */
+export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];

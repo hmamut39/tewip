@@ -148,3 +148,25 @@ export const MODEL_LAYER = { asked: 174, answered: 42, refused: 132, right: 34, 
 
 /** Causes the layer may no longer claim: 0 of 13 right before Phase 177 refused them. */
 export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
+
+/**
+ * The rules code that `DATASET_ACCURACY` and `TRIAGE_RECALL` were measured against.
+ *
+ * Both are produced where the labelled failures live, and those are deliberately not in this
+ * repository, so no CI job can re-derive either. That is why a wrong headline survived seven weeks.
+ * This does not fix that - only the data could - but it makes the figures *fail loudly when they
+ * have gone stale*: `engine/test/fingerprint.test.ts` recomputes this hash from the source and goes
+ * red when the rules have moved since the figures were last measured.
+ *
+ * When it goes red the figure is not necessarily wrong, it is unverified. Re-run
+ * `node eval/dataset-accuracy.ts` and `node eval/triage-recall.ts` on a machine with the harvest,
+ * then update the figures and this hash together. Updating the hash alone is the one thing that
+ * defeats the guard, which is why the harness prints both.
+ */
+export const RULES_MEASURED_AT = {
+  /** From `rulesFingerprint()` in engine/fingerprint.ts. */
+  hash: '0169000f30b1afaf',
+  /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
+  files: 20,
+  at: '2026-11-15',
+};

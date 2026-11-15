@@ -18,6 +18,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadDataset } from '../engine/dataset.ts';
 import { HistoryIndex } from '../engine/history.ts';
+import { rulesFingerprint } from '../engine/fingerprint.ts';
 import { DATASET_ACCURACY, type DatasetAccuracy } from '../engine/measured.ts';
 import { diagnosePipeline } from '../engine/pipeline.ts';
 import { readJsonl } from '../reporters/store.ts';
@@ -64,6 +65,7 @@ export async function measure(root = process.cwd()): Promise<Measured[]> {
 const pct = (n: number, of: number) => (of === 0 ? 'n/a' : `${((n / of) * 100).toFixed(1)}%`);
 
 function report(all: Measured[]): void {
+  const { files, hash } = rulesFingerprint(process.cwd());
   const read = all.filter((m) => m.found !== null);
   const drifted = read.filter((m) => m.found!.right !== m.recorded.right || m.found!.of !== m.recorded.of);
   const absent = all.filter((m) => m.found === null);
@@ -110,6 +112,16 @@ function report(all: Measured[]): void {
       'Rules only, with the model layer off. Not a convenience: the product caps a model verdict below',
       'the escalation threshold, so every one of them routes to a person anyway, and a figure that',
       'includes a model moves when a provider replaces one. The published range did exactly that.',
+      '',
+      '## The rules these figures were measured against',
+      '',
+      `    hash: '${hash}',`,
+      `    files: ${files.length},`,
+      '',
+      'Printed here so the figures and the fingerprint are updated in the same sitting. CI cannot',
+      're-derive any number above - the labelled failures stay local - but it does check this hash,',
+      'and goes red when the rules have moved since a figure was last measured. Updating the hash',
+      'without re-running this harness is the one move that defeats that guard.',
       '',
     ].join(NL),
   );

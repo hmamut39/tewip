@@ -139,13 +139,13 @@ export interface ModelPrecision {
  * refusing is not failing.
  */
 export const MODEL_PRECISION: ModelPrecision[] = [
-  { category: 'REAL_BUG', said: 16, right: 16 },
+  { category: 'REAL_BUG', said: 5, right: 5 },
   { category: 'ENV', said: 23, right: 17 },
   { category: 'TIMING', said: 3, right: 1 },
 ];
 
 /** Asked, answered and right across those seven projects, for the sentence the README prints. */
-export const MODEL_LAYER = { asked: 174, answered: 42, refused: 132, right: 34, labelled: 1961 };
+export const MODEL_LAYER = { asked: 148, answered: 31, refused: 117, right: 23, labelled: 1961 };
 
 /** Causes the layer may no longer claim: 0 of 13 right before Phase 177 refused them. */
 export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
@@ -170,4 +170,17 @@ export const RULES_MEASURED_AT = {
   /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
   files: 22,
   at: '2026-11-15',
+  /**
+   * Every harness that has to be re-run when that hash moves. All of them, named.
+   *
+   * Phase 180 exists because this list did not. Phase 179 changed the rules, the guard went red as
+   * designed, and two of the three harnesses were re-run - so `DATASET_ACCURACY` and
+   * `TRIAGE_RECALL` were right and `MODEL_LAYER` silently was not. The model is asked only what the
+   * rules refuse, so a rule that decides 26 more cases changes what the model was asked, answered
+   * and got right; all three figures moved and the README quoted all three.
+   *
+   * A guard that says "re-measure" without saying what is a guard you satisfy from memory, and
+   * memory is what this whole class of defect is made of.
+   */
+  harnesses: ['node eval/dataset-accuracy.ts', 'node eval/triage-recall.ts', 'node eval/model-layer.ts'],
 };

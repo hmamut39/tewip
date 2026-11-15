@@ -13,7 +13,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RULES_ENTRY, fingerprint, importClosure, rulesFingerprint } from '../fingerprint.ts';
-import { RULES_MEASURED_AT } from '../measured.ts';
+import { MODEL_LAYER, MODEL_PRECISION, RULES_MEASURED_AT } from '../measured.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 
@@ -38,14 +38,19 @@ describe('the figures know which rules they were measured against', () => {
       hash,
       RULES_MEASURED_AT.hash,
       [
-        'The rules changed since the published accuracy figures were measured.',
+        'The rules changed since the published figures were measured.',
         'They are not necessarily wrong - they are unverified, and nothing in CI can check them',
         'because the labelled failures are gitignored and stay local.',
         '',
-        'On a machine with the harvest:  node eval/dataset-accuracy.ts  and  node eval/triage-recall.ts',
+        'On a machine with the harvest, run EVERY one of these, not the ones you remember:',
+        ...RULES_MEASURED_AT.harnesses.map((h) => `  ${h}`),
+        '',
         'then update the figures and RULES_MEASURED_AT.hash together.',
         '',
-        'Updating the hash on its own is the one move that defeats this guard.',
+        'Updating the hash on its own is the one move that defeats this guard. Running some of the',
+        'harnesses is the move that half-defeats it, which is what happened in Phase 179: the model',
+        'layer figures depend on the rules too, because the model is only ever asked what the rules',
+        'refuse, and they were left stale while the other two were corrected.',
       ].join('\n'),
     );
   });
@@ -79,6 +84,39 @@ describe('the figures know which rules they were measured against', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('names a harness for every figure that moves when the rules move', () => {
+    // The Phase 180 guard. Each of these exports is derived from the rules, so each has to be
+    // re-derived when the fingerprint moves - and the only thing that makes that happen is this
+    // list being complete. A figure with no harness named here is a figure that will go stale
+    // exactly the way MODEL_LAYER did, with CI green the whole time.
+    const named = RULES_MEASURED_AT.harnesses.join(' ');
+    for (const [figure, harness] of [
+      ['DATASET_ACCURACY', 'eval/dataset-accuracy.ts'],
+      ['TRIAGE_RECALL', 'eval/triage-recall.ts'],
+      ['MODEL_LAYER and MODEL_PRECISION', 'eval/model-layer.ts'],
+    ] as const) {
+      assert.ok(named.includes(harness), `${figure} is derived from the rules but ${harness} is not in RULES_MEASURED_AT.harnesses`);
+      assert.ok(existsSync(join(ROOT, harness)), `${harness} is named but does not exist`);
+    }
+    assert.equal(RULES_MEASURED_AT.harnesses.length, 3, 'a harness added or removed here needs this count moved deliberately');
+  });
+
+  it('keeps the model-layer record arithmetically whole', () => {
+    // MODEL_LAYER went stale in Phase 179 and nothing noticed. These are the internal checks that
+    // at least catch a figure updated by hand in part.
+    assert.equal(MODEL_LAYER.asked, MODEL_LAYER.answered + MODEL_LAYER.refused);
+    assert.equal(
+      MODEL_PRECISION.reduce((a, r) => a + r.said, 0),
+      MODEL_LAYER.answered,
+      'the per-cause rows must add up to what the layer answered',
+    );
+    assert.equal(
+      MODEL_PRECISION.reduce((a, r) => a + r.right, 0),
+      MODEL_LAYER.right,
+      'and to what it got right',
+    );
   });
 
   it('reads the same on Windows as on the machine that measured', () => {

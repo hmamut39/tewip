@@ -250,13 +250,12 @@ old figure was published.
 
 This document also said the AI layer was "right on 7 of the 39 cases it decides". That was wrong:
 39 is how many it was *asked*. It is asked only what the rules refuse, and it mostly declines. Over
-1,961 labelled failures from seven projects it was asked 174, **answered 42 and refused 132**, and
-**34 of the 42 were right — 81%**. On the fresh set it answered 9 and got 7. Being asked is not
-deciding, and a refusal routes the failure to a person rather than naming a cause nobody can
-support.
+1,961 labelled failures from seven projects it was asked 148, **answered 31 and refused 117**, and
+**23 of the 31 were right — 74%**. Being asked is not deciding, and a refusal routes the failure to
+a person rather than naming a cause nobody can support.
 
 It is still not a way to raise the headline, which is why the figures above are the deterministic
-rules only: the layer declines too often to move them. Per cause it is uneven — `REAL_BUG` 16 of 16,
+rules only: the layer declines too often to move them. Per cause it is uneven — `REAL_BUG` 5 of 5,
 `ENV` 17 of 23, `TIMING` 1 of 3 — and it named `LOCATOR_DRIFT` or `TEST_DATA` thirteen times while
 being right none of them, so since 15 November 2026 it may not claim either. Accuracy was unchanged
 by that and the wrong causes people see fell from 21 to 8.

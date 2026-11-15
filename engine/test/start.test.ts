@@ -14,8 +14,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
-import { CANNOT_READ, lookAround } from '../start/look.ts';
-import { languageOf } from '../vouch/tests-in.ts';
+import { lookAround } from '../start/look.ts';
+import { CANNOT_READ, languageOf } from '../vouch/tests-in.ts';
 import { renderStart, suggest } from '../start/start-command.ts';
 
 function project(files: Record<string, string>): string {

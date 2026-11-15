@@ -8,6 +8,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { normalise } from '../quality/source-text.ts';
 import { join, relative } from 'node:path';
 import { CANNOT_FAIL, vouchFile, type FileVouch, type Judgement, type Verdict } from './vouch.ts';
+import { unreadableOf } from './tests-in.ts';
 
 export interface VouchCommand {
   root: string;
@@ -21,7 +22,7 @@ export interface VouchCommand {
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', 'vendor', 'target', '.venv', '__pycache__', '.tewip']);
 
 /** Every file under these paths that could hold tests. */
-export function testFiles(root: string, paths: string[]): string[] {
+export function testFiles(root: string, paths: string[], skipped?: Map<string, number>): string[] {
   const found: string[] = [];
   const walk = (where: string, depth: number): void => {
     if (depth > 12) return;
@@ -45,6 +46,14 @@ export function testFiles(root: string, paths: string[]): string[] {
       // a file named outright came back "0 test(s) read in 0 file(s)" - which reads like a clean
       // answer and is not one.
       else if (/\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|java|kt|kts|scala|groovy|go|cs|fs|rb|php|rs)$/i.test(entry)) found.push(full);
+      // Phase 186. Everything else fell out of this walk without a trace. On a clone of the Flutter
+      // SDK that meant 2,743 Dart test files, and `vouch` reported "1088 test(s) read in 112
+      // file(s)" over the Android corner written in Java - a verdict a Flutter team would
+      // reasonably have read as covering their suite.
+      else if (skipped) {
+        const cannot = unreadableOf(entry);
+        if (cannot) skipped.set(cannot, (skipped.get(cannot) ?? 0) + 1);
+      }
     }
   };
   for (const path of paths) {
@@ -54,6 +63,19 @@ export function testFiles(root: string, paths: string[]): string[] {
     else found.push(full);
   }
   return found;
+}
+
+/**
+ * Source files `testFiles` walked past because Tewip cannot read the language, by language.
+ *
+ * Same walk, so the counts describe the same ground the verdict does. It counts source files rather
+ * than guessing which are tests: naming conventions differ per language and a count that overstates
+ * what it skipped is no better than one that hides it.
+ */
+export function skippedLanguages(root: string, paths: string[]): Map<string, number> {
+  const skipped = new Map<string, number>();
+  testFiles(root, paths, skipped);
+  return skipped;
 }
 
 export function vouchAll(root: string, paths: string[]): FileVouch[] {
@@ -72,9 +94,28 @@ export function vouchAll(root: string, paths: string[]): FileVouch[] {
   return out;
 }
 
+/**
+ * The one line that keeps the count above honest on a project Tewip half-reads.
+ *
+ * Only ever says what it skipped and that it skipped it. It does not guess how many were tests -
+ * naming conventions differ per language, and a count that overstates what was missed is no better
+ * than one that hides it.
+ */
+function skippedLine(skipped: Map<string, number>): string[] {
+  const rows = [...skipped.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  if (rows.length === 0) return [];
+  const [first, ...rest] = rows;
+  const also = rest.slice(0, 2).map(([name, n]) => `${n} ${name}`);
+  return [
+    '',
+    `**It did not read ${first[1]} ${first[0]} file(s)**${also.length > 0 ? ` (also ${also.join(', ')})` : ''}, because Tewip cannot read ${first[0]}. ` +
+      `Any tests in them are not in the count above and have not been judged either way.`,
+  ];
+}
+
 const count = (all: Judgement[], verdict: Verdict): number => all.filter((j) => j.verdict === verdict).length;
 
-export function renderVouch(files: FileVouch[]): string {
+export function renderVouch(files: FileVouch[], skipped: Map<string, number> = new Map()): string {
   // No test file was read, so there is nothing to say about tests.
   //
   // This printed the ordinary summary - "0 test(s) read in 0 file(s). **0 cannot fail at all.**" -
@@ -106,6 +147,12 @@ export function renderVouch(files: FileVouch[]): string {
     '# Which of these tests could fail?',
     '',
     `${all.length} test(s) read in ${files.length} file(s). **${cannotFail.length} cannot fail at all.** ${crashOnly} compare no value, so only a crash would fail them. ${count(all, 'cannot-tell')} Tewip would not judge.`,
+    // Phase 186. Said next to the count, not in a footnote, because it is the count that is
+    // misleading without it: on a clone of the Flutter SDK this line read "1088 test(s) read in 112
+    // file(s)" for a repository of 2,743 Dart test files, and the verdict covered the Android
+    // corner written in Java. A number that describes a corner of a project, printed as though it
+    // described the project, is the thing this whole command exists to stop happening to tests.
+    ...skippedLine(skipped),
     '',
     'A test that cannot fail still passes, still counts towards coverage, and still looks like work.',
     '',

@@ -14,7 +14,7 @@
 // Nothing is run and nothing is written. It reads the directory and stops.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { languageOf, looksLikeTests } from '../vouch/tests-in.ts';
+import { CANNOT_READ, languageOf, looksLikeTests, unreadableOf } from '../vouch/tests-in.ts';
 import { MARKUP } from '../access/markup.ts';
 import { dialectOf } from '../schema/frameworks.ts';
 import { isDockerfile } from '../iac/dockerfile.ts';
@@ -150,7 +150,7 @@ export function lookAround(root: string, limit = 4000): Found {
       // Counted before the `worthReading` gate below, because the whole point is the files that
       // gate throws away. Nothing is read: the extension is the claim, and a count of files Tewip
       // cannot parse needs no more than that.
-      const cannotRead = UNREADABLE_OF(entry);
+      const cannotRead = unreadableOf(entry);
       if (cannotRead) found.unreadable.set(cannotRead, (found.unreadable.get(cannotRead) ?? 0) + 1);
       const worthReading = (language !== null || /\.(sql|xml)$/i.test(entry)) && info.size < 1_000_000;
       if (!worthReading) continue;
@@ -198,44 +198,6 @@ export const PLAIN: Record<string, string> = {
   knex: 'Knex',
   efcore: 'EF Core',
   liquibase: 'Liquibase',
-};
-
-/**
- * Languages Tewip knows exist and cannot read, by extension.
- *
- * An explicit list rather than "anything `languageOf` refuses". A denylist of everything Tewip
- * cannot parse would sweep in every `.md`, `.json`, `.lock` and `.png` in the repository and the
- * front door would start warning people about their README. This names the cases where somebody
- * would reasonably expect test support and will not get it, and stays silent otherwise - a report
- * that names a gap it is not sure about teaches people to skim the gaps.
- *
- * Adding a language to `languageOf` means deleting its line here. `engine/test/start.test.ts` fails
- * if a language appears in both, because claiming to read something and warning that you cannot is
- * worse than either on its own.
- */
-export const CANNOT_READ: Record<string, string> = {
-  dart: 'Dart',
-  swift: 'Swift',
-  m: 'Objective-C',
-  c: 'C',
-  cc: 'C++',
-  cpp: 'C++',
-  cxx: 'C++',
-  ex: 'Elixir',
-  exs: 'Elixir',
-  erl: 'Erlang',
-  clj: 'Clojure',
-  hs: 'Haskell',
-  lua: 'Lua',
-  jl: 'Julia',
-  r: 'R',
-  pl: 'Perl',
-};
-
-const UNREADABLE_OF = (name: string): string | null => {
-  const dot = name.lastIndexOf('.');
-  if (dot < 0) return null;
-  return CANNOT_READ[name.slice(dot + 1).toLowerCase()] ?? null;
 };
 
 /**

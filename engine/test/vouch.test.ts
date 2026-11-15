@@ -7,7 +7,11 @@
 // Each of those must come back clean or undecided, never condemned.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { vouchFile, type Verdict } from '../vouch/vouch.ts';
+import { renderVouch, skippedLanguages, vouchAll } from '../vouch/vouch-command.ts';
 
 const verdictOf = (file: string, text: string): Verdict => {
   const vouched = vouchFile(file, text);
@@ -804,5 +808,52 @@ describe('an expectation whose chain continues on the next line', () => {
   it('still catches one followed by an unrelated statement', () => {
     const body = lines("it('has a total', () => {", '  expect(cart.total)', '  cart.save();', '});');
     assert.equal(verdictOf('cart.test.js', body), 'unfinished-expectation');
+  });
+});
+
+// Phase 186. On a clone of the Flutter SDK, `tewip vouch` reported "1088 test(s) read in 112
+// file(s)" and judged the Android corner written in Java. That repository holds 2,743 Dart test
+// files and 7,748 Dart sources; the walk dropped every one of them on the extension and said
+// nothing. A Flutter team would reasonably have read that count as covering their suite.
+describe('what vouch did not read', () => {
+  const project = (files: Record<string, string>): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-vouch-'));
+    for (const [name, content] of Object.entries(files)) {
+      const path = join(root, name);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content, 'utf8');
+    }
+    return root;
+  };
+  const A_JS_TEST = "describe('cart', () => { it('adds', () => { expect(total()).toBe(2); }); });";
+
+  it('counts the files it walked past, by language', () => {
+    const root = project({ 'test/a_test.dart': 'void main() {}', 'test/b_test.dart': 'void main() {}', 'src/x.test.js': A_JS_TEST });
+    assert.equal(skippedLanguages(root, ['.']).get('Dart'), 2);
+  });
+
+  it('says so beside the count, not in a footnote', () => {
+    const root = project({ 'test/a_test.dart': 'void main() {}', 'src/x.test.js': A_JS_TEST });
+    const page = renderVouch(vouchAll(root, ['.']), skippedLanguages(root, ['.']));
+    assert.match(page, /\*\*It did not read 1 Dart file\(s\)\*\*/, 'the language and the count have to be named');
+    assert.match(page, /not in the count above/, 'and the count above disowned');
+    // Beside the count: a reader who stops after the summary must still have seen it.
+    const summary = page.indexOf('test(s) read in');
+    const warning = page.indexOf('It did not read');
+    assert.ok(warning > summary && warning - summary < 400, 'the warning must sit with the summary, not at the end');
+  });
+
+  it('says nothing when it read everything it could', () => {
+    const root = project({ 'src/x.test.js': A_JS_TEST, 'README.md': '# x' });
+    assert.doesNotMatch(renderVouch(vouchAll(root, ['.']), skippedLanguages(root, ['.'])), /did not read/);
+  });
+
+  it('is passed by every caller, not only the one that was fixed first', () => {
+    // The MCP path took the skipped count first and the command line did not, which would have
+    // left the path the Flutter report came from still printing the misleading number.
+    const src = readFileSync(join(import.meta.dirname, '..', 'vouch', 'run-vouch.ts'), 'utf8');
+    const calls = [...src.matchAll(/renderVouch\(([^)]*)\)/g)].map((m) => m[1]);
+    assert.ok(calls.length >= 2, 'both the report and the command line render a vouch');
+    for (const args of calls) assert.match(args, /skipped/i, `renderVouch(${args}) drops the skipped count`);
   });
 });

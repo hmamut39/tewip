@@ -25,6 +25,44 @@ export interface FoundTest {
 export type Language = 'js' | 'python' | 'jvm' | 'go' | 'csharp' | 'ruby' | 'php' | 'rust';
 
 /** Which language this file is, by extension. Unknown extensions are not guessed at. */
+/**
+ * Languages Tewip knows exist and cannot read, by extension.
+ *
+ * An explicit list rather than "anything `languageOf` refuses". A denylist of everything Tewip
+ * cannot parse would sweep in every `.md`, `.json`, `.lock` and `.png` in the repository and the
+ * front door would start warning people about their README. This names the cases where somebody
+ * would reasonably expect test support and will not get it, and stays silent otherwise - a report
+ * that names a gap it is not sure about teaches people to skim the gaps.
+ *
+ * Adding a language to `languageOf` means deleting its line here. `engine/test/start.test.ts` fails
+ * if a language appears in both, because claiming to read something and warning that you cannot is
+ * worse than either on its own.
+ */
+export const CANNOT_READ: Record<string, string> = {
+  dart: 'Dart',
+  swift: 'Swift',
+  m: 'Objective-C',
+  c: 'C',
+  cc: 'C++',
+  cpp: 'C++',
+  cxx: 'C++',
+  ex: 'Elixir',
+  exs: 'Elixir',
+  erl: 'Erlang',
+  clj: 'Clojure',
+  hs: 'Haskell',
+  lua: 'Lua',
+  jl: 'Julia',
+  r: 'R',
+  pl: 'Perl',
+};
+
+export const unreadableOf = (name: string): string | null => {
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return null;
+  return CANNOT_READ[name.slice(dot + 1).toLowerCase()] ?? null;
+};
+
 export function languageOf(file: string): Language | null {
   const lower = file.toLowerCase();
   if (/\.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$/.test(lower)) return 'js';

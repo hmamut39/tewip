@@ -204,8 +204,16 @@ describe('the confidence table', () => {
     const doc = renderEvidence(e);
     // secure is one of the three --quick skips, so its number must not be quoted as backing a
     // claim this run never made.
-    assert.ok(!doc.includes('eval/secure-recall.ts'), 'a skipped check must not contribute a confidence row');
-    assert.ok(doc.includes('eval/schema-recall.ts'), 'a check that ran must contribute its number');
+    //
+    // Asked of the confidence section and not of the whole document, which is a difference that
+    // bit in Phase 210. The pack names the files that differ from the commit when the tree is
+    // dirty, so editing `eval/secure-recall.ts` put that path in the document - and this assertion
+    // failed on a change that had nothing to do with what it guards. A guard that can fail for the
+    // wrong reason can pass for the wrong reason too.
+    const from = doc.indexOf('## How much each line above is worth');
+    const confidence = from === -1 ? '' : doc.slice(from);
+    assert.ok(!confidence.includes('eval/secure-recall.ts'), 'a skipped check must not contribute a confidence row');
+    assert.ok(confidence.includes('eval/schema-recall.ts'), 'a check that ran must contribute its number');
   });
 });
 

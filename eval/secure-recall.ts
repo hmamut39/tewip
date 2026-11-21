@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { scanSecrets } from '../engine/secure/secrets.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 
@@ -45,6 +45,8 @@ interface Shape {
   /** The provider's own documented format, in words, so a reader can check the generator. */
   documented: string;
   build: (r: ReturnType<typeof generator>) => string;
+  /** Where it is planted, when the verdict depends on the kind of file it sits in. */
+  at?: string;
 }
 
 /**
@@ -95,6 +97,41 @@ const DECOYS: Shape[] = [
   { kind: 'base64-blob', documented: 'an encoded image', build: (r) => 'data:image/png;base64,' + r(B64, 120) },
   { kind: 'lorem', documented: 'a long sentence', build: () => 'The quick brown fox jumps over the lazy dog again and again and again' },
   { kind: 'placeholder', documented: 'an obvious example value', build: () => 'sk_test_' + 'EXAMPLE_KEY_DO_NOT_USE_0000' },
+  // Phase 210, from immich's own documentation:
+  //
+  //     DB_URL='postgresql://immichdbusername:immichdbpassword@postgreshost:postgresport/db'
+  //
+  // Every part names what it is, which a person sees instantly. Tewip called it "a database URL
+  // with a password in it" and explained that "the value itself does not say it is an example" -
+  // about a value that is the word `immichdbpassword`. Four of the five findings on immich were
+  // that one sentence.
+  { kind: 'self-describing', documented: 'a value that is the word for what it is, in documentation', at: 'docs/self-describing.md', build: () => 'immichdbpassword' },
+  { kind: 'self-describing-url', documented: 'a documented connection string, all placeholders', at: 'docs/self-describing-url.md', build: () => ['postgresql://immichdbusername', 'immichdbpassword@postgreshost:postgresport/immichdatabasename'].join(':') },
+];
+
+/**
+ * Real credentials that must stay found, however much they look like the word for what they are.
+ *
+ * The rule added in Phase 210 asks only about the value, and only about a value that is nothing but
+ * letters - because `PLACEHOLDER_WORDS` is tested against the surrounding line too, so putting
+ * `password` in that list would have dismissed every real `password = "..."` assignment there is.
+ * These are the cases that would catch that mistake: each is a plausible password sitting on a line
+ * that says the word.
+ */
+const PASSWORDS: Shape[] = [
+  { kind: 'password-random', documented: 'a real password in a connection string', build: (r) => `postgresql://appuser:${r('abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', 20)}@db.prod.internal/orders` },
+  { kind: 'password-words', documented: 'a weak but real password of plain words', build: () => ['mongodb://svc', 'correcthorsebatterystaple@cluster0.acme.io/app'].join(':') },
+  { kind: 'password-in-http', documented: 'a real password inside an http URL', build: (r) => `https://deploy:${r('abcdefghijkmnopqrstuvwxyz23456789', 18)}@artifacts.acme.io/repo` },
+  // The two that keep the rule narrow, and neither was here until the sabotage run showed that
+  // taking the narrowness away cost nothing:
+  //
+  //   the user is called `secretsvc`, so the URL *contains* the word - only a value that is
+  //   nothing but those words may be dismissed, never one that merely holds one;
+  //   every line here already reads `const password_… =`, because `planted()` names the variable
+  //   after the case - so putting `password` in PLACEHOLDER_WORDS, which is tested against the
+  //   surrounding line, would throw all of these away.
+  { kind: 'password-user-says-secret', documented: 'a real password whose URL names a user called secretsvc', build: (r) => `postgresql://secretsvc:${r('abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', 20)}@db.prod.internal/app` },
+  { kind: 'password-host-says-token', documented: 'a real password at a host with token in its name', build: (r) => `https://ci:${r('abcdefghijkmnopqrstuvwxyz23456789', 18)}@token-service.acme.io/fetch` },
 ];
 
 /** The line a credential is written on in real code: an assignment in a config file. */
@@ -114,19 +151,42 @@ export interface Measured {
   matched: boolean;
   /** Did triage keep it as something a person must act on. */
   actionable: boolean;
+  /** The verdict itself, because noise and not-reachable are different answers. */
+  verdict: string;
 }
 
-export function measure(seed = 7): { credentials: Measured[]; decoys: Measured[] } {
+/**
+ * A working credential pasted into a documentation file, which must stay visible.
+ *
+ * triage.ts calls this "the commonest accident there is - a working key pasted into an example
+ * file", and shows it below the ones needing action rather than dismissing it. The placeholder rule
+ * added in Phase 210 fires only inside these files, so this is where it can do harm: the verdict
+ * here must stay `not-reachable`, never `noise`, however much the surrounding words talk about
+ * secrets. The user is called `secretsvc` and the password itself begins with the word, both on purpose: the
+ * rule must look at the value and must refuse to fire on one carrying digits and capitals.
+ */
+const IN_DOCS: Shape[] = [
+  {
+    kind: 'real-key-in-docs',
+    documented: 'a real credential in documentation, beside the word secret',
+    at: 'docs/real-key-in-docs.md',
+    build: (r) => `postgresql://secretsvc:secret${r('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 18)}@db.prod.internal/app`,
+  },
+];
+
+export function measure(seed = 7): { credentials: Measured[]; decoys: Measured[]; inDocs: Measured[] } {
   const root = mkdtempSync(join(tmpdir(), 'tewip-secure-recall-'));
   try {
     mkdirSync(join(root, 'src'), { recursive: true });
     const r = generator(seed);
     const values = new Map<string, string>();
-    for (const shape of [...SHAPES, ...DECOYS]) {
+    for (const shape of [...SHAPES, ...PASSWORDS, ...DECOYS, ...IN_DOCS]) {
       const value = shape.build(r);
       values.set(shape.kind, value);
       const body = NAMED[shape.kind]?.(value) ?? planted(shape.kind, value);
-      writeFileSync(join(root, 'src', `${shape.kind}.ts`), body, 'utf8');
+      const at = shape.at ?? `src/${shape.kind}.ts`;
+      mkdirSync(join(root, dirname(at)), { recursive: true });
+      writeFileSync(join(root, at), body, 'utf8');
     }
     // Committed, because triage asks whether a credential ever left the machine and answers that
     // from git. In a directory git does not track, every finding is correctly `not-reachable` - the
@@ -146,20 +206,24 @@ export function measure(seed = 7): { credentials: Measured[]; decoys: Measured[]
         documented: shape.documented,
         matched: here.length > 0,
         actionable: here.some((f) => triageSecret(f, root, new Set<string>()).verdict === 'real-risk'),
+        verdict: here.map((f) => triageSecret(f, root, new Set<string>()).verdict)[0] ?? 'none',
       };
     };
-    return { credentials: SHAPES.map(judge), decoys: DECOYS.map(judge) };
+    return { credentials: [...SHAPES, ...PASSWORDS].map(judge), decoys: DECOYS.map(judge), inDocs: IN_DOCS.map(judge) };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
 function report(): void {
-  const { credentials, decoys } = measure();
+  const { credentials, decoys, inDocs } = measure();
   const matched = credentials.filter((c) => c.matched);
   const actionable = credentials.filter((c) => c.actionable);
   const missed = credentials.filter((c) => !c.matched);
   const accused = decoys.filter((d) => d.actionable);
+  const matchedDecoys = decoys.filter((d) => d.matched);
+  const misjudged = matchedDecoys.filter((d) => d.verdict !== 'noise');
+  const buried = inDocs.filter((d) => d.verdict !== 'not-reachable');
   const pct = (n: number) => `${((n / credentials.length) * 100).toFixed(1)}%`;
 
   process.stdout.write(
@@ -191,12 +255,33 @@ function report(): void {
       '',
       ...(accused.length === 0 ? ['None of them was called a credential needing action.'] : accused.map((a) => `- **${a.kind}** — ${a.documented}`)),
       '',
+      // Not enough on its own, and this harness said so the moment it was asked properly. "Needing
+      // action" is one bit, and the rule added in Phase 210 moves a finding between two answers
+      // that are both *not* actionable - `noise` ("this is not a credential") and `not-reachable`
+      // ("real, but not of what it runs"). Taking the rule away changed no number here until the
+      // verdict itself was measured.
+      `Decoys matched by a pattern and then read correctly as noise: ${matchedDecoys.length - misjudged.length} of ${matchedDecoys.length}`,
+      `Real credentials in documentation, kept visible rather than dismissed: ${inDocs.length - buried.length} of ${inDocs.length}`,
+      ...(buried.length === 0 ? [] : buried.map((b) => `- **${b.kind}** — called \`${b.verdict}\`, so a working key in an example file was dismissed`)),
+      ...(misjudged.length === 0 ? [] : misjudged.map((m) => `- **${m.kind}** — called \`${m.verdict}\`, which is not "this is not a credential"`)),
+      '',
       '---',
       '',
       'What this rests on: the shapes are the published formats, so a miss here is a shape Tewip has',
       'no pattern for rather than a trick. What it does not measure is a credential in a shape nobody',
       'publishes - an internal token, a password in a config file with no recognisable form - which',
-      'no pattern-based scanner finds and which this cannot pretend to cover.',
+      'no pattern-based scanner finds and which this cannot pretend to cover. A bare',
+      '`password = "..."` assignment is in that class on purpose: there is no pattern for it, because',
+      'every string assigned to a variable called password would match one.',
+      '',
+      'Phase 210 added the rule that a value which is **the word for what it is** - `immichdbpassword`',
+      "- is a placeholder. On immich that took the findings needing a second look from 5 to 1, and the",
+      'one left is a real PEM key in a file called test-keys.ts, which should stay. The rule is kept',
+      'narrow deliberately, and the narrowness is measured rather than asserted: three sabotages, all',
+      'three caught, and the telling one is putting `password` into `PLACEHOLDER_WORDS` - which is',
+      'tested against the surrounding line as well as the value. Every case here is written',
+      '`const password_… = "<credential>"`, so that one change takes this harness from **25 of 25 to',
+      '15 of 25**: ten real credentials dismissed to tidy up a documentation example.',
       '',
     ].join(NL),
   );

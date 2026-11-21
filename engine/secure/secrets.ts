@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { sourceFiles } from '../walk.ts';
+import { describesItself } from './placeholder.ts';
 import { declaredPurpose } from './jwt.ts';
 
 export interface SecretFinding {
@@ -205,6 +206,13 @@ export function looksPlanted(value: string, line: string, file: string, before =
   // Substitution, not illustration: `${VAR}` is not an example, and the reason is what gets read.
   if (/\$\{|\{\{|\$\(/.test(value)) return 'the value is a variable, substituted at run time, so no credential is written here';
   if (PLACEHOLDER_WORDS.test(value)) return 'the value itself says it is an example';
+  // Only in a file whose job is to show the shape of a thing. A value that names itself is a
+  // placeholder in documentation and a weak default in `settings.py`, and the second is worth
+  // somebody's time: saleor ships `postgres://saleor:saleorpassword@localhost` in settings, and a
+  // default password that reaches production unchanged is exactly the finding worth keeping.
+  // engine/test/secure-secrets.test.ts has said so since before this rule existed, and said it
+  // again the moment the rule was written without this gate.
+  if (inATemplate(file) && describesItself(value)) return 'the value is the word for what it is, not a credential';
   // Only the words *around* the credential are commentary about it. A hostname or a database name
   // inside the URL is part of the credential: a real password at db.acme-prod.example-corp.io was
   // dismissed because "example" was in the line, and it was in the line because it was in the host.

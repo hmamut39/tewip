@@ -61,9 +61,9 @@ export const MEASURED: Confidence[] = [
     command: 'secure',
     precision: '0 credentials wrongly called actionable across 9 real projects, pinned in the corpus',
     pinnedIn: ['keycloak', 'bitwarden-server', 'saleor', 'govuk-frontend', 'firefly-iii', 'ripgrep', 'nocodb', 'immich', 'n8n'],
-    recall: '20 of 20 credential shapes found and kept by triage, 0 of 5 decoys wrongly accused',
+    recall: '25 of 25 credential shapes found and kept by triage, 0 of 7 decoys wrongly accused',
     from: 'eval/secure-recall.ts',
-    measured: { found: 20, of: 20, accused: 0, decoys: 5 },
+    measured: { found: 25, of: 25, accused: 0, decoys: 7 },
     groundTruth: "each provider's own published token format - AWS, GitHub, Stripe, Shopify and the rest",
   },
   {

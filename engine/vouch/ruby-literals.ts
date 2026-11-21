@@ -66,6 +66,71 @@ export function rubyPercentLiteral(text: string, at: number): number {
   return -1;
 }
 
+const BACKSLASH = String.fromCharCode(92);
+
+/**
+ * Where the double-quoted Ruby string opening at `at` ends, honouring `#{...}`.
+ *
+ * Ruby interpolates with `#{}`, and what goes inside is ordinary Ruby - including strings. So a
+ * double-quoted string can legally contain a double quote:
+ *
+ *     "HTTP_COOKIE" => "#{ContentLocalization::AUTOMATICALLY_TRANSLATE_COOKIE}=false"
+ *     log("value: #{fetch("key")} done")
+ *
+ * Scanning for the next `"` stops inside the interpolation, so the string ends where it does not,
+ * the next real quote is read as an opening one, and the parity of everything after it is wrong.
+ * That is the last of the four Ruby shapes that kept `//` wrong: with percent literals and heredocs
+ * read, discourse's `lib/middleware/anonymous_cache_spec.rb` was still mis-parsed from line 179
+ * onwards, and the `//`-as-a-comment accident was resynchronising it by cutting lines short.
+ *
+ * Mutually recursive with `balancedInterpolation` below, because a string inside an interpolation
+ * can interpolate again. Ruby allows that and real code does it.
+ */
+export function rubyDoubleQuoted(text: string, at: number): number {
+  for (let i = at + 1; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === BACKSLASH) {
+      i += 1;
+      continue;
+    }
+    if (ch === '#' && text[i + 1] === '{') {
+      const close = balancedInterpolation(text, i + 1);
+      if (close === -1) return text.length;
+      i = close;
+      continue;
+    }
+    if (ch === '"') return i;
+  }
+  return text.length;
+}
+
+/** The `}` closing the `#{` whose brace is at `open`, skipping strings and nested braces inside. */
+function balancedInterpolation(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === BACKSLASH) {
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      i = rubyDoubleQuoted(text, i);
+      continue;
+    }
+    if (ch === "'") {
+      // A single-quoted string does not interpolate, so the next unescaped quote ends it.
+      for (i += 1; i < text.length && text[i] !== "'"; i += 1) if (text[i] === BACKSLASH) i += 1;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
 /** A heredoc marker: `<<~SQL`, `<<-EOS`, `<<EOF`, and the quoted forms `<<~'SQL'` and `<<"EOF"`. */
 const HEREDOC = /<<([~-]?)(['"]?)([A-Z_][A-Z_0-9]*)\2/;
 

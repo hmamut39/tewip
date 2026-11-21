@@ -14,7 +14,11 @@
 //   `spec/system/localized_internal_oneboxes_spec.rb`  2 tests read as 0, hidden by an apostrophe
 //                                                      in "Sun Tzu's strategies"
 //
-// The measured effect of reading both: **28,156 -> 28,358 tests** across discourse's 2,443 spec
+// A third shape joined them in Phase 206: `"a #{fetch("b")} c"`, where Ruby interpolates and what
+// goes inside is Ruby, so a double-quoted string can legally hold a double quote. One of those on
+// **line 7** of `spec/lib/stylesheet/compiler_spec.rb` hid all 17 tests in the file.
+//
+// The measured effect of reading all three: **28,156 -> 28,379 tests** across discourse's 2,443 spec
 // files, 4 fewer crash-only accusations, and **0 files losing a single test**.
 //
 // What this does not buy yet: Ruby's `//` is still read as a comment, which is wrong, and
@@ -72,6 +76,27 @@ const CASES: Case[] = [
   {
     what: 'the dash form of a heredoc, where the terminator may be indented',
     body: ['before do', '  run(<<-EOS)', "    it's fine", '  EOS', 'end', ...AFTER],
+    tests: 2,
+    allowed: ['checks'],
+  },
+  {
+    what: 'a quote inside an interpolation inside a string (discourse, compiler_spec line 7)',
+    // One line at the top of a 600-line file hid all 17 of its tests. Ruby interpolates with
+    // `#{}`, what goes inside is Ruby, and Ruby has strings - so a double-quoted string can
+    // legally hold a double quote. Scanning to the next `"` ends the string inside the call.
+    body: ['before do', '  Dir["#{Rails.root.join("app/assets/*.scss")}"].each { |p| load(p) }', 'end', ...AFTER],
+    tests: 2,
+    allowed: ['checks'],
+  },
+  {
+    what: 'an interpolation holding an apostrophe, which has no closing partner',
+    body: ['before do', '  log("owner: #{user.name || "o\'brien"} done")', 'end', ...AFTER],
+    tests: 2,
+    allowed: ['checks'],
+  },
+  {
+    what: 'an interpolation nested inside an interpolation',
+    body: ['before do', '  msg = "a #{fmt("b #{inner("c")} d")} e"', '  track(msg)', 'end', ...AFTER],
     tests: 2,
     allowed: ['checks'],
   },
@@ -183,7 +208,7 @@ function report(): void {
     '---',
     '',
     'Measured on real Ruby as well, because this kind of defect needs a long file to show itself:',
-    'across discourse’s 2,443 spec files, **28,156 -> 28,358 tests read**, 4 fewer crash-only',
+    'across discourse’s 2,443 spec files, **28,156 -> 28,379 tests read**, 4 fewer crash-only',
     'accusations, and **0 files losing a test**. Two gains were read by hand against their source -',
     'a file that went 0 -> 2, hidden by the apostrophe in "Sun Tzu’s strategies" inside a heredoc',
     'of HTML, and one that went 22 -> 22 where it had read 2 with Ruby’s `//` corrected.',
@@ -205,8 +230,13 @@ function report(): void {
     'a real gap, not only a refusal: a quote in the second body still breaks the file, and there is',
     'no case here for it because the case would fail.',
     '',
-    'Still not bought: Ruby’s `//` is read as a comment, which is wrong. It now costs 8 tests on',
-    'discourse instead of 159, and 8 is still 8 - so `C_COMMENTS` in slash.ts keeps its apology.',
+    'Still not bought, and the number went the other way: Ruby’s `//` is read as a comment, which',
+    'is wrong, and correcting it now costs **29 tests across 7 files** where before these readers it',
+    'cost 159. It rose from 8 because the readers raised the baseline around it - the gains are real',
+    'and the remaining loss is concentrated. `lib/middleware/anonymous_cache_spec.rb` still goes 24',
+    'to 10, so there is at least one more Ruby shape here that nothing reads, and the',
+    '`//`-as-a-comment accident is still resynchronising the file by cutting its lines short.',
+    '`C_COMMENTS` in slash.ts keeps its apology, and now says what is actually left.',
     '',
   );
   process.stdout.write(lines.join(NL));

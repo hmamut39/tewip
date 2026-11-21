@@ -7,7 +7,7 @@
 import { bracedTests, jsTests, pythonTests } from './find-tests.ts';
 import { rubyTests } from './ruby-tests.ts';
 import { C_COMMENTS, closingSlash, opensRegex, REGEX_LITERALS } from './slash.ts';
-import { lineSpans, rubyHeredoc, rubyPercentLiteral } from './ruby-literals.ts';
+import { lineSpans, rubyDoubleQuoted, rubyHeredoc, rubyPercentLiteral } from './ruby-literals.ts';
 
 export interface FoundTest {
   name: string;
@@ -121,6 +121,13 @@ export function textRanges(text: string, language?: Language): Array<[number, nu
       i = heredoc[1];
     } else if (ruby && ch === '%' && rubyPercentLiteral(text, i) !== -1) {
       const end = rubyPercentLiteral(text, i);
+      ranges.push([i, end]);
+      i = end;
+    } else if (ruby && ch === '"') {
+      // Ruby interpolates with `#{}`, and what goes in it is Ruby - including strings with quotes
+      // in them. The generic reader below stops at the first `"` it meets, which for
+      // `"value: #{fetch("key")} done"` is the one inside the call.
+      const end = rubyDoubleQuoted(text, i);
       ranges.push([i, end]);
       i = end;
     } else if (slashComments && ch === '/' && next === '/') {

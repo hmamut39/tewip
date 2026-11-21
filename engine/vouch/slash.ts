@@ -46,6 +46,14 @@ import type { Language } from './tests-in.ts';
  * percent-literal off before its quotes can do any damage. That is the whole of why the wrong rule
  * helps - luck, not design.
  *
+ * Phases 202 and 206 then taught the masker three of Ruby's shapes - percent literals, heredocs,
+ * and `#{}` interpolation that can hold a quote - and the cost of being right about `//` is now
+ * **29 tests across 7 files**, not 159. It did not reach zero, and the number rose from 8 as the
+ * other readers raised the baseline around it. `lib/middleware/anonymous_cache_spec.rb` still goes
+ * from 24 tests to 10, and its parity is already wrong before the first `//` on the page - so at
+ * least one Ruby shape here is still unread, and `//` is still cutting the lines short in a way
+ * that resynchronises the file. The next phase is finding that shape, not deleting this line.
+ *
  * Phase 201b recorded this as a fault in how `rubyTests` finds the `end` that closes a block.
  * **That was wrong**, and it was wrong in the direction that wastes a phase: the declarations are
  * not swallowed by an enclosing test at all. Measured in Phase 201d, no accepted test's body

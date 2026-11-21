@@ -129,7 +129,19 @@ function judge(file: string, test: FoundTest, helpers: Set<string>, language: La
   // Nothing in the body checks anything. Before saying so, look for the checking somewhere else:
   // a helper in this file that asserts, or a call this cannot follow at all.
   const called = [...body.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]).filter((name) => !LANGUAGE_NOISE.has(name));
-  const helping = called.find((name) => helpers.has(name));
+  // Ruby calls a method without parentheses, which is how nearly every helper in a spec is called:
+  //
+  //     it "does not send an email if user can't chat" do
+  //       SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:admins]
+  //       no_chat_summary_email
+  //     end
+  //
+  // Asking only for `name(` found none of them, so 37 tests in one discourse file were told that
+  // only a crash would fail them. A bare word is matched against `helpers` and nothing else - a set
+  // of names declared in *this* file whose own bodies assert - so the worst a wrong one can do is
+  // credit a local variable that shares a name with an asserting helper beside it.
+  const bare = language === 'ruby' ? [...body.matchAll(/^\s*([a-z_]\w*[?!]?)\s*$/gm)].map((m) => m[1]) : [];
+  const helping = [...called, ...bare].find((name) => helpers.has(name));
   if (helping) return { ...at, verdict: 'checks', evidence: `${helping}(…)`, why: `it checks through ${helping}(), which asserts` };
   const unknown = called.find((name) => /^(check|verify|ensure|validate|assert|expect|should|confirm)/i.test(name));
   if (unknown) return { ...at, verdict: 'cannot-tell', evidence: `${unknown}(…)`, why: `${unknown}() may assert, and it is not in this file, so Tewip will not call this either way` };
@@ -169,6 +181,7 @@ function withoutText(body: string, language?: Language): string {
 
 /** Functions defined in this file that assert, so a test calling one really is checking something. */
 function helpersThatCheck(text: string, language: Language): Set<string> {
+  if (language === 'ruby') return rubyHelpersThatCheck(text);
   const names = new Set<string>();
   const declarations =
     language === 'python'
@@ -180,6 +193,61 @@ function helpersThatCheck(text: string, language: Language): Set<string> {
     const from = (hit.index ?? 0) + hit[0].length;
     const body = language === 'python' ? indentedFrom(text, from) : jsHelperBody(text, from, hit[0].trimEnd().endsWith('=>'));
     if (body && checksSomething(body)) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Ruby helpers that do the asserting, which Ruby never had.
+ *
+ * `helpersThatCheck` had a branch for Python and a branch for the braced languages, and Ruby fell
+ * through to the braced one - which asks for `function name(` or a `{` body and matches nothing
+ * Ruby writes. So no Ruby helper was ever registered, and **every Ruby test that delegates its
+ * assertion to one was told it compares no value**.
+ *
+ * discourse's `plugins/chat/spec/mailers/user_notifications_spec.rb` is the whole case:
+ *
+ *     def no_chat_summary_email
+ *       email = described_class.chat_summary(user, {})
+ *       expect(email.to).to be_blank
+ *     end
+ *
+ *     it "does not send an email if user can't chat" do
+ *       SiteSetting.chat_allowed_groups = Group::AUTO_GROUPS[:admins]
+ *       no_chat_summary_email
+ *     end
+ *
+ * Thirty-seven tests in that one file, each told that only a crash would fail it, each of them
+ * checking exactly what it says it checks. This is the failure that matters most in this project -
+ * a correct test called worthless - and it was not Phase 202's doing: Phase 202 made these tests
+ * visible for the first time, and handed them to a reader that had never known how to judge them.
+ *
+ * Two shapes, which is nearly all of them: `def name ... end`, and RSpec's `let(:name)`. The body
+ * runs to the `end` lining up with the opener's indentation, the same rule `rubyTests` uses, and
+ * for the same reason: counting `do`/`if`/`case` against `end` gets real Ruby wrong in ways that
+ * are hard to see, and matching the indentation is right for conventionally formatted Ruby.
+ */
+function rubyHelpersThatCheck(text: string): Set<string> {
+  const names = new Set<string>();
+  const lines = text.split(String.fromCharCode(10));
+  for (let i = 0; i < lines.length; i += 1) {
+    // `def name`, `def name(a, b)`, `def name?`, and `let(:name) do` / `let(:name) {`.
+    const hit = /^(\s*)(?:def\s+([a-z_]\w*[?!]?)|let!?\s*\(\s*:([a-z_]\w*[?!]?)\s*\)\s*(?:do|\{))/.exec(lines[i]);
+    if (!hit) continue;
+    const name = hit[2] ?? hit[3];
+    if (!name) continue;
+    const indent = hit[1].length;
+    const body: string[] = [];
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const line = lines[j];
+      if (line.trim() === '') continue;
+      const width = line.length - line.trimStart().length;
+      // The closer, at the opener's own indentation: `end` for a `def` or a `do`, `}` for a brace.
+      if (width === indent && /^\s*(end\b|\})/.test(line)) break;
+      if (width <= indent) break; // dedented without closing: do not guess at the body
+      body.push(line);
+    }
+    if (body.length > 0 && checksSomething(body.join(String.fromCharCode(10)))) names.add(name);
   }
   return names;
 }

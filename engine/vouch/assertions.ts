@@ -77,6 +77,18 @@ const CHECKS: RegExp[] = [
   // `expect { thing }.to raise_error(...)`. Missing it reported rspec-core's own specs - the
   // reference implementation - as containing tests that cannot fail.
   /\bexpect\s*\{[\s\S]*?\}\s*\.\s*(to|not_to|to_not)\b/,
+  // The same thing written `do ... end`, which Ruby uses whenever the block is more than one line.
+  // Only the brace form was here, so discourse's
+  //
+  //     expect do
+  //       process(:text_reply)
+  //       process(:text_reply)
+  //     end.to change { topic.posts.count }.by(1)
+  //
+  // was read as a test that compares no value - a correct test called worthless, which is the one
+  // direction this file must not fail in. Found in Phase 204 by reading the four accusations left
+  // on discourse after the Ruby helper fix: three were this, and the fourth was true.
+  /\bexpect\s+do\b[\s\S]*?\bend\s*\.\s*(to|not_to|to_not)\b/,
   /\bis_expected\s*\.\s*to\b/,
   /\.\s*(must_equal|must_be|wont_equal|wont_be)\b/,
   // PHP: PHPUnit on the instance or statically, and Pest's expectation chain.

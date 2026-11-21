@@ -59,6 +59,26 @@ if (!file || !existsSync(file) || !LOOKS_LIKE_A_TEST.test(file)) process.exit(0)
 const out = tewip(['vouch', file]);
 if (out.status !== 0 || !out.stdout) process.exit(0);
 
+// A Tewip too old to read the path it was handed.
+//
+// This hook is only ever given an absolute path, and `tewip vouch <absolute path>` read nothing
+// until Phase 193 - it answered "no test file was read", which is the honest sentence for the wrong
+// reason. Every published version before that fix returns it for every file this hook checks.
+//
+// Left alone, that is the worst failure this hook could have: it would run on every test Claude
+// wrote, find nothing, say nothing, and be indistinguishable from a hook that had looked and been
+// satisfied. Silence is what this project spends its phases refusing to let stand for an absence,
+// and it would be shipping one here. So the symptom is named rather than the version: a file that
+// exists, matched the test pattern, and came back unread can only be a binary that cannot read it.
+if (/No test file was read/.test(out.stdout)) {
+  process.stdout.write(
+    `Tewip: the installed tewip could not read ${file}, which means it is older than the fix for absolute paths. ` +
+      'This hook will find nothing until it is updated: `npm i -g tewip-ai@latest`. ' +
+      'Saying so because a hook that silently finds nothing looks exactly like one that found nothing wrong.\n',
+  );
+  process.exit(0);
+}
+
 // The one line worth interrupting for. `vouch` prints a count of tests that cannot fail at all;
 // anything else it says is for a person reading the whole report, not for this moment.
 const cannot = /\*\*(\d+) cannot fail at all\.\*\*/.exec(out.stdout);

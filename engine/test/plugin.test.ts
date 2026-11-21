@@ -77,6 +77,28 @@ describe('the Claude Code plugin', () => {
     }
   });
 
+  it('says so when the installed Tewip is too old to read the path it is given', () => {
+    // Phase 195. This hook is only ever handed an absolute path, and every published version before
+    // Phase 193 answered "no test file was read" for one. Left alone it would run on every test
+    // Claude wrote, find nothing, say nothing, and look exactly like a hook that had looked and
+    // been satisfied - which is the silence this project spends its phases refusing to let stand.
+    const script = readFileSync(join(ROOT, 'plugin', 'hooks', 'vouch-edit.mjs'), 'utf8');
+    assert.match(script, /No test file was read/, 'the hook must notice the symptom of a binary that cannot read its path');
+    assert.match(script, /npm i -g tewip-ai@latest/, 'and say what to do about it');
+  });
+
+  it('keeps the two plugin copies identical where it matters', () => {
+    // `plugin/` is what the marketplace installs and `plugin-standalone/` is what somebody copies.
+    // A fix applied to one and not the other is a fix half the users do not get.
+    for (const f of ['hooks/hooks.json', 'hooks/vouch-edit.mjs']) {
+      assert.equal(
+        readFileSync(join(ROOT, 'plugin', f), 'utf8'),
+        readFileSync(join(ROOT, 'plugin-standalone', f), 'utf8'),
+        `${f} differs between plugin/ and plugin-standalone/`,
+      );
+    }
+  });
+
   it('runs the one check that is worth a person being interrupted for', () => {
     // `vouch` and not something broader, on purpose. It needs no model, it takes about a second,
     // and it answers the question agentic coding actually gets wrong: a model asked to make a

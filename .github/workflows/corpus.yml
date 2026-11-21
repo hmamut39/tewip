@@ -43,7 +43,14 @@ jobs:
           key: corpus-${{ hashFiles('corpus/expected.json') }}
           restore-keys: corpus-
 
+      # A dispatched run is somebody asking, so it reports what moved and exits 0. The weekly run
+      # and a release tag are the guard and still fail, which is where failing belongs: nobody
+      # asked, so a number that drifted unnoticed is the whole fear.
+      #
+      # Phase 203, after three "corpus: All jobs have failed" emails in one afternoon - every one a
+      # run dispatched on purpose to find out what a fix had moved. The owner cannot tell those from
+      # a broken build, and a red build nobody can trust is a red build nobody reads.
       - name: Re-derive the verified numbers
         env:
           TEWIP_CORPUS: ~/.cache/tewip-corpus
-        run: node scripts/corpus.ts ${{ inputs.repo }}
+        run: node scripts/corpus.ts ${{ inputs.repo }} ${{ github.event_name == 'workflow_dispatch' && '--asking' || '' }}

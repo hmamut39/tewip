@@ -206,11 +206,37 @@ function measure(command: Check['command'], root: string): Expectation {
 }
 
 const repos: Repo[] = JSON.parse(readFileSync(MANIFEST, 'utf8')).repos;
-const only = process.argv[2];
+// The first argument that is not a flag. It used to be `process.argv[2]`, with `only === '--record'`
+// special-cased beside it, so any second flag would have been read as a repository name and matched
+// nothing - a run that checked **no repositories at all** and said "every number still holds".
+const only = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const record = process.argv.includes('--record');
+/**
+ * Report what moved and exit 0, because somebody asked rather than something broke.
+ *
+ * A moved number means "re-verify this by hand", and when the weekly run or a release tag says it,
+ * failing is right - nobody asked, and a number that drifted unnoticed is the whole fear. But a
+ * run dispatched by hand is a question, and answering a question with **"corpus: All jobs have
+ * failed"** in somebody's inbox is a lie about what happened. Three of those went out in one
+ * afternoon, every one of them a run I had asked for on purpose, and the owner could not tell them
+ * from a broken build - which is exactly how a real red build ends up ignored.
+ */
+const asking = process.argv.includes('--asking');
+
+// A name that matches nothing checked nothing and said so in the words of a clean run.
+//
+// `node scripts/corpus.ts nosuchrepo` printed **"Every number still holds"** and exited 0, having
+// re-derived not one number. The dispatch input is a free-text box, so one typo bought a green run
+// over 0 of 14 repositories - the exact shape this whole file exists to catch in Tewip, found in
+// Tewip's own checker while writing the guard for something else.
+const chosen = repos.filter((r) => !only || r.name === only);
+if (chosen.length === 0) {
+  console.error(`No repository here is called "${only}". The manifest has: ${repos.map((r) => r.name).join(', ')}.`);
+  process.exit(1);
+}
 let moved = 0;
 
-for (const repo of repos.filter((r) => !only || only === '--record' || r.name === only)) {
+for (const repo of chosen) {
   console.log(`\n${repo.name}  ${repo.commit.slice(0, 10)}  - ${repo.why}`);
   const root = checkout(repo);
   for (const check of repo.checks) {
@@ -247,7 +273,8 @@ if (record) {
   writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
 } else if (moved > 0) {
   console.log(`\n${moved} check(s) moved. A real fix moves numbers - re-verify by hand, then \`npm run corpus -- --record\`.`);
-  process.exit(1);
+  if (asking) console.log('This run was dispatched by hand, so it is reporting rather than failing. The weekly run and a release tag still fail on a number that moved.');
+  else process.exit(1);
 } else {
   console.log('\nEvery number still holds.');
 }

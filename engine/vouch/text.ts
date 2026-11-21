@@ -1,3 +1,6 @@
+import { C_COMMENTS, HASH_COMMENTS } from './slash.ts';
+import type { Language } from './tests-in.ts';
+
 // Small text operations the vouch rules share.
 //
 // Split out in Phase 44 so that `swallowed.ts` could use them without importing the module that
@@ -25,7 +28,22 @@
 //
 // So the text is walked instead, and a quoted string is skipped whole - which is what the rules
 // above already assumed: "Strings are blanked as well as comments".
-export function withoutComments(body: string): string {
+/**
+ * @param language which comment syntax this file actually has. Phase 201.
+ *
+ * This function was written to be handed every language and guess, and the header above records
+ * two bugs that came of it - gin's `*/` inside a media type, discourse's `/*` ending a regex. The
+ * third was the same shape and had been here all along: `//` is **not** a comment in Python, where
+ * it is floor division, and `half = n // 2; assert half == 3` had everything from the slashes
+ * onwards removed. What was left - `half = n` - compares no value, so a test that plainly compares
+ * was reported as one only a crash could fail. `#` is not a comment in JavaScript either, where a
+ * class field is written `#count = 0`.
+ *
+ * Undefined keeps the old guess, which is right for the one caller that cannot say.
+ */
+export function withoutComments(body: string, language?: Language): string {
+  const slashComments = language === undefined || C_COMMENTS.has(language);
+  const hashComments = language === undefined || HASH_COMMENTS.has(language);
   let out = '';
   for (let i = 0; i < body.length; i += 1) {
     const ch = body[i];
@@ -36,7 +54,7 @@ export function withoutComments(body: string): string {
       i = end;
       continue;
     }
-    if (ch === '/' && next === '*') {
+    if (slashComments && ch === '/' && next === '*') {
       const close = body.indexOf('*/', i + 2);
       // Only when it closes. An unclosed one was treated as running to the end of the body, on the
       // reasoning that a compiler would do the same - but a compiler is reading a language that has
@@ -58,11 +76,11 @@ export function withoutComments(body: string): string {
     }
     const atLineStart = i === 0 || /\s/.test(body[i - 1] ?? '');
     // `http://x` is not a comment, which is why the start of the line or a space is required.
-    if (ch === '/' && next === '/' && atLineStart) {
+    if (slashComments && ch === '/' && next === '/' && atLineStart) {
       i = indexOrEnd(body, i) - 1;
       continue;
     }
-    if (ch === '#' && next !== '{' && atLineStart) {
+    if (hashComments && ch === '#' && next !== '{' && atLineStart) {
       i = indexOrEnd(body, i) - 1;
       continue;
     }

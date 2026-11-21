@@ -12,14 +12,14 @@ import { bodyBrace, braced, isText, lineAt, textRanges, type FoundTest, type Lan
  */
 function jsTests(text: string): FoundTest[] {
   const found: FoundTest[] = [];
-  const ranges = textRanges(text);
+  const ranges = textRanges(text, 'js');
   const declaration = /\b(it|test|specify)\s*(\.\s*(skip|only|todo|failing|concurrent|each|for)\s*(\([^)]*\)|`[^`]*`)?\s*)*\(\s*(['"`])((?:\\.|(?!\5)[^\\])*)\5/g;
   for (const hit of text.matchAll(declaration)) {
     const at = hit.index ?? 0;
     if (isText(ranges, at)) continue;
     const open = bodyBrace(text, at + hit[0].length);
     if (open === -1) continue;
-    const body = braced(text, open);
+    const body = braced(text, open, 'js');
     if (body === null) continue;
     const signature = text.slice(at + hit[0].length, open);
     found.push({
@@ -35,7 +35,7 @@ function jsTests(text: string): FoundTest[] {
     const at = hit.index ?? 0;
     if (isText(ranges, at)) continue;
     const open = text.indexOf('{', at + hit[0].length);
-    const body = open === -1 ? null : braced(text, open);
+    const body = open === -1 ? null : braced(text, open, 'js');
     found.push({ name: hit[3], line: lineAt(text, at), body: body ?? '', skipped: true, callback: '' });
   }
   return found.sort((a, b) => a.line - b.line);
@@ -44,7 +44,7 @@ function jsTests(text: string): FoundTest[] {
 /** Python has no braces: a test's body is everything indented further than its `def`. */
 function pythonTests(text: string): FoundTest[] {
   const lines = text.split(String.fromCharCode(10));
-  const ranges = textRanges(text);
+  const ranges = textRanges(text, 'python');
   const offsets: number[] = [];
   let seen = 0;
   for (const line of lines) {
@@ -121,7 +121,7 @@ function rubyTests(text: string): FoundTest[] {
   /** Each accepted test with the line its `end` sits on, so a nested one can be recognised. */
   const found: Array<FoundTest & { endsAt: number }> = [];
   const lines = text.split(String.fromCharCode(10));
-  const ranges = textRanges(text);
+  const ranges = textRanges(text, 'ruby');
   const offsets: number[] = [];
   let seen = 0;
   for (const line of lines) {
@@ -216,7 +216,7 @@ function bracedTests(language: Language, text: string): FoundTest[] {
           ? text.indexOf('{', at + hit[0].length)
           : text.indexOf('{', text.indexOf('(', at + hit[0].length));
     if (open === -1) continue;
-    const body = braced(text, open);
+    const body = braced(text, open, language);
     if (body === null) continue;
     const signature = text.slice(at, open);
     // `void foo() throws IOException` still names foo. Without allowing the throws clause, every

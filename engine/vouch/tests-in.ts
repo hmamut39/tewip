@@ -5,6 +5,7 @@
 // Everything after this reads that text. Where the shape is not recognised, the file is reported as
 // unread rather than judged - a file Tewip cannot see into is not a file full of worthless tests.
 import { bracedTests, jsTests, pythonTests, rubyTests } from './find-tests.ts';
+import { C_COMMENTS, closingSlash, opensRegex, REGEX_LITERALS } from './slash.ts';
 
 export interface FoundTest {
   name: string;
@@ -90,18 +91,36 @@ export function languageOf(file: string): Language | null {
 /** A Rust char literal: `'a'`, `'\n'`, `'\''`. Anything else beginning with a quote is a lifetime. */
 const RUST_CHAR = new RegExp(`^'(?:${String.raw`\\`}.|[^'${String.raw`\\`}])'`);
 
+
 export function textRanges(text: string, language?: Language): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const TRIPLES = ['"'.repeat(3), "'".repeat(3)];
+  // Undefined means both, which is right for JavaScript - the language of the two callers that
+  // cannot say, `withoutText` and `candidateMutants`. Every caller that knows now says so.
+  const slashComments = language === undefined || C_COMMENTS.has(language);
+  const regexes = language === undefined || REGEX_LITERALS.has(language);
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     const next = text[i + 1];
-    if (ch === '/' && next === '/') {
+    if (slashComments && ch === '/' && next === '/') {
       const end = indexOrEnd(text, String.fromCharCode(10), i);
       ranges.push([i, end]);
       i = end;
-    } else if (ch === '/' && next === '*') {
+    } else if (slashComments && ch === '/' && next === '*') {
       const end = indexOrEnd(text, '*/', i) + 1;
+      ranges.push([i, end]);
+      i = end;
+    } else if (regexes && ch === '/' && opensRegex(text, i)) {
+      // A regular expression literal is text, not code, and it is full of both. A quote inside one
+      // used to open a string that ran to the end of the file: `engine/test/action-manifest.test.ts`
+      // has `/["']?composite/` on line 39, and the phantom string that opened there swallowed
+      // 1,253 characters and five of the file's six tests. `vouch` read **none** of them and
+      // reported a clean 136 files, because a file it cannot parse was dropped without a word.
+      //
+      // Masking the contents also stops a pattern *about* tests being read as one: Tewip's own
+      // `engine/review/expectations.ts` holds `/\b(?:it|test|describe)\b/` and was a test file.
+      const end = closingSlash(text, i);
+      if (end === -1) continue; // division after all
       ranges.push([i, end]);
       i = end;
     } else if (ch === '#' && /[#\s]/.test(next ?? '')) {
@@ -143,26 +162,32 @@ export const lineAt = (text: string, index: number): number => text.slice(0, ind
  * The text between the brace at `open` and the one that closes it, skipping over strings, template
  * literals and comments - all of which can hold a brace that closes nothing.
  *
- * It does **not** skip regular expression literals, although this comment claimed it did until
- * Phase 200. Neither does `textRanges`, and that is a live defect rather than a wording slip: a
- * quote inside a regular expression - `/["']?composite/` - opens a string as far as the masking is
- * concerned, and the phantom string runs to the end of the file. In this project's own test suite
- * `engine/test/action-manifest.test.ts` loses five of its six tests that way, and `vouch` read
- * **none** of them while reporting a clean 136 files. Telling division from a regex needs the
- * previous token, which is a lexer's job and a phase of its own; until then `vouch` names the files
- * it could not parse instead of leaving them out, which is how this was found at all.
+ * This comment claimed to skip regular expressions from the day it was written, and the code had
+ * no branch for them until Phase 201 - which cost more than the wording. A quote inside a regex
+ * opened a string here too, so the brace counting went past the real closing brace and the whole
+ * test was returned as unread. With a quote in a regex on its first line, a three-test file came
+ * back as **0 of 3**: two declarations masked by the phantom string, and the third lost to this.
  */
-export function braced(text: string, open: number): string | null {
+export function braced(text: string, open: number, language?: Language): string | null {
+  const slashComments = language === undefined || C_COMMENTS.has(language);
+  const regexes = language === undefined || REGEX_LITERALS.has(language);
   let depth = 0;
   for (let i = open; i < text.length; i += 1) {
     const ch = text[i];
     const next = text[i + 1];
-    if (ch === '/' && next === '/') {
+    if (slashComments && ch === '/' && next === '/') {
       i = indexOrEnd(text, String.fromCharCode(10), i);
       continue;
     }
-    if (ch === '/' && next === '*') {
+    if (slashComments && ch === '/' && next === '*') {
       i = indexOrEnd(text, '*/', i) + 1;
+      continue;
+    }
+    if (regexes && ch === '/' && opensRegex(text, i)) {
+      const end = closingSlash(text, i);
+      // A brace inside a regular expression closes nothing: `/x{2}/` is a quantifier, and before
+      // this it decremented the depth and ended the test body early.
+      if (end !== -1) i = end;
       continue;
     }
     if (ch === '#' && /[#\s]/.test(next ?? '')) {

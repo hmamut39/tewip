@@ -76,7 +76,7 @@ export function swallowsFailure(body: string, checks: boolean, language: Languag
     const open = body.indexOf('{', hit.index ?? 0);
     const handler = balanced(body, open);
     if (handler === null) continue;
-    const meaningful = withoutComments(handler).trim();
+    const meaningful = withoutComments(handler, language).trim();
     const rescues = checksSomething(handler) || /\b(throw|raise|rethrow|fail|t\s*\.\s*(Error|Fatal)|pytest\s*\.\s*fail)\b/.test(handler);
     if (rescues) continue;
     // A handler that only logs, or does nothing at all, discards the failure.

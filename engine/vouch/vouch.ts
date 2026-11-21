@@ -82,7 +82,7 @@ export function vouchFile(file: string, text: string): FileVouch {
 
   const helpers = helpersThatCheck(text, language);
   // Masked the same way the extractor is: a `.only` quoted inside a fixture focuses nothing.
-  const ranges = textRanges(text);
+  const ranges = textRanges(text, language);
   const focus = [...text.matchAll(/\b(it|test|describe)\s*\.\s*only\s*\(|\bfdescribe\s*\(|\bfit\s*\(/g)].find(
     (hit) => !ranges.some(([from, to]) => (hit.index ?? 0) > from && (hit.index ?? 0) < to),
   );
@@ -103,7 +103,7 @@ function judge(file: string, test: FoundTest, helpers: Set<string>, language: La
   // exactly that. The extractor learned this lesson in Phase 22; the verdicts had not, and it took a
   // recall measurement judging by execution to notice, because no ordinary project quotes test code in
   // its tests. Any checker's own tests do, and so does any test asserting on generated code.
-  const body = withoutText(withoutComments(test.body));
+  const body = withoutText(withoutComments(test.body, language), language);
   const tautology = tautologies(body);
   const unfinished = unfinishedExpectations(body);
   const checks = checksSomething(body);
@@ -155,9 +155,9 @@ function judge(file: string, test: FoundTest, helpers: Set<string>, language: La
  * everything around them. `expect(x).toBe(1)` still reads as a call; `"expect(true).toBe(true)"` reads
  * as an empty string.
  */
-function withoutText(body: string): string {
+function withoutText(body: string, language?: Language): string {
   let out = body;
-  for (const [from, to] of textRanges(body).slice().reverse()) {
+  for (const [from, to] of textRanges(body, language).slice().reverse()) {
     const span = out.slice(from, to + 1);
     if (span.length < 3) continue;
     out = out.slice(0, from + 1) + ' '.repeat(span.length - 2) + out.slice(to);

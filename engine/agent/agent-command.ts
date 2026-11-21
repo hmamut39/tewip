@@ -1,5 +1,6 @@
 // `tewip agent`: what this agent is allowed to do, and what stands between it and the real world.
-import { writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 
 import { CAPABILITY_MEANS, FRAMEWORKS_READ, IRREVERSIBLE, trifectaIn, type AgentTool, type Capability, type Reach } from './tools.ts';
@@ -7,6 +8,7 @@ import { type PromptFlow } from './prompt-flow.ts';
 import { configSection, type ConfigScan } from './claude-config.ts';
 import { coverageSection, type EvalEvidence, type ToolCoverage } from './tool-tests.ts';
 import { GUARD_MEANS, GUARD_PREVENTS, type Guard, type GuardKind } from './guards.ts';
+import { changedSince, inventoryOf, renderInventory, type Inventory } from './inventory.ts';
 
 import { scanAgent, type AgentScan } from './scan.ts';
 
@@ -17,7 +19,21 @@ export interface AgentCommand {
   out?: string;
   /** Exit non-zero when a tool that cannot be undone has nothing asking a person. */
   gate?: boolean;
+  /** Write the capability baseline to `.tewip/agent-inventory.json` and compare against it. */
+  inventory?: boolean;
 }
+
+/**
+ * Where the baseline lives: the repository root, in a file people will commit without being told.
+ *
+ * Not `.tewip/`, which is where everything else this tool writes goes. That directory is gitignored
+ * by Tewip's own convention - it holds history and scratch output - so a baseline written there is
+ * never committed, never reaches CI, and the diff never fires. The check would run, find no
+ * baseline, say "nothing to compare against yet" forever, and look exactly like one that was
+ * working. Caught before shipping it, which is the only reason it is written down here rather than
+ * in a later phase as a defect.
+ */
+export const INVENTORY_AT = 'tewip-agents.json';
 
 const NL = String.fromCharCode(10);
 
@@ -254,16 +270,3 @@ export function renderAgent(scan: AgentScan, root: string): string {
 }
 
 const rank = (r: Reach): number => (IRREVERSIBLE.includes(r) ? 0 : r === 'not-sure' ? 1 : r === 'writes' ? 2 : 3);
-
-export function runAgent(cmd: AgentCommand): { report: string; ungated: number } {
-  const scan = scanAgent(cmd.root);
-  const report = renderAgent(scan, cmd.root);
-  if (cmd.out) writeFileSync(cmd.out, report, 'utf8');
-  else console.log(report);
-  const asksAPerson = scan.guards.some((g) => g.kind === 'asks-a-person');
-  const ungated = asksAPerson ? 0 : scan.tools.filter((t) => IRREVERSIBLE.includes(t.reach)).length;
-  // The gate fails on the trifecta whether or not a person is asked: an approval step in front of
-  // one tool does not close a path that runs through three.
-  if (cmd.gate && (ungated > 0 || trifectaIn(scan.tools).complete)) process.exitCode = 1;
-  return { report, ungated };
-}

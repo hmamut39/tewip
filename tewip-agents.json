@@ -1,0 +1,123 @@
+{
+  "capabilities": [
+    {
+      "kind": "guard",
+      "name": "dry-run"
+    },
+    {
+      "kind": "mcp-server",
+      "name": "tewip",
+      "reach": "this machine"
+    },
+    {
+      "kind": "tool",
+      "name": "accessibility_barriers",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "evidence_pack",
+      "reach": "not-sure",
+      "file": "mcp/tools-assure.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "explain_failure",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "github_ci_report",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "is_the_work_done",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "is_this_slower",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "list_datasets",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "list_failed_runs",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "next_action",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "project_standards",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "prove_tests_catch_bugs",
+      "reach": "reads",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "recall",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "test_plan",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "trace_requirements",
+      "reach": "reads",
+      "file": "mcp/server.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "vouch_tests",
+      "reach": "reads",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "what_tewip_may_do",
+      "reach": "not-sure",
+      "file": "mcp/tools-assure.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "what_will_this_migration_do",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    },
+    {
+      "kind": "tool",
+      "name": "which_tests_to_run",
+      "reach": "not-sure",
+      "file": "mcp/tools-prove.ts"
+    }
+  ],
+  "hash": "49b16855a865",
+  "at": "2026-11-21T17:10:47.143Z"
+}

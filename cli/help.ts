@@ -101,7 +101,7 @@ Usage:
                                     Compare a Figma frame against the running page: the words the
                                     design specifies and the controls its layer names imply. Says
                                     "the design says X, the page says Y". No model, no cost.
-  tewip agent [<folder>] [--out agent.md] [--gate]
+  tewip agent [<folder>] [--out agent.md] [--gate] [--inventory]
                                     What an AI agent in this project is allowed to do, read from
                                     its source before it runs: every tool it can call, which of
                                     them cannot be undone, and whether anything asks a person
@@ -109,6 +109,11 @@ Usage:
                                     input, private data and a way to send data out, in one loop.
                                     Reads LangChain, LangGraph, the MCP SDKs, CrewAI, the OpenAI
                                     Agents SDK and the Vercel AI SDK. No model, no cost.
+      --inventory                   Write every capability found to tewip-agents.json and say what
+                                    has changed since the last one you committed: a new tool, a gate
+                                    gone, an interface that can now be reached. With --gate it fails
+                                    when something arrived that nobody approved. The registry five of
+                                    the seven national agent-governance frameworks ask for.
   tewip contract [<folder>] [--since <ref>] [--out contract.md] [--gate]
                                     What this change breaks for the clients already calling your
                                     API. Compares every OpenAPI description against its previous

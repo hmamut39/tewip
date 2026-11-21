@@ -38,8 +38,8 @@ export async function assureVerb(verb: string, args: string[]): Promise<boolean>
       return true;
     }
     case 'agent': {
-      const { runAgent } = await import('../engine/agent/agent-command.ts');
-      runAgent({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate') });
+      const { runAgent } = await import('../engine/agent/run-agent.ts');
+      runAgent({ root: folderArg(args, ['out']) ?? process.cwd(), out: flag(args, 'out'), gate: args.includes('--gate'), inventory: args.includes('--inventory') });
       return true;
     }
     case 'contract': {

@@ -621,6 +621,20 @@
             "isNew": 0
           },
           "verified": "2026-11-08. One OpenAPI description, read. Against HEAD on a clean pinned tree every description is compared with itself, so breaks are trivially nought - checked and unreadable are the measurement, and they are what engine/evidence/confidence.ts admits is unmeasured about this command."
+        },
+        {
+          "command": "start",
+          "expect": {
+            "tests": 365,
+            "languages": 3,
+            "markup": 425,
+            "migrations": 97,
+            "manifests": 22,
+            "containers": 5,
+            "unreadable": 859,
+            "stopped-early": 0
+          },
+          "verified": "2026-11-21, Phase 209. The repository this pin was built for: immich ships a Flutter app, so it is the Phase 185 shape - a project most of which Tewip cannot read. **unreadable 859 is exact**, counted independently from the git index without downloading a blob: 830 .dart, 28 .swift, 1 .cpp, and none of them under a directory the walk skips. If that number ever drops while the Dart files are still there, the front door has gone quiet about the majority of this project, which is precisely what it did to the Flutter SDK in Phase 185. markup 425 is exact against the index, and containers 5 is the 5 Dockerfiles. manifests 22 reconciles exactly for npm: 14 package.json files minus e2e/package.json, which the fixture rule excludes, minus two under .mise/locks/, a dot-directory the walk skips - leaving 11, beside pub 3, cargo 3, maven 2, rubygems 2 and pypi 1. migrations 97 are all kysely, out of 100 .ts files under a migrations directory; the other 3 are not migrations. tests 365 (js 360, python 1, rust 4) was **not** counted one by one - it anchors against drift rather than being read back, and this line says so rather than implying otherwise. stopped-early 0 is the one to watch: the look is bounded at 4,000 files and this checkout holds 3,518, so immich is 482 files from the edge. Crossing it turns every count above into 'at least this many', and this pin is what will say so."
         }
       ]
     },

@@ -142,6 +142,16 @@ export const MEASURED: Confidence[] = [
     groundTruth: "the human-in-the-loop page of LangGraph, CrewAI, the OpenAI Agents SDK and the Vercel AI SDK, in both the Python and JavaScript forms each publishes",
   },
   {
+    check: 'agent (memory poisoning)',
+    command: 'agent',
+    precision: '0 of 5 decoys counted as a flow, including a Set, a list append and a store seeded from the project’s own text',
+    recall: '6 of 6 documented store writes found, across LangChain, Pinecone and a RAG re-index',
+    from: 'eval/memory-recall.ts',
+    groundTruth:
+      'OWASP ASI06, Memory and Context Poisoning. Each case is the write the library’s own documentation uses, carrying outside text into a store that outlives the request. What it cannot measure is whether that store is read back into a prompt: that happens in a later request, through code this check does not follow, so the claim is that the door exists rather than that somebody walked through it',
+    measured: { found: 6, of: 6, accused: 0, decoys: 5 },
+  },
+  {
     check: 'agent (prompt-injection flows)',
     command: 'agent',
     precision: '0 of 5 decoys accused, every one real code this check had reported',

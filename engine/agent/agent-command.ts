@@ -35,7 +35,7 @@ const REACH_READS: Record<Reach, string> = {
 
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
+  const { tools, injections, poisoned, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -141,6 +141,30 @@ export function renderAgent(scan: AgentScan, root: string): string {
     }
     if (injections.length > 20) lines.push(`…and ${injections.length - 20} more`);
     lines.push('');
+  }
+
+  if (poisoned.length > 0) {
+    lines.push(
+      '## Text somebody else wrote, kept where it will be read back',
+      '',
+      `${poisoned.length} place(s) where outside text is written to a store that outlives the request. ` +
+        'This is the longer-lived version of the section above, and the worse one. A prompt injected once is ' +
+        'wrong once; text written into a store is retrieved again, for this user and for others, and arrives ' +
+        'carrying the authority of something the agent itself remembered rather than of a web page.',
+      '',
+    );
+    for (const p of poisoned.slice(0, 20)) {
+      lines.push(`- ${p.file}:${p.line} — ${p.origin}, ${p.through}, into \`${p.store}\``);
+      lines.push(`  \`${p.evidence}\``);
+    }
+    if (poisoned.length > 20) lines.push(`…and ${poisoned.length - 20} more`);
+    lines.push(
+      '',
+      'What this does **not** say is whether that store is ever read back into a prompt. It is read in a ' +
+        'later request, by code this check does not follow, so the finding is that the door exists rather ' +
+        'than that somebody walked through it.',
+      '',
+    );
   }
 
   lines.push('## The lethal trifecta', '');

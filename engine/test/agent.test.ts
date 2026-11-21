@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { reachOf, toolsIn, trifectaIn, type AgentTool } from '../agent/tools.ts';
 import { guardsIn } from '../agent/guards.ts';
+import { memoryFlows } from '../agent/memory-flow.ts';
 import { blank } from '../agent/source-text.ts';
 import { promptFlows } from '../agent/prompt-flow.ts';
 import { scanConfig } from '../agent/claude-config.ts';
@@ -218,7 +219,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
+    const page = renderAgent({ tools: [], injections: [], poisoned: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);
@@ -677,5 +678,50 @@ describe('a sandbox and a spend cap are guards too', () => {
     // a long call to an expensive model. One ceiling is not the other.
     assert.deepEqual(kinds('a.py', 'agent = AgentExecutor(agent=a, tools=t, max_iterations=6)'), ['step-budget']);
     assert.deepEqual(kinds('b.ts', 'const cfg = { max_budget: 25.0 };'), ['spend-cap']);
+  });
+});
+
+// Phase 192. OWASP ASI06, Memory and Context Poisoning: outside text written to a store that
+// outlives the request. `prompt-flow.ts` asks the same question about one request; this asks the
+// one with the longer reach. An injected prompt is wrong once; an injected memory is retrieved
+// again, for this user and for others, carrying the authority of the agent's own history.
+describe('text kept where it will be read back', () => {
+  const flows = (file: string, body: string) => memoryFlows(file, body).map((f) => f.origin);
+
+  it('sees a fetched page written into a vector store', () => {
+    const body = ['def ingest(url):', '    page = requests.get(url).text', '    vectorstore.add_texts([page])'].join(NL);
+    assert.deepEqual(flows('ingest.py', body), ['a web page this agent fetched']);
+  });
+
+  it('sees it arrive as an argument, not only glued into a string', () => {
+    // The difference from the prompt check next door, and the reason this is its own module.
+    // `gluedIn` asks whether a value was concatenated into a string, because there the danger is
+    // syntax. Storing a memory has no syntax to break: `add_texts([page])` glues nothing and
+    // poisons the store exactly the same.
+    const body = ['async function ingest(url: string) {', '  const res = await fetch(url).then((r) => r.text());', '  await index.upsert([{ id: "1", values: res }]);', '}'].join(NL);
+    assert.deepEqual(flows('u.ts', body), ['a web page this agent fetched']);
+  });
+
+  it('does not call a Set a memory', () => {
+    const body = ['function unique(items: string[]) {', '  const seen = new Set<string>();', '  for (const i of items) seen.add(i);', '}'].join(NL);
+    assert.deepEqual(flows('d.ts', body), []);
+  });
+
+  it('does not call a list append a store write', () => {
+    // `append`, `push`, `set`, `write` and `save` are absent from the sinks on purpose: they are
+    // how every program puts something in a list, and counting them would report a memory in
+    // every file this reads.
+    assert.deepEqual(flows('c.py', ['def collect(url):', '    page = requests.get(url).text', '    results.append(page)'].join(NL)), []);
+  });
+
+  it('needs both halves: a source with no store, and a store with no source', () => {
+    assert.deepEqual(flows('s.py', ['def show(url):', '    page = requests.get(url).text', '    print(page)'].join(NL)), [], 'a source that goes nowhere');
+    assert.deepEqual(flows('t.ts', 'await index.upsert([{ id: "1", values: "our own copy" }]);'), [], 'a store fed the project own text');
+  });
+
+  it('does not read the store being written to as the thing written', () => {
+    // The argument scan starts after the opening parenthesis for this reason: otherwise a
+    // parameter named `store` would make every write to it look like untrusted text arriving.
+    assert.deepEqual(flows('r.py', ['def rotate(store):', '    store.add_texts(["scheduled note"])'].join(NL)), []);
   });
 });

@@ -8,6 +8,7 @@ import { scanSourceFiles } from '../walk.ts';
 import { toolsIn, type AgentTool } from './tools.ts';
 import { blank } from './source-text.ts';
 import { promptFlows, type PromptFlow } from './prompt-flow.ts';
+import { memoryFlows, type MemoryFlow } from './memory-flow.ts';
 import { budgetSetToNothing, guardsIn, type Guard } from './guards.ts';
 import { scanConfig, type ConfigScan } from './claude-config.ts';
 import { coverageOf, evalEvidence, type EvalEvidence, type ToolCoverage } from './tool-tests.ts';
@@ -53,6 +54,8 @@ export interface AgentScan {
   tools: AgentTool[];
   /** Untrusted text glued into a prompt, in the same function. */
   injections: PromptFlow[];
+  /** Untrusted text written to a store that outlives the request. OWASP ASI06. */
+  poisoned: MemoryFlow[];
   guards: Guard[];
   filesRead: number;
   /** Which tools anybody ever mentioned in a test. */
@@ -69,6 +72,7 @@ export function scanAgent(root: string): AgentScan {
   const tools: AgentTool[] = [];
   const tests: Array<{ file: string; text: string }> = [];
   const injections: PromptFlow[] = [];
+  const poisoned: MemoryFlow[] = [];
   const guards: Guard[] = [];
   let emptyBudget: AgentScan['emptyBudget'] = null;
   let filesRead = 0;
@@ -104,6 +108,7 @@ export function scanAgent(root: string): AgentScan {
     const blanked = blank(text, /\.py$/i.test(where));
     tools.push(...toolsIn(where, text, blanked));
     injections.push(...promptFlows(where, text));
+    poisoned.push(...memoryFlows(where, text));
     guards.push(...guardsIn(where, text, blanked));
     if (!emptyBudget) {
       const empty = budgetSetToNothing(text);
@@ -120,6 +125,7 @@ export function scanAgent(root: string): AgentScan {
   return {
     tools,
     injections,
+    poisoned,
     guards,
     filesRead,
     emptyBudget,

@@ -39,6 +39,21 @@ describe('the Claude Code plugin', () => {
     for (const m of MANIFESTS) assert.ok(sync.includes(m), `${m} is not synced by scripts/sync-version.ts`);
   });
 
+  it('stages every file the version script writes, not a list beside it', () => {
+    // The 0.85.0 release failed on exactly this. `scripts/sync-version.ts` wrote three files and
+    // package.json staged one of them by name, so the version commit carried a plugin manifest a
+    // release behind - and the guard above caught it in CI, after the tag was already pushed.
+    //
+    // The staging is now derived from what the script recorded writing. This test holds that: a
+    // hand-kept list of files to stage, beside a hand-kept list of files to write, is how the
+    // first one went stale.
+    const sync = readFileSync(join(ROOT, 'scripts', 'sync-version.ts'), 'utf8');
+    assert.match(sync, /git', \['add', \.\.\.wrote\]/, 'the script must stage the files it recorded writing');
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    assert.ok(!pkg.scripts.version.includes('git add'), 'package.json must not name files to stage; the script knows which it wrote');
+    for (const m of MANIFESTS) assert.ok(sync.includes(m), `${m} is written by the script, so it is staged by it`);
+  });
+
   it('points the marketplace at a directory that exists', () => {
     const market = read('.claude-plugin/marketplace.json') as { plugins: Array<{ source: string }> };
     for (const p of market.plugins) {

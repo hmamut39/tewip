@@ -8,9 +8,12 @@
 //
 // Run from the `version` lifecycle script, so it happens on `npm version` whether or not anybody
 // thinks of it.
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version as string;
+/** Every file this script writes, so the staging below cannot drift from it. */
+const wrote: string[] = [];
 const text = readFileSync('server.json', 'utf8');
 const server = JSON.parse(text) as { version: string; packages: Array<{ version: string }> };
 
@@ -34,5 +37,19 @@ for (const manifest of ['plugin/.claude-plugin/plugin.json', 'plugin-standalone/
   const had = plugin.version;
   plugin.version = version;
   writeFileSync(manifest, `${JSON.stringify(plugin, null, 2)}\n`);
+  wrote.push(manifest);
   console.log(`${manifest} ${had} -> ${version}`);
 }
+
+// Stage what this script wrote, from the list it actually wrote rather than a second one.
+//
+// `npm version` runs this file and then commits whatever is staged. package.json said
+// `git add server.json`, so when Phase 193 taught this script to sync the plugin manifests as
+// well, those two files were written and never staged - and the 0.85.0 release commit carried a
+// plugin that still said 0.84.0. The guard from that same phase caught it in CI and failed the
+// publish, which is the system working, on a defect I had put there a day earlier.
+//
+// Derived from `wrote`, so a file added to this script is staged by it without anybody
+// remembering. A hand-kept list beside a hand-kept list is how the first one went stale.
+execFileSync('git', ['add', ...wrote], { stdio: 'ignore' });
+console.log(`staged: ${wrote.join(', ')}`);

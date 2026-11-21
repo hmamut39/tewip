@@ -67,7 +67,7 @@
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "tewip": "node cli/tewip.ts",
-    "version": "node scripts/sync-version.ts && git add server.json",
+    "version": "node scripts/sync-version.ts",
     "channels": "node scripts/channels.ts",
     "corpus": "node scripts/corpus.ts"
   },

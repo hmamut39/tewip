@@ -279,6 +279,20 @@
             "findings": 0
           },
           "verified": "2026-10-31. A genuine zero: no migrations directory and no .sql file anywhere in the repository. A design system has no database. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
+        },
+        {
+          "command": "start",
+          "expect": {
+            "tests": 173,
+            "languages": 1,
+            "markup": 175,
+            "migrations": 0,
+            "manifests": 11,
+            "containers": 0,
+            "unreadable": 0,
+            "stopped-early": 0
+          },
+          "verified": "2026-11-21, Phase 208, and every number reconciled against the git index by hand. markup 175 is exact: 175 files end .html, .htm, .njk, .vue, .svelte, .jsx or .tsx. manifests 11 is 12 package.json files minus docs/examples/webpack/package.json, which the fixture rule excludes on purpose so that somebody else’s example cannot make this a project that \"depends on webpack\". tests 173 is 178 files named like a test, minus 3 and minus 2, and the second 2 are a **blind spot worth pinning**: rollup.config.mjs, vite.config.mjs and webpack.config.js under tests/ are configuration and are refused by name since Phase 200, which is right - but packages/govuk-frontend/tasks/build/package.unit.test.mjs and release.unit.test.mjs are real test files, skipped because the walk skips any directory *named* build. Here that directory holds build tasks, not build output. Un-skipping it would pull generated output into every other repository, so the number stays 173 and this line is what stops it being mistaken for the whole suite. This is the first entry to pin markup, and govuk-frontend is a markup-heavy project, which is why it was chosen."
         }
       ]
     },

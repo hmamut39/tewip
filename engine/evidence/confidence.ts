@@ -135,10 +135,10 @@ export const MEASURED: Confidence[] = [
     // check reported on n8n to be false: two object keys and a value appended to its own field.
     check: 'agent (the guards)',
     command: 'agent',
-    precision: '0 of 4 decoys counted as a gate, including a schema that only declares the option',
-    recall: '14 of 14 documented gates found, up from 5',
+    precision: '0 of 7 decoys counted as a gate, including a shop’s price ceiling, a payments sandbox and a rate limit',
+    recall: '19 of 20 documented gates found, across six kinds including a sandbox and a spend cap',
     from: 'eval/guard-recall.ts',
-    measured: { found: 14, of: 14, accused: 0, decoys: 4 },
+    measured: { found: 19, of: 20, accused: 0, decoys: 7 },
     groundTruth: "the human-in-the-loop page of LangGraph, CrewAI, the OpenAI Agents SDK and the Vercel AI SDK, in both the Python and JavaScript forms each publishes",
   },
   {

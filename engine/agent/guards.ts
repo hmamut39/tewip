@@ -22,13 +22,15 @@ export interface Guard {
   evidence: string;
 }
 
-export type GuardKind = 'asks-a-person' | 'dry-run' | 'step-budget' | 'tool-allow-list';
+export type GuardKind = 'asks-a-person' | 'dry-run' | 'step-budget' | 'tool-allow-list' | 'sandboxed' | 'spend-cap';
 
 export const GUARD_MEANS: Record<GuardKind, string> = {
   'asks-a-person': 'something here stops and waits for a person',
   'dry-run': 'something here can run without touching anything',
   'step-budget': 'the loop has a declared ceiling, so it cannot run forever',
   'tool-allow-list': 'the tools are drawn from a named list rather than whatever is in scope',
+  sandboxed: 'code the model wrote runs somewhere it cannot reach the real machine',
+  'spend-cap': 'there is a ceiling on money, not only on steps',
 };
 
 /** Why each one matters, in the words of the failure it prevents. */
@@ -37,6 +39,11 @@ export const GUARD_PREVENTS: Record<GuardKind, string> = {
   'dry-run': 'having to find out what it would do by letting it do it',
   'step-budget': 'loop divergence - the agent retrying the same failing tool until the bill arrives',
   'tool-allow-list': 'a tool reaching the model because it was in scope, not because anyone chose it',
+  sandboxed: 'a generated script reading a credential file, deleting a directory, or calling out from the machine that ran it',
+  // Said apart from the step budget on purpose. They are different ceilings and the catalogues that
+  // list both are right to: a loop can stay inside twenty-five steps and still spend a month of
+  // budget, if each step is a long call to an expensive model.
+  'spend-cap': 'a run that stays inside its step budget and still spends a month of budget in an afternoon',
 };
 
 /**
@@ -75,6 +82,31 @@ const PATTERNS: Array<{ kind: GuardKind; re: RegExp; keys: string[] }> = [
     // `maxSteps`, which makes them the current shape for a large share of TypeScript agents.
     re: /\b(?:max_iterations|maxIterations|max_steps|maxSteps|recursion_limit|recursionLimit|max_turns|maxTurns|max_tool_calls|maxToolCalls|max_tool_roundtrips|stop_after_attempt|stopWhen|stepCountIs)\b/g,
     keys: ['max_iterations', 'maxIterations', 'max_steps', 'maxSteps', 'recursion_limit', 'recursionLimit', 'max_turns', 'maxTurns', 'max_tool_calls', 'maxToolCalls', 'max_tool_roundtrips', 'stop_after_attempt'],
+  },
+  {
+    kind: 'sandboxed',
+    // Library and runtime names, not the word "sandbox" loose in code.
+    //
+    // `sandbox` on its own is a payments mode, an AWS account name and half the test fixtures in
+    // the world. Every name here belongs to something whose whole job is to run somebody else's
+    // code away from the machine: E2B's interpreter, AutoGen's Azure dynamic sessions, and the
+    // three Linux jailers. A guard finding is a *reassuring* claim - it tells a reader a control
+    // exists - so a wrong one here is the direction that does the most damage.
+    re: /\b(?:e2b_code_interpreter|AsyncSandbox|ACADynamicSessionsCodeExecutor|RestrictedPython|nsjail|firejail|bubblewrap)\b|\bnew\s+Sandbox\b|\bSandbox\.create\b/g,
+    keys: ['sandbox', 'sandboxed', 'sandbox_mode', 'sandboxMode', 'use_sandbox', 'useSandbox'],
+  },
+  {
+    kind: 'spend-cap',
+    // LiteLLM's own names, which are the ones most projects inherit: `max_budget` on a key, a team
+    // or the proxy, and `model_max_budget` per model. `budget_duration` is deliberately absent - it
+    // is the window, not the ceiling, and a window with no ceiling is not a cap.
+    //
+    // `rate_limit` is absent too, and that is a scoping decision rather than an oversight. The
+    // catalogues group "spend and rate limits" into one control; a rate limit is a general web
+    // concern that appears in every backend ever written, and counting it would claim a budget
+    // ceiling wherever somebody throttled an endpoint.
+    re: /\b(?:max_budget|maxBudget|model_max_budget|budget_limit|budgetLimit|spend_limit|spendLimit|max_spend|maxSpend)\b/g,
+    keys: ['max_budget', 'maxBudget', 'model_max_budget', 'budget_limit', 'budgetLimit', 'spend_limit', 'spendLimit', 'max_spend', 'maxSpend'],
   },
   {
     kind: 'tool-allow-list',

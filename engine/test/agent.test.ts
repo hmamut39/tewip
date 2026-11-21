@@ -635,3 +635,47 @@ describe('the gates each framework documents', () => {
     assert.deepEqual(found.map((g) => g.kind), ['dry-run']);
   });
 });
+
+// Phase 191. Two guard kinds the published guardrail catalogues list and this check did not read:
+// a sandbox and a spend cap. Both appear in OWASP's agentic material and in both guardrail
+// catalogues; a step budget is neither of them, which is the point of adding them separately.
+describe('a sandbox and a spend cap are guards too', () => {
+  const kinds = (file: string, body: string) => guardsIn(file, body).map((g) => g.kind);
+
+  it('reads the sandbox runtimes by name', () => {
+    assert.deepEqual(kinds('run.py', 'from e2b_code_interpreter import Sandbox'), ['sandboxed']);
+    assert.deepEqual(kinds('run.ts', 'const s = await Sandbox.create();'), ['sandboxed']);
+    assert.deepEqual(kinds('x.py', 'executor = ACADynamicSessionsCodeExecutor(pool_management_endpoint=e)'), ['sandboxed']);
+    assert.deepEqual(kinds('y.py', 'from RestrictedPython import compile_restricted'), ['sandboxed']);
+  });
+
+  it('reads a budget ceiling, in LiteLLM’s own words', () => {
+    assert.deepEqual(kinds('p.ts', 'export const litellm_settings = { max_budget: 100.0 };'), ['spend-cap']);
+    assert.deepEqual(kinds('k.py', 'generate_key(model_max_budget={"gpt-4o": {"budget_limit": 10.0}})'), ['spend-cap']);
+  });
+
+  it('does not call a shop’s price ceiling a spend cap', () => {
+    // The false positive this pattern was nearly shipped with. `max_cost` was in the first draft
+    // and is deliberately not in the shipped one: a guard finding tells a reader a control exists,
+    // so a wrong one here is the direction that reads as reassurance.
+    assert.deepEqual(kinds('pricing.ts', 'const max_cost = 500; // never quote above this'), []);
+  });
+
+  it('does not call a payments sandbox an execution sandbox', () => {
+    assert.deepEqual(kinds('pay.ts', 'export const stripe = new Stripe(key, { sandbox: true });'), []);
+  });
+
+  it('does not count a rate limit, which bounds requests and not dollars', () => {
+    // The catalogues group "spend and rate limits" into one control. A rate limit appears in every
+    // backend ever written, and counting it would claim a budget ceiling wherever somebody
+    // throttled an endpoint.
+    assert.deepEqual(kinds('server.ts', 'app.use(rateLimit({ windowMs: 60000, max: 100 }));'), []);
+  });
+
+  it('keeps a step budget and a spend cap apart', () => {
+    // A loop can stay inside twenty-five steps and still spend a month of budget, if each step is
+    // a long call to an expensive model. One ceiling is not the other.
+    assert.deepEqual(kinds('a.py', 'agent = AgentExecutor(agent=a, tools=t, max_iterations=6)'), ['step-budget']);
+    assert.deepEqual(kinds('b.ts', 'const cfg = { max_budget: 25.0 };'), ['spend-cap']);
+  });
+});

@@ -4,7 +4,8 @@
 // narrower: where each test starts, what text belongs to it, and whether it was marked as skipped.
 // Everything after this reads that text. Where the shape is not recognised, the file is reported as
 // unread rather than judged - a file Tewip cannot see into is not a file full of worthless tests.
-import { bracedTests, jsTests, pythonTests, rubyTests } from './find-tests.ts';
+import { bracedTests, jsTests, pythonTests } from './find-tests.ts';
+import { rubyTests } from './ruby-tests.ts';
 import { C_COMMENTS, closingSlash, opensRegex, REGEX_LITERALS } from './slash.ts';
 import { lineSpans, rubyHeredoc, rubyPercentLiteral } from './ruby-literals.ts';
 

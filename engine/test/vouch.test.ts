@@ -12,6 +12,9 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { looksLikeTests } from '../vouch/is-a-test-file.ts';
+import { testsIn } from '../vouch/tests-in.ts';
+
+const NL = String.fromCharCode(10);
 import { vouchFile, type Verdict } from '../vouch/vouch.ts';
 import { renderVouch, skippedLanguages, testFiles, vouchAll } from '../vouch/vouch-command.ts';
 
@@ -942,5 +945,40 @@ describe('the gate in front of the test readers', () => {
       `the front door counts ${accepted} test files here against ${named} named like one. ` +
         'A count that high is the Phase 200 defect: source files read as tests because they mention one.',
     );
+  });
+});
+
+// Phase 205. A finding is only as useful as the name on it.
+//
+// The Ruby name was read with `[^"')]*`, which stops at the first quote of any kind - including the
+// apostrophe in an English contraction. On discourse that cut **2,375 of 28,265 names, 8.4%**, and
+// the damage is not only cosmetic: `helpers/application_helper_spec.rb` has two different tests
+// that both came back as **"includes"**, so two findings were indistinguishable from each other.
+describe('the name on a Ruby finding', () => {
+  const nameOf = (declaration: string): string => {
+    const found = testsIn('ruby', [declaration, '  expect(a).to eq 1', 'end'].join(NL));
+    assert.equal(found.length, 1, `one test should be read from ${declaration}`);
+    return found[0].name;
+  };
+
+  it('reads past an apostrophe in a contraction', () => {
+    assert.equal(nameOf(`it "doesn't count emoji images" do`), "doesn't count emoji images");
+  });
+
+  it('reads a quoted word inside a double-quoted name', () => {
+    assert.equal(nameOf(`it "includes 'rtl' when the locale is rtl" do`), "includes 'rtl' when the locale is rtl");
+  });
+
+  it('still reads a single-quoted name', () => {
+    assert.equal(nameOf(`it 'handles the user' do`), 'handles the user');
+  });
+
+  it('reads a name in parentheses, which RSpec also allows', () => {
+    assert.equal(nameOf(`it("doesn't crash") do`), "doesn't crash");
+  });
+
+  it('keeps minitest naming the method', () => {
+    const found = testsIn('ruby', ['def test_adds_up', '  assert_equal 3, total', 'end'].join(NL));
+    assert.equal(found[0]?.name, 'test_adds_up');
   });
 });

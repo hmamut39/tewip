@@ -6,7 +6,7 @@
 // it believable.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { normalise } from '../quality/source-text.ts';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { CANNOT_FAIL, vouchFile, type FileVouch, type Judgement, type Verdict } from './vouch.ts';
 import { unreadableOf } from './tests-in.ts';
 
@@ -57,7 +57,11 @@ export function testFiles(root: string, paths: string[], skipped?: Map<string, n
     }
   };
   for (const path of paths) {
-    const full = join(root, path);
+    // An absolute path is used as it stands. `join(root, 'C:/x/y.test.js')` produces a path under
+    // the project that does not exist, so `tewip vouch <absolute>` read nothing and reported "no
+    // test file was read" - which is the honest sentence for the wrong reason. Found in Phase 193
+    // by writing the Claude Code hook, because a hook is only ever handed an absolute path.
+    const full = isAbsolute(path) ? path : join(root, path);
     if (!existsSync(full)) continue;
     if (statSync(full).isDirectory()) walk(full, 0);
     else found.push(full);

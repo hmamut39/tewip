@@ -1,0 +1,19 @@
+{
+  "description": "After Claude writes or edits a test file, Tewip reads it back and says so if any test in it cannot fail. No model is called and nothing is written; a file that is not a test costs nothing.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/vouch-edit.mjs\" || true",
+            "async": true,
+            "asyncRewake": true,
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

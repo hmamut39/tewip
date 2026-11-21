@@ -22,3 +22,17 @@ for (const entry of server.packages) entry.version = version;
 // newline coming and going.
 writeFileSync('server.json', `${JSON.stringify(server, null, 2)}\n`);
 console.log(`server.json ${was} -> ${version}`);
+
+// The Claude Code plugin manifests, which nothing synced and nothing checked.
+//
+// Found in Phase 193: both declared **0.49.0** while the package was 0.84.0 - thirty-five
+// releases, shown to anybody browsing the marketplace. This file already existed because
+// server.json had exactly this problem; the plugin manifests were simply never added to it. The
+// same defect, in the same shape, one directory over.
+for (const manifest of ['plugin/.claude-plugin/plugin.json', 'plugin-standalone/.claude-plugin/plugin.json']) {
+  const plugin = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string };
+  const had = plugin.version;
+  plugin.version = version;
+  writeFileSync(manifest, `${JSON.stringify(plugin, null, 2)}\n`);
+  console.log(`${manifest} ${had} -> ${version}`);
+}

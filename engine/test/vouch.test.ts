@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { vouchFile, type Verdict } from '../vouch/vouch.ts';
-import { renderVouch, skippedLanguages, vouchAll } from '../vouch/vouch-command.ts';
+import { renderVouch, skippedLanguages, testFiles, vouchAll } from '../vouch/vouch-command.ts';
 
 const verdictOf = (file: string, text: string): Verdict => {
   const vouched = vouchFile(file, text);
@@ -855,5 +855,28 @@ describe('what vouch did not read', () => {
     const calls = [...src.matchAll(/renderVouch\(([^)]*)\)/g)].map((m) => m[1]);
     assert.ok(calls.length >= 2, 'both the report and the command line render a vouch');
     for (const args of calls) assert.match(args, /skipped/i, `renderVouch(${args}) drops the skipped count`);
+  });
+});
+
+// Phase 193. `tewip vouch <absolute path>` read nothing and reported "no test file was read",
+// which is the honest sentence for the wrong reason. `join(root, 'C:/x/y.test.js')` produces a
+// path under the project that does not exist. Found by writing the Claude Code hook, because a
+// hook is only ever handed an absolute path - so every edit Claude made would have been checked
+// against a file that was not there, and the hook would have been silent and looked fine.
+describe('a path given in full', () => {
+  it('reads the file at an absolute path, not one joined onto the project', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-abs-'));
+    const file = join(root, 'cart.test.js');
+    writeFileSync(file, "describe('c', () => { it.skip('x', () => { expect(1).toBe(2); }); });", 'utf8');
+    // Deliberately run with a different root, which is the hook situation exactly.
+    const found = testFiles(process.cwd(), [file]);
+    assert.deepEqual(found, [file], 'an absolute path must be used as it stands');
+    assert.ok(vouchAll(process.cwd(), [file]).length > 0, 'and the file must actually be read');
+  });
+
+  it('still joins a relative path onto the root it was given', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-rel-'));
+    writeFileSync(join(root, 'a.test.js'), "it('x', () => { expect(1).toBe(1); });", 'utf8');
+    assert.deepEqual(testFiles(root, ['a.test.js']), [join(root, 'a.test.js')]);
   });
 });

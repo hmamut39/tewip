@@ -111,6 +111,27 @@ const CASES: Case[] = [
     allowed: ['checks'],
   },
   {
+    what: 'JSX: two self-closing tags on one line, which is not a pattern between them',
+    language: 'js',
+    file: 'Row.test.tsx',
+    body: ["it('renders both rows', () => {", '  render(<Row a="1" /><Row b="2" />);', '  expect(screen.getAllByRole("row")).toHaveLength(2);', '});'].join(NL),
+    tests: 1,
+    // The regression the corpus caught and this harness did not: on one repository `vouch` read
+    // 374 fewer tests, and on another it lost two files. JSX puts a `/` exactly where a value is
+    // expected, and two on a line masked everything between them.
+    code: '<Row b="2"',
+    allowed: ['checks'],
+  },
+  {
+    what: 'JSX: a closing tag, where the slash follows the angle bracket',
+    language: 'js',
+    file: 'Panel.test.tsx',
+    body: ["it('renders the panel', () => {", '  const ui = <div><span>x</span></div>;', '  expect(ui).toBeTruthy();', '});'].join(NL),
+    tests: 1,
+    code: '</span></div>',
+    allowed: ['checks'],
+  },
+  {
     what: 'Python: floor division before the only check on the line',
     language: 'python',
     file: 'tests/test_half.py',
@@ -239,9 +260,9 @@ function report(): void {
     'comparison inside one, and a test whose comparison has been blanked looks exactly like a test',
     'that compares nothing. That is the accusation this project cares most about not making.',
     '',
-    'Nine things were changed to make these cases pass. **Six of them are earned**: taking each one',
-    'back on its own drops a number above, which is how they were checked. **Three are not**, and',
-    'they are named rather than counted, because a fix no measurement can miss is a fix nobody can',
+    'Eleven things were changed to make these cases pass. **Eight are earned**: taking each one back',
+    'on its own drops a number above, which is how they were checked. **Three are not**, and they',
+    'are named rather than counted, because a fix no measurement can miss is a fix nobody can',
     'trust:',
     '',
     "- the language `pythonTests` and `rubyTests` now pass to `textRanges`. Both are correct - `//` is",

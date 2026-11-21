@@ -55,16 +55,35 @@ export function opensRegex(text: string, at: number): boolean {
   let i = at - 1;
   while (i >= 0 && /\s/.test(text[i])) i -= 1;
   if (i < 0) return true;
+  // JSX, which puts a `/` exactly where a value is expected, in two shapes: `</div>` has it after
+  // the angle bracket, and `<Foo />` has it before one. Two on a line - ordinary in a React test -
+  // and everything between them was masked as a pattern:
+  //
+  //     render(<Row a="1" /><Row b="2" />);    masked `/><Row b="2" /`
+  //     const ui = <div><span>x</span></div>;  masked `/span></`
+  //
+  // which swallows declarations and, through `braced`, miscounts the braces that end a test body.
+  // Found by the corpus, which is the only thing that did find it: on one repository `vouch` read
+  // **374 fewer tests** and on another it lost two files outright. The bound measured in Phase 200
+  // - 748 files refused and not one of them a real test - was taken on three trees with almost no
+  // JSX in them and did not generalise. That is what the 14 repositories are for.
+  //
+  // Asked about this slash rather than about the span between it and the next one. Rejecting any
+  // span containing an angle bracket was the first attempt, and it refused
+  // `/^(\s*)([a-z-]+):[ \t]+(?!['"|>&*#])(.*)$/` - the regex in the very file this phase set out to
+  // recover, which contains a `>` inside a lookahead. It read as a fix and undid the fix.
+  if (text[i] === '<' || text[at + 1] === '>') return false;
   if (!/[\w$)\]]/.test(text[i])) return true;
   const word = /[\w$]+$/.exec(text.slice(0, i + 1))?.[0] ?? '';
   return BEFORE_A_REGEX.has(word);
 }
 
 /**
- * Where the regular expression opening at `from` ends, or -1 if it does not close on this line.
+ * Where the regular expression opening at `from` ends, or -1 if this `/` was not one after all.
  *
  * A `/` inside a character class closes nothing - `/[a-z/]+/` is one expression - and a literal
- * never spans a line, so a slash with no partner before the newline was division after all.
+ * never spans a line, so a slash with no partner before the newline was division.
+ *
  */
 export function closingSlash(text: string, from: number): number {
   let inClass = false;

@@ -23,6 +23,7 @@ import { measure as containerRecall } from '../../eval/container-recall.ts';
 import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as memoryRecall } from '../../eval/memory-recall.ts';
 import { measure as doorRecall } from '../../eval/door-recall.ts';
+import { measure as goalRecall } from '../../eval/goal-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
 import { measure as terraformRecall } from '../../eval/terraform-recall.ts';
 import { measure as injectionRecall } from '../../eval/injection-recall.ts';
@@ -106,6 +107,16 @@ const HARNESSES: Record<string, () => Counts> = {
       of: frameworks.length,
       accused: decoys.filter((d) => d.found).length,
       decoys: decoys.length,
+    };
+  },
+  goal: () => {
+    const { goals, turns } = goalRecall();
+    const reachable = goals.filter((g) => g.flow);
+    return {
+      found: reachable.filter((g) => g.goal).length,
+      of: reachable.length,
+      accused: turns.filter((t) => t.goal).length,
+      decoys: turns.length,
     };
   },
   door: () => {
@@ -227,7 +238,7 @@ describe('where a precision figure is pinned', () => {
     const unpinned = MEASURED.filter((r) => !r.pinnedIn).map((r) => r.check);
     assert.deepEqual(
       unpinned,
-      ['infra (Terraform)', 'infra (Docker)', 'agent (the guards)', 'agent (memory poisoning)', 'agent (an interface others can reach)', 'agent (prompt-injection flows)'],
+      ['infra (Terraform)', 'infra (Docker)', 'agent (the guards)', 'agent (memory poisoning)', 'agent (an interface others can reach)', 'agent (goal hijack)', 'agent (prompt-injection flows)'],
       `these precision figures are neither pinned nor counted from decoys: ${unpinned.join(', ')}`,
     );
   });

@@ -774,3 +774,40 @@ describe('an agent interface somebody else can reach', () => {
     assert.equal(found[0].auth, 'requireAuth', 'and what was found beside it is named');
   });
 });
+
+// Phase 199. OWASP ASI01, Agent Goal Hijack: untrusted text reaching the system prompt rather than
+// a turn. Scored on top of the injection flows, not beside them - every case is already a flow, and
+// what is new is the size of the claim. A wrong answer is one thing; the agent's purpose rewritten
+// for every turn after it, and for whoever talks to it next, is another.
+describe('text that reaches the system prompt', () => {
+  const PY = '    page = requests.get(url).text';
+  const goals = (file: string, body: string) => promptFlowsOf(file, body).map((f) => f.goal);
+
+  it('names the system prompt in each framework own words', () => {
+    assert.deepEqual(goals('a.py', ['def b(url):', PY, '    m = [SystemMessage(content=f"You are. {page}")]'].join(NL)), [true]);
+    assert.deepEqual(goals('b.py', ['def b(url):', PY, '    messages=[{"role": "system", "content": f"{page}"}]'].join(NL)), [true]);
+    assert.deepEqual(goals('c.py', ['def b(url):', PY, '    a = Agent(name="x", instructions=f"You must: {page}")'].join(NL)), [true]);
+  });
+
+  it('leaves a user turn as a turn', () => {
+    // Still a finding - it must be reported - but not this finding. A check that escalates
+    // whatever it cannot classify is one people stop reading, and then the escalation is worth
+    // nothing on the day it is right.
+    assert.deepEqual(goals('d.py', ['def b(url):', PY, '    messages=[{"role": "user", "content": f"{page}"}]'].join(NL)), [false]);
+    assert.deepEqual(goals('e.py', ['def b(url):', PY, '    m = [HumanMessage(content=f"{page}")]'].join(NL)), [false]);
+  });
+
+  it('does not read the word system in prose as a role', () => {
+    // `system` is in half the codebases in the world: system.out, systemd, file system, design
+    // system. The pattern asks for a role or a property, never the bare word.
+    const body = ['def b(url):', PY, '    llm.invoke(f"Our design system docs say: {page}")'].join(NL);
+    assert.deepEqual(goals('f.py', body), [false]);
+  });
+
+  it('still finds the flow either way', () => {
+    // The guarantee underneath. Escalation is a label on a finding that was already there, so a
+    // mistake here can never lose one.
+    const turn = promptFlowsOf('g.py', ['def b(url):', PY, '    messages=[{"role": "user", "content": f"{page}"}]'].join(NL));
+    assert.equal(turn.length, 1, 'a turn is still reported');
+  });
+});

@@ -151,8 +151,19 @@ export function renderAgent(scan: AgentScan, root: string): string {
         : `${injections.length} place(s). None is in a function that also hands the model tools, so the worst case here is a wrong answer rather than a tool call somebody else chose.`,
       '',
     );
+    const goals = injections.filter((i) => i.goal);
+    if (goals.length > 0) {
+      lines.push(
+        `**${goals.length} of them reach the system prompt**, which is a larger claim than the rest of this section. ` +
+          'Text in a user turn can produce a wrong answer. Text in the system prompt rewrites what the agent is *for*, ' +
+          'for every turn after it and for whoever is talking to it next, and the model cannot tell that instruction ' +
+          'from the one you wrote because both arrive in the same place with the same standing. OWASP calls this ASI01, ' +
+          'Agent Goal Hijack, and puts it first.',
+        '',
+      );
+    }
     for (const i of injections.slice(0, 20)) {
-      lines.push(`- ${i.file}:${i.line} — ${i.origin}, in by ${i.through}${i.withTools ? ' — **and this function has tools**' : ''}`);
+      lines.push(`- ${i.file}:${i.line} — ${i.origin}, in by ${i.through}${i.goal ? ' — **into the system prompt**' : ''}${i.withTools ? ' — **and this function has tools**' : ''}`);
       lines.push(`  \`${i.evidence}\``);
     }
     if (injections.length > 20) lines.push(`…and ${injections.length - 20} more`);

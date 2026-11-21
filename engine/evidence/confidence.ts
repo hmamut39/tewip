@@ -162,6 +162,16 @@ export const MEASURED: Confidence[] = [
     measured: { found: 5, of: 5, accused: 0, decoys: 5 },
   },
   {
+    check: 'agent (goal hijack)',
+    command: 'agent',
+    precision: '0 of 4 turns wrongly escalated, including a `user` role, a HumanMessage and the words “design system” in prose',
+    recall: '5 of 5 system-prompt shapes named, across LangChain, OpenAI, the Anthropic and Vercel SDKs and the Agents SDK',
+    from: 'eval/goal-recall.ts',
+    groundTruth:
+      'OWASP ASI01, Agent Goal Hijack, scored on top of the injection flows rather than beside them: every case is already a flow, and what is measured is whether the system prompt is told from a turn. The failure available here is not a false finding but a real one made to sound worse than it is, so the four turns weigh as much as the five system prompts. One shape is unreachable by design and named in the harness: a chain two hops from its source, which this project refuses everywhere it reads a flow',
+    measured: { found: 5, of: 5, accused: 0, decoys: 4 },
+  },
+  {
     check: 'agent (prompt-injection flows)',
     command: 'agent',
     precision: '0 of 5 decoys accused, every one real code this check had reported',

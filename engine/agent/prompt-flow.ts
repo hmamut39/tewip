@@ -30,6 +30,17 @@ export interface PromptFlow {
   through: string;
   /** True when the same function also hands the model tools. */
   withTools: boolean;
+  /**
+   * True when what the text reaches is the **system** prompt rather than a turn in the conversation.
+   *
+   * OWASP ASI01, Agent Goal Hijack, and the reason it is a field here rather than a second module:
+   * the flow is the same flow, and reporting it twice would read as two problems. What differs is
+   * the size of the claim. Untrusted text in a user turn can produce a wrong answer. Untrusted text
+   * in the system prompt rewrites what the agent is *for* - every turn after it, including the ones
+   * where somebody else is talking to it - and the model has no way to tell that instruction from
+   * the one the author wrote, because they arrive in the same place with the same standing.
+   */
+  goal: boolean;
   evidence: string;
 }
 
@@ -93,6 +104,22 @@ const PROMPT = /\b(?:messages|prompt|system|instructions|user_message|userMessag
 const WEAK_SINK = /^\s*(?:input|content|template)\s*[:=]/;
 const A_MODEL_IS_HERE =
   /\b(?:messages|prompt|system|instructions|user_message|userMessage)\s*[:=]|\b(?:SystemMessage|HumanMessage|ChatPromptTemplate|PromptTemplate)\s*(?:\.\s*from_\w+\s*)?\(|\.\s*(?:invoke|complete|generate|predict|chat)\s*\(|\b(?:openai|anthropic|llm|model|chain|agent|completion)\w*\s*\.\s*\w+\s*\(/i;
+
+/**
+ * The statement is building the **system** prompt, not a turn in the conversation.
+ *
+ * Each shape is how one framework writes it: LangChain's `SystemMessage`, the `("system", ...)`
+ * tuple `from_messages` takes, OpenAI's `{"role": "system"}`, the `system:` property the Anthropic
+ * and Vercel SDKs take beside `messages:`, and the `instructions` the OpenAI Agents SDK uses for
+ * the same thing under a different name.
+ *
+ * `system` loose in a sentence is not here and must not be. It is a word that appears in half the
+ * codebases in the world - `system.out`, `systemd`, `file system`, `design system` - and this
+ * escalates a finding rather than making one, so a wrong match does not invent a flow. It makes a
+ * real flow sound worse than it is, which is its own kind of wrong and the one worth guarding.
+ */
+const A_SYSTEM_PROMPT =
+  /\bSystemMessage\s*\(|["'`]\s*system\s*["'`]\s*,|\brole\s*[:=]\s*["'`]system["'`]|\bsystem\s*[:=]\s*(?:f?["'`]|\w)|\bsystem_prompt\b|\bsystemPrompt\b|\binstructions\s*[:=]/i;
 
 /** A value glued into its own field is not a value glued into a prompt. */
 const assignsToItself = (statement: string, value: string): boolean => {
@@ -206,6 +233,9 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
     // Tools in the same body: looked for from the start of the enclosing function rather than the
     // whole file, so a tool list in one handler does not arm a prompt built in another.
     const withTools = TOOLS_HERE.test(body);
+    // Decided from the statement, not the matched word: `messages=[{"role":"system",...}]` has the
+    // system-ness beside the sink rather than in it.
+    const goal = A_SYSTEM_PROMPT.test(statement);
 
     // Directly: the fetched value is written inside the prompt string itself.
     for (const { re, origin } of SOURCES) {
@@ -218,7 +248,7 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
       const key = `direct:${hit[0]}:${statement.slice(0, 40)}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      found.push({ file, line, source: hit[0].replace(/\s+/g, ' ').slice(0, 80), origin, through: how, withTools, evidence: statement.replace(/\s+/g, ' ').slice(0, 160) });
+      found.push({ file, line, source: hit[0].replace(/\s+/g, ' ').slice(0, 80), origin, through: how, withTools, goal, evidence: statement.replace(/\s+/g, ' ').slice(0, 160) });
     }
 
     // Through one variable, assigned from an untrusted value earlier in the same body.
@@ -236,6 +266,7 @@ export function promptFlows(file: string, text: string): PromptFlow[] {
         origin: a.origin,
         through: `${how}, through \`${a.name}\``,
         withTools,
+        goal,
         evidence: statement.replace(/\s+/g, ' ').slice(0, 160),
       });
     }

@@ -143,7 +143,7 @@ describe("the README's account of how its numbers were measured", () => {
     // A row without one counts its own planted decoys, which is legitimate and different, and the
     // README now states the number - so it needs re-deriving like every other count in it.
     const decoyOnly = MEASURED.filter((r) => !r.pinnedIn).length;
-    const words: Record<number, string> = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six' };
+    const words: Record<number, string> = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' };
     const claimed = words[decoyOnly];
     assert.ok(claimed, `no word for ${decoyOnly} rows; add it or rewrite the sentence as a numeral`);
     assert.match(

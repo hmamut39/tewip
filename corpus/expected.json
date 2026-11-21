@@ -346,16 +346,16 @@
           "command": "vouch",
           "expect": {
             "files": 4770,
-            "tests": 54846,
+            "tests": 54853,
             "cannot-tell": 1050,
-            "crash-only": 584,
-            "checks": 53205,
+            "crash-only": 582,
+            "checks": 53214,
             "never-runs": 7,
             "swallows-failure": 0,
             "unfinished-expectation": 0,
             "tautology": 0
           },
-          "verified": "2026-10-15. 7 never-runs, every one read against its source: 5 `xit` and 2 unconditional `skip`. It was 38 before Phase 48. Thirty were `skip \"...\" if condition` - a Ruby modifier guard, where the test runs every time the condition is false - and one was an expectation held in a variable and finished on the next line, which RSpec allows and discourse writes. The Go side had refused conditional skips since it was written; Ruby's was added in Phase 36 without it. | 2026-10-19: 92 verdicts moved to checks, and 2 more moved the wrong way and were a regression I had introduced - the new comment stripper treated an unclosed /* as running to the end of the body, and discourse writes a regex literal ending in /*, which deleted three assertions below it. Found here because this repository is too large to check by hand. Fixed, and the guard is in vouch.test.ts."
+          "verified": "2026-10-15. 7 never-runs, every one read against its source: 5 `xit` and 2 unconditional `skip`. It was 38 before Phase 48. Thirty were `skip \"...\" if condition` - a Ruby modifier guard, where the test runs every time the condition is false - and one was an expectation held in a variable and finished on the next line, which RSpec allows and discourse writes. The Go side had refused conditional skips since it was written; Ruby's was added in Phase 36 without it. | 2026-10-19: 92 verdicts moved to checks, and 2 more moved the wrong way and were a regression I had introduced - the new comment stripper treated an unclosed /* as running to the end of the body, and discourse writes a regex literal ending in /*, which deleted three assertions below it. Found here because this repository is too large to check by hand. Fixed, and the guard is in vouch.test.ts. | 2026-11-21, Phase 201: tests 54846 -> 54853, checks 53205 -> 53214, crash-only 584 -> 582. Seven more tests read and two accusations withdrawn, all on discourse's JavaScript side, where a quote inside a regular expression literal used to open a string that ran to the end of the file. **This entry is now the only guard on a rule Tewip knows is wrong.** `//` is the empty pattern in Ruby, not a comment, and Tewip reads it as a comment anyway. Reading it correctly cost 159 tests here: `lib/onebox/engine/youtube_onebox_spec.rb` has `%r{https://www\\.youtube\\.com/oembed...}`, the `//` inside it opened a comment to the end of the line, and that accidental comment was hiding an `it` - which is what stopped `rubyTests` treating the next twenty as nested inside it. The file went 22 tests -> 2. The fragility is in how the closing `end` is found, and until that is fixed this number is what stops the wrong rule being corrected again. Verified file by file across all 2,443 spec files with the engine before and after, and the Ruby delta is 0."
         },
         {
           "command": "schema",
@@ -430,14 +430,14 @@
         {
           "command": "vouch",
           "expect": {
-            "files": 372,
+            "files": 370,
             "tests": 8267,
-            "checks": 8154,
-            "crash-only": 21,
+            "checks": 8157,
+            "crash-only": 18,
             "cannot-tell": 91,
             "never-runs": 1
           },
-          "verified": "2026-10-31. Pinned to hold Phase 128. unfinished-expectation is 0 and absent here; it was 525 before the fix, every one a Jasmine `.withContext` chain whose matcher sits on a later line. The single never-runs was read: autocomplete.spec.ts:2852 is an `xit(`, with a `// tslint:disable-next-line:ban` above it, so the team skipped it deliberately - a correct finding. tautology and swallows-failure are 0. crash-only 21 and cannot-tell 95 are not accusations that a test cannot fail and were not read one by one; they anchor against drift. | 2026-10-31, later the same day: cannot-tell 95 -> 91 and checks 8150 -> 8154. Same one gap as keycloak - a call named assertSomething() is now read as an assertion, so four tests delegating to a custom assert helper are decided instead of refused."
+          "verified": "2026-10-31. Pinned to hold Phase 128. unfinished-expectation is 0 and absent here; it was 525 before the fix, every one a Jasmine `.withContext` chain whose matcher sits on a later line. The single never-runs was read: autocomplete.spec.ts:2852 is an `xit(`, with a `// tslint:disable-next-line:ban` above it, so the team skipped it deliberately - a correct finding. tautology and swallows-failure are 0. crash-only 21 and cannot-tell 95 are not accusations that a test cannot fail and were not read one by one; they anchor against drift. | 2026-10-31, later the same day: cannot-tell 95 -> 91 and checks 8150 -> 8154. Same one gap as keycloak - a call named assertSomething() is now read as an assertion, so four tests delegating to a custom assert helper are decided instead of refused. | 2026-11-21, Phase 200 and 201: files 372 -> 370, checks 8154 -> 8157, crash-only 21 -> 18, and tests unchanged at 8267 - which is the proof that nothing real was lost. Two files stopped being counted as tests. One was read in full: `scripts/create-package-archives.mjs` is a build script, and Tewip had been reading two tests out of it named **\"-e\"** and **\"-d\"** - shell test flags - and calling both of them tests that compare no value and only a crash would fail. Two false accusations, against a build script, in this pinned entry. The second file was not identified one by one; it held no test, because `tests` did not move while two left with the script, so it was kept only by a phantom `.only` that the masking fix no longer sees. The 3 verdicts that moved from crash-only to checks are real tests whose assertion sat behind a regular expression the masking used to swallow."
         },
         {
           "command": "schema",

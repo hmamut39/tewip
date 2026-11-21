@@ -10,16 +10,17 @@
 //                and `vouch` read **none** of them, while reporting a clean 136 files. The file
 //                guards the GitHub Action's manifest, written because nothing had ever run the
 //                action; nothing had vouched for it either.
-//   Python       `total // 2` is floor division, and the masker read it as a line comment, so the
-//                rest of the line - including the comparison in `assert total // 2 == 3` - was
-//                blanked. A blanked comparison is how a real test gets accused of checking
-//                nothing, which is the one mistake this project cares about most.
-//   Ruby        `//` is the empty regular expression, and the same branch read it as a comment and
-//                swallowed the rest of the line.
+//   Python       `total // 2` is floor division, read as a line comment, so the rest of the line -
+//                including the comparison in `assert total // 2 == 3` - was blanked. A blanked
+//                comparison is how a real test is accused of checking nothing, which is the one
+//                mistake this project cares about most.
+//   Ruby         `//` is the empty pattern there, read as a comment too - and **not fixed**. Being
+//                right about it cost 159 tests on discourse, so it is knowingly left wrong; the
+//                footer says why, and `engine/vouch/slash.ts` carries the reasoning.
 //
-// The cause behind all three: `textRanges` takes the language and six of its eight callers never
-// passed it, although every one of them knew it. The same shape as Phase 200, where the masking
-// existed and the gate in front of it never asked.
+// The cause behind all of it: `textRanges` takes the language and six of its eight callers never
+// passed it, although every one knew it. The same shape as Phase 200, where the masking existed
+// and the gate in front of it never asked.
 //
 // Run: node eval/slash-reading.ts
 import { testsIn, textRanges, type Language } from '../engine/vouch/tests-in.ts';
@@ -48,8 +49,8 @@ const CASES: Case[] = [
     language: 'js',
     file: 'a.test.ts',
     body: [
-      // Each test compares a value the code produced. `expect(2).toBe(2)` would be a tautology,
-      // and Tewip said so when this fixture was first written - correctly, about the fixture.
+      // Each compares a value the code produced: `expect(2).toBe(2)` is a tautology, and Tewip
+      // said so when this fixture was first written - correctly, about the fixture.
       "it('one', () => { expect(/[\"']/.test(s)).toBe(true); });",
       "it('two', () => { expect(cart.total).toBe(2); });",
       "it('three', () => { expect(cart.count).toBe(3); });",
@@ -116,9 +117,8 @@ const CASES: Case[] = [
     file: 'Row.test.tsx',
     body: ["it('renders both rows', () => {", '  render(<Row a="1" /><Row b="2" />);', '  expect(screen.getAllByRole("row")).toHaveLength(2);', '});'].join(NL),
     tests: 1,
-    // The regression the corpus caught and this harness did not: on one repository `vouch` read
-    // 374 fewer tests, and on another it lost two files. JSX puts a `/` exactly where a value is
-    // expected, and two on a line masked everything between them.
+    // The regression the corpus caught and this harness did not: `vouch` read 374 fewer tests on
+    // one repository. JSX puts a `/` where a value is expected, and two on a line masked between.
     code: '<Row b="2"',
     allowed: ['checks'],
   },
@@ -173,20 +173,36 @@ const CASES: Case[] = [
     allowed: ['checks'],
   },
   {
-    what: 'Ruby: `//` is the empty regular expression, not a comment',
+    // The shape from discourse's youtube_onebox_spec.rb, where `//` reaches a `%r{}` through an
+    // `https://` URL. Tewip reads it as a comment, which is wrong about Ruby, and being right cost
+    // **159 tests** across that suite - see the footer. **This case does not catch that**: the
+    // sabotage leaves every number here at 16 of 16, because a short fixture has none of the quote
+    // parity of a 3,000-line file. It keeps the ordinary shape honest, nothing more.
+    what: 'Ruby: `//` inside a percent-literal, read as a comment - wrong, and load-bearing',
     language: 'ruby',
-    file: 'spec/text_spec.rb',
-    body: ['it "matches anything" do', '  expect(text).to match(//)', '  expect(text.size).to eq 3', 'end'].join(NL),
-    tests: 1,
-    code: 'eq 3',
+    file: 'spec/onebox_spec.rb',
+    body: [
+      'it "fetches the oEmbed" do',
+      '  stub_request(:get, %r{//www\\.youtube\\.com/oembed\\?url=https://www\\.youtube\\.com/watch})',
+      '  expect(Onebox.preview(url).to_s).to include("iframe")',
+      'end',
+      'it "falls back to the embed page" do',
+      '  expect(Onebox.preview(other).to_s).to include("embed")',
+      'end',
+    ].join(NL),
+    // Both, which is the number that matters: the second declaration must not be swallowed.
+    tests: 2,
     allowed: ['checks'],
   },
   {
-    what: 'Ruby: a regular expression after a condition with no parentheses',
+    what: 'Ruby: a pattern holding a quote, which Tewip deliberately does not read as a pattern',
     language: 'ruby',
     file: 'spec/line_spec.rb',
     body: ['it "finds the line" do', '  expect(line =~ /^a"b/).to eq 0', 'end'].join(NL),
     tests: 1,
+    // Ruby is not in REGEX_LITERALS, so the quote here opens a string that should not be open -
+    // and the test is still read and still not accused, which is the pre-existing behaviour kept
+    // on purpose. Guessing at `/` with the file's quote parity at stake cost discourse 206 tests.
     allowed: ['checks'],
   },
   {
@@ -245,38 +261,35 @@ function report(): void {
     '',
   ];
   const broken = all.filter((m) => !m.right);
-  if (broken.length > 0) {
+  if (broken.length === 0) lines.push('Every slash above is read as the language reads it, and no real test is accused.', '');
+  else {
     lines.push('## Read wrongly', '');
     for (const m of broken) lines.push(`- **${m.what}**`, ...m.wrong.map((w) => `  - ${w}`));
     lines.push('');
-  } else {
-    lines.push('Every slash above is read as the language reads it, and no real test is accused.', '');
   }
   lines.push(
     '---',
     '',
-    'Every case asserts two things, not one: that the tests are read, **and** that no test is given',
-    'a verdict it does not deserve. Masking errors do not usually hide a test - they blank the',
-    'comparison inside one, and a test whose comparison has been blanked looks exactly like a test',
-    'that compares nothing. That is the accusation this project cares most about not making.',
+    'Every case asserts two things: that the tests are read, **and** that none is given a verdict',
+    'it does not deserve. A masking error rarely hides a test - it blanks the comparison inside one,',
+    'and that looks exactly like a test comparing nothing.',
     '',
-    'Eleven things were changed to make these cases pass. **Eight are earned**: taking each one back',
-    'on its own drops a number above, which is how they were checked. **Three are not**, and they',
-    'are named rather than counted, because a fix no measurement can miss is a fix nobody can',
-    'trust:',
+    'Thirteen decisions were sabotaged one at a time. **Eight are earned**: taking one back drops a',
+    'number above. **Five are not**, and are named rather than counted - a fix no measurement can',
+    'miss is a fix nobody can trust:',
     '',
-    "- the language `pythonTests` and `rubyTests` now pass to `textRanges`. Both are correct - `//` is",
-    '  floor division in one and an empty regular expression in the other - but neither finder uses',
-    '  the masking to take a body, so no case here can tell. The impact of that same misreading is',
-    '  real and is measured, one function along, in `withoutComments`.',
-    '- gating `#` comments out of JavaScript, Go, Java, C# and Rust, where `#` is a class field, a',
-    '  preprocessor directive or an attribute. Harmful only when code follows the `#` on the same',
-    '  line, and nobody writes `#[allow(...)] let x = 1; assert_eq!(x, 1);`. Correct, and narrow.',
+    "- the language `pythonTests` and `rubyTests` pass to `textRanges`, and gating `#` comments out",
+    '  of JavaScript, Go, Java, C# and Rust. Correct, and narrow: no case here can tell, because',
+    '  neither finder uses masking to take a body, and nobody writes code after a `#` attribute.',
+    '- **the two Ruby decisions, which are the interesting ones**: `//` read as a comment although',
+    '  it is the empty pattern, and `/` left inert although Ruby has pattern literals. Both wrong',
+    '  about the language, both deliberate, both reasoned out in `engine/vouch/slash.ts`. Reading',
+    '  Ruby properly cost 206 tests on discourse, 159 with half undone. Taking either back leaves',
+    '  every number here at 16 of 16: **the guard is discourse in `corpus/expected.json`, not this',
+    '  harness**, which is the honest shape of it.',
     '',
-    'What is not measured at all: whether `/` is read correctly in code that is not a test.',
-    '`candidateMutants` in engine/prove still cannot say what language it is reading, so for it',
-    'undefined means "JavaScript, probably" - right for the files it is given, and an assumption',
-    'rather than a fact.',
+    'Not measured at all: `/` in code that is not a test. `candidateMutants` in engine/prove still',
+    'cannot say what language it reads, so undefined means "JavaScript, probably" - an assumption.',
     '',
   );
   process.stdout.write(lines.join(NL));

@@ -23,12 +23,51 @@
 // comparison inside one.
 import type { Language } from './tests-in.ts';
 
-/** Languages where `//` begins a comment. Not Python, where it is floor division, and not Ruby. */
-export const C_COMMENTS = new Set<Language>(['js', 'jvm', 'go', 'csharp', 'php', 'rust']);
+/**
+ * Languages where `//` is treated as beginning a comment. **Ruby is in this list and should not
+ * be**, and the honest name for that is a known wrong rule that is load-bearing.
+ *
+ * Python came out, which is the whole fix: `total // 2` is floor division, and reading it as a
+ * comment removed the rest of the line. Ruby came out too, for the same reason - `//` is the empty
+ * pattern there - and it had to go back, because the accident it caused was holding something up.
+ *
+ * discourse's `youtube_onebox_spec.rb` contains
+ *
+ *     stub_request(:get, %r{//www\.youtube\.com/oembed\?url=https://www\.youtube\.com/watch})
+ *
+ * and the `//` inside that percent-literal opened a comment that ran to the end of the line. That
+ * accidental comment hid the `it` on that line - and `rubyTests` skips a declaration nested inside
+ * an accepted one, so hiding the first one was what kept the next twenty visible. Reading Ruby
+ * correctly made the first `it` real, its closing `end` was found far too late, and the file fell
+ * from **22 tests to 2**. Across discourse's spec suite, being right about `//` cost 159 tests.
+ *
+ * So the fragility is in how `rubyTests` finds the `end` that closes a block, and this wrong rule
+ * is compensating for it. Fixing them in the other order loses real tests on a real repository,
+ * which is not a trade worth making for a rule nothing measurable depends on. The `end` matcher is
+ * the phase that has to come first, and then this line changes.
+ */
+export const C_COMMENTS = new Set<Language>(['js', 'jvm', 'go', 'csharp', 'php', 'rust', 'ruby']);
 /** Languages where `#` begins a comment. Not JavaScript, where `#count = 0` is a class field. */
 export const HASH_COMMENTS = new Set<Language>(['python', 'ruby', 'php']);
-/** Languages where `/` can open a regular expression literal. */
-export const REGEX_LITERALS = new Set<Language>(['js', 'ruby']);
+/**
+ * Languages where `/` can open a regular expression literal **and Tewip can tell**.
+ *
+ * Ruby belongs here by the language and is deliberately absent, which cost a phase to learn. Ruby
+ * writes a pattern four ways, and `%r{...}` is the common one in real code:
+ *
+ *     expect(url).to match(%r{/tag/test/#{tag.id}/l/top\.json})
+ *
+ * The `/` after `%r{` sits where a value is expected, so it opened a pattern, `/tag/` was masked,
+ * and from there the quote parity for the rest of the file was wrong. On discourse's spec suite
+ * that was **206 tests lost in one subtree**, and `spec/requests/tags_controller_spec.rb` fell from
+ * 209 tests to 52. Ruby also has `%w[]`, `%q()`, `%i[]` and heredocs, none of which this masker
+ * knows, so reading `/` as a pattern there is guessing with the file's whole parity at stake.
+ *
+ * Doing it properly is a Ruby lexer. Until then Ruby keeps the behaviour of every release before
+ * this one - `/` is inert - which loses nothing that was ever working. What Ruby does get from
+ * this phase is `//` no longer being read as a comment, which is in `C_COMMENTS` and separate.
+ */
+export const REGEX_LITERALS = new Set<Language>(['js']);
 
 /**
  * The words a `/` may follow and still open a regular expression.

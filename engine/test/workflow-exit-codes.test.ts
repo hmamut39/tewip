@@ -89,3 +89,41 @@ describe('the corpus gate fails where failing means something', () => {
     assert.match(src, /process\.argv\.slice\(2\)\.find\(\(a\) => !a\.startsWith\('--'\)\)/, 'the repository name must be the first non-flag argument');
   });
 });
+
+// Phase 207. The front door is the first command anybody runs and the only number a new user has
+// no way to check - and until now it was the one command corpus/expected.json never held.
+//
+// That gap is why the same count broke three times. Phase 185 under-counted the Flutter SDK, Phase
+// 186 fixed it, and Phase 200 found it reporting 298 test files in this repository against a real
+// 133. Each fix was aimed at a reported symptom; nothing was watching the number itself.
+describe('the front door is pinned on real code', () => {
+  const manifest = JSON.parse(readFileSync(join('corpus', 'expected.json'), 'utf8')) as {
+    repos: Array<{ name: string; checks: Array<{ command: string; expect: Record<string, number>; verified: string }> }>;
+  };
+  const pinned = manifest.repos.flatMap((r) => r.checks.filter((c) => c.command === 'start').map((c) => ({ repo: r.name, check: c })));
+
+  it('pins `start` against at least two repositories', () => {
+    assert.ok(pinned.length >= 2, `the front door is pinned on ${pinned.length} repositories; a number nobody watches is how it broke three times`);
+  });
+
+  it('pins the test count, which is the number that was wrong', () => {
+    for (const { repo, check } of pinned) {
+      assert.ok(typeof check.expect.tests === 'number', `${repo}'s start check must pin a test count`);
+      assert.ok(check.expect.tests > 0, `${repo} pins ${check.expect.tests} test files, and a zero pinned by accident guards nothing`);
+    }
+  });
+
+  it('pins whether the look stopped early, because that changes what every other count means', () => {
+    // The look is bounded at 4,000 files, so a count taken from a bounded one is "at least this
+    // many". A repository crossing that line turns the counts into samples reported as totals.
+    for (const { repo, check } of pinned) {
+      assert.ok('stopped-early' in check.expect, `${repo}'s start check must pin stopped-early`);
+    }
+  });
+
+  it('says how each count was checked, not only what it was', () => {
+    for (const { repo, check } of pinned) {
+      assert.ok(check.verified.length > 120, `${repo}'s start check needs a verification note; a number with none is what the tool said that day`);
+    }
+  });
+});

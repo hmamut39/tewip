@@ -52,6 +52,14 @@ describe('the Claude Code plugin', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     assert.ok(!pkg.scripts.version.includes('git add'), 'package.json must not name files to stage; the script knows which it wrote');
     for (const m of MANIFESTS) assert.ok(sync.includes(m), `${m} is written by the script, so it is staged by it`);
+
+    // Counted, not named. The first version of this guard checked that the manifests were
+    // mentioned and that the staging was derived - and both were true while `server.json` was
+    // written and never recorded, so 0.85.1 was tagged on a commit with a stale server.json. Every
+    // file written has to be a file recorded, and the only way to hold that is to compare the two.
+    const writes = [...sync.matchAll(/writeFileSync\(/g)].length;
+    const records = [...sync.matchAll(/wrote\.push\(/g)].length;
+    assert.equal(records, writes, `sync-version.ts writes ${writes} file(s) and records ${records}. A file written and not recorded is not staged, and ships a release behind.`);
   });
 
   it('points the marketplace at a directory that exists', () => {

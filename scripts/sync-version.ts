@@ -24,6 +24,7 @@ for (const entry of server.packages) entry.version = version;
 // The trailing newline matters: without it every release shows a one-line diff that is only the
 // newline coming and going.
 writeFileSync('server.json', `${JSON.stringify(server, null, 2)}\n`);
+wrote.push('server.json');
 console.log(`server.json ${was} -> ${version}`);
 
 // The Claude Code plugin manifests, which nothing synced and nothing checked.

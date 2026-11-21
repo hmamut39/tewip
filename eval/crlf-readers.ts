@@ -16,7 +16,8 @@
 // text with the two endings, and the answers compared. That is exactly the level the bug lives at,
 // it needs no fixture project, and it runs in milliseconds.
 import { checksSomething, tautologies, unfinishedExpectations } from '../engine/vouch/assertions.ts';
-import { lineAt, looksLikeTests, testsIn, textRanges } from '../engine/vouch/tests-in.ts';
+import { lineAt, testsIn, textRanges } from '../engine/vouch/tests-in.ts';
+import { looksLikeTests } from '../engine/vouch/is-a-test-file.ts';
 import { firstRealLine, withoutComments } from '../engine/vouch/text.ts';
 import { readLcov } from '../engine/coverage/read-coverage.ts';
 import { candidateMutants } from '../engine/prove/mutants.ts';
@@ -105,7 +106,7 @@ const LCOV = ['TN:', 'SF:src/add.js', 'DA:1,1', 'DA:2,1', 'DA:3,0', 'LF:3', 'LH:
 
 const READERS: Reader[] = [
   { name: 'vouch: testsIn', from: 'engine/vouch/tests-in.ts', lines: JS_TEST, read: (t) => testsIn('js', t), carriesInputText: true },
-  { name: 'vouch: looksLikeTests', from: 'engine/vouch/tests-in.ts', lines: JS_TEST, read: (t) => looksLikeTests('a.spec.js', t) },
+  { name: 'vouch: looksLikeTests', from: 'engine/vouch/is-a-test-file.ts', lines: JS_TEST, read: (t) => looksLikeTests('a.spec.js', t) },
   { name: 'vouch: textRanges', from: 'engine/vouch/tests-in.ts', lines: JS_TEST, read: (t) => textRanges(t, 'js').length },
   {
     // The line a finding points at. An off-by-one here is what Kubernetes had: the finding is real

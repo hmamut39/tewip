@@ -12,7 +12,8 @@
 import { balanced, conciseBody, firstRealLine, stripLines, withoutComments } from './text.ts';
 import { swallowsFailure } from './swallowed.ts';
 import { checksSomething, tautologies, unfinishedExpectations } from './assertions.ts';
-import { languageOf, looksLikeTests, testsIn, textRanges, type FoundTest, type Language } from './tests-in.ts';
+import { languageOf, testsIn, textRanges, type FoundTest, type Language } from './tests-in.ts';
+import { looksLikeTests } from './is-a-test-file.ts';
 
 export type Verdict =
   | 'checks' // it can fail: something in it is asserted

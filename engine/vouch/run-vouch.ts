@@ -8,20 +8,22 @@ import { renderVouch, skippedLanguages, vouchAll, type VouchCommand } from './vo
 
 /** The silent core: every MCP caller and the report itself use this. */
 export function vouchReport(root: string, paths: string[]): { report: string; cannotFail: number; read: number } {
-  const files = vouchAll(root, paths);
+  const noTestRead: string[] = [];
+  const files = vouchAll(root, paths, noTestRead);
   const all = files.flatMap((f) => f.judgements);
   return {
-    report: renderVouch(files, skippedLanguages(root, paths)),
+    report: renderVouch(files, skippedLanguages(root, paths), noTestRead),
     cannotFail: all.filter((j) => CANNOT_FAIL.includes(j.verdict)).length,
     read: all.length,
   };
 }
 
 export function runVouch(cmd: VouchCommand): void {
-  const files = vouchAll(cmd.root, cmd.paths);
+  const noTestRead: string[] = [];
+  const files = vouchAll(cmd.root, cmd.paths, noTestRead);
   // Both call sites pass it. The MCP path had it first and this one did not, which would have left
   // the command line - the path the Flutter report came from - still printing the misleading count.
-  const report = renderVouch(files, skippedLanguages(cmd.root, cmd.paths));
+  const report = renderVouch(files, skippedLanguages(cmd.root, cmd.paths), noTestRead);
   console.log(report);
 
   if (cmd.out) {

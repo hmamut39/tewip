@@ -14,7 +14,8 @@
 // Nothing is run and nothing is written. It reads the directory and stops.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { CANNOT_READ, languageOf, looksLikeTests, unreadableOf } from '../vouch/tests-in.ts';
+import { CANNOT_READ, languageOf, unreadableOf } from '../vouch/tests-in.ts';
+import { looksLikeTests } from '../vouch/is-a-test-file.ts';
 import { MARKUP } from '../access/markup.ts';
 import { dialectOf } from '../schema/frameworks.ts';
 import { isDockerfile } from '../iac/dockerfile.ts';

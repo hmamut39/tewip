@@ -82,7 +82,20 @@ export function skippedLanguages(root: string, paths: string[]): Map<string, num
   return skipped;
 }
 
-export function vouchAll(root: string, paths: string[]): FileVouch[] {
+/**
+ * @param noTestRead collects the files that look like tests and gave up no test at all, which this
+ * walk otherwise throws away. `vouchFile` writes the honest sentence for them - "no test in a shape
+ * Tewip recognises, so it says nothing about this file rather than clearing it" - and until Phase
+ * 200 the line below dropped the file before anybody could read it.
+ *
+ * What that hid, found the same hour: `engine/test/action-manifest.test.ts` is a file in this
+ * project's own test directory, named `.test.ts`, holding six tests - and `vouch` reads **none** of
+ * them. A quote inside a regular expression literal opens a string as far as the masking is
+ * concerned, and the phantom string runs 1,253 characters to the end of the file, so five of the
+ * six declarations are masked as prose. The file then vanished from the verdict in silence, which
+ * is why a parsing bug in the project's own suite survived however many runs of its own command.
+ */
+export function vouchAll(root: string, paths: string[], noTestRead?: string[]): FileVouch[] {
   const out: FileVouch[] = [];
   for (const file of testFiles(root, paths)) {
     let text: string;
@@ -92,8 +105,10 @@ export function vouchAll(root: string, paths: string[]): FileVouch[] {
       continue;
     }
     if (text.length > 2_000_000) continue; // a generated file, not a test somebody wrote
-    const vouched = vouchFile(relative(root, file).split('\\').join('/'), text);
+    const named = relative(root, file).split(String.fromCharCode(92)).join('/');
+    const vouched = vouchFile(named, text);
     if (vouched.judgements.length > 0 || vouched.focused) out.push(vouched);
+    else if (noTestRead && vouched.unread.startsWith('no test in a shape')) noTestRead.push(named);
   }
   return out;
 }
@@ -117,9 +132,32 @@ function skippedLine(skipped: Map<string, number>): string[] {
   ];
 }
 
+/**
+ * Files that look like tests and gave up no test at all.
+ *
+ * Said beside the count rather than in a footnote, for the same reason the skipped-language line
+ * is: it changes what the count means. "136 test(s) read in 136 file(s)" over a suite of 137 is a
+ * clean report with one file missing from it, and the missing one is the interesting one - a file
+ * Tewip could not parse is far more likely to be hiding something than the 136 it read.
+ *
+ * It is not a finding against the project. It is a finding against Tewip, printed where the person
+ * who would have to care about it is looking.
+ */
+function unparsedLine(noTestRead: string[]): string[] {
+  if (noTestRead.length === 0) return [];
+  const shown = noTestRead.slice(0, 5);
+  const rest = noTestRead.length - shown.length;
+  return [
+    '',
+    `**${noTestRead.length} file(s) look like tests and no test could be read in them**, so this verdict does not cover them: ` +
+      `${shown.map((f) => `\`${f}\``).join(', ')}${rest > 0 ? ` and ${rest} more` : ''}. ` +
+      `Either they hold no test, or they hold one in a shape Tewip cannot parse - and it cannot tell those apart, so it names the files instead of counting them as clean.`,
+  ];
+}
+
 const count = (all: Judgement[], verdict: Verdict): number => all.filter((j) => j.verdict === verdict).length;
 
-export function renderVouch(files: FileVouch[], skipped: Map<string, number> = new Map()): string {
+export function renderVouch(files: FileVouch[], skipped: Map<string, number> = new Map(), noTestRead: string[] = []): string {
   // No test file was read, so there is nothing to say about tests.
   //
   // This printed the ordinary summary - "0 test(s) read in 0 file(s). **0 cannot fail at all.**" -
@@ -137,6 +175,16 @@ export function renderVouch(files: FileVouch[], skipped: Map<string, number> = n
       '# Which of these tests could fail?',
       '',
       '**No test file was read, so nothing here has been checked.** This is not a report that your tests are sound - it is a report that Tewip found none to look at.',
+      // Two different situations wore the same sentence. "Tewip found no tests" and "Tewip found
+      // files that are tests and could not read any of them" need different things done about them,
+      // and the second is the one worth a bug report against Tewip.
+      ...(noTestRead.length > 0
+        ? [
+            '',
+            `It is the second kind of nothing: **${noTestRead.length} file(s) here look like tests** and no test could be read in any of them - ` +
+              `${noTestRead.slice(0, 5).map((f) => `\`${f}\``).join(', ')}. That is more likely to be a gap in Tewip than an empty suite.`,
+          ]
+        : []),
       '',
       'Three things usually explain it: the path given holds no tests, the tests are somewhere Tewip was not pointed at (`tewip vouch <path>`), or they are written in a language it cannot read yet.',
       '',
@@ -157,6 +205,7 @@ export function renderVouch(files: FileVouch[], skipped: Map<string, number> = n
     // corner written in Java. A number that describes a corner of a project, printed as though it
     // described the project, is the thing this whole command exists to stop happening to tests.
     ...skippedLine(skipped),
+    ...unparsedLine(noTestRead),
     '',
     'A test that cannot fail still passes, still counts towards coverage, and still looks like work.',
     '',

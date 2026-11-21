@@ -10,7 +10,7 @@ import { HistoryIndex } from '../history.ts';
 import { importJunit } from '../import/junit.ts';
 import { PROJECT_ROOT } from '../../reporters/store.ts';
 import { vouchFile } from '../vouch/vouch.ts';
-import { looksLikeTests } from '../vouch/tests-in.ts';
+import { looksLikeTests } from '../vouch/is-a-test-file.ts';
 
 const REPORTS = join(PROJECT_ROOT, 'fixtures', 'polyglot', 'reports');
 

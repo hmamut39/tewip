@@ -8,8 +8,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
+import { looksLikeTests } from '../vouch/is-a-test-file.ts';
 import { vouchFile, type Verdict } from '../vouch/vouch.ts';
 import { renderVouch, skippedLanguages, testFiles, vouchAll } from '../vouch/vouch-command.ts';
 
@@ -852,9 +854,23 @@ describe('what vouch did not read', () => {
     // The MCP path took the skipped count first and the command line did not, which would have
     // left the path the Flutter report came from still printing the misleading number.
     const src = readFileSync(join(import.meta.dirname, '..', 'vouch', 'run-vouch.ts'), 'utf8');
-    const calls = [...src.matchAll(/renderVouch\(([^)]*)\)/g)].map((m) => m[1]);
+    // By line, not by `\(([^)]*)\)`, which stops at the first close paren it meets. The argument
+    // list holds a nested call - `skippedLanguages(root, paths)` - so that pattern captured
+    // "files, skippedLanguages(root, paths" and anything after it was never looked at. The
+    // `skipped` check below passed anyway, because the truncated text happens to contain the word,
+    // so this test has been weaker than it reads since it was written. Phase 200 found out by
+    // adding a second argument after the nested one and watching the assertion fail on a call
+    // site that was correct.
+    const calls = src.split(String.fromCharCode(10)).filter((line) => line.includes('renderVouch('));
     assert.ok(calls.length >= 2, 'both the report and the command line render a vouch');
-    for (const args of calls) assert.match(args, /skipped/i, `renderVouch(${args}) drops the skipped count`);
+    for (const line of calls) {
+      assert.match(line, /skipped/i, `this renderVouch drops the skipped count: ${line.trim()}`);
+      // The same thing a caller can forget, in the same shape, so it is checked in the same place.
+      assert.match(line, /noTestRead/, `this renderVouch drops the files it could not parse: ${line.trim()}`);
+    }
+    for (const line of src.split(String.fromCharCode(10)).filter((l) => l.includes('vouchAll('))) {
+      assert.match(line, /noTestRead/, `this vouchAll throws those files away instead of collecting them: ${line.trim()}`);
+    }
   });
 });
 
@@ -878,5 +894,53 @@ describe('a path given in full', () => {
     const root = mkdtempSync(join(tmpdir(), 'tewip-rel-'));
     writeFileSync(join(root, 'a.test.js'), "it('x', () => { expect(1).toBe(1); });", 'utf8');
     assert.deepEqual(testFiles(root, ['a.test.js']), [join(root, 'a.test.js')]);
+  });
+});
+
+// Phase 200. `looksLikeTests` is the gate in front of every test reader, and the front door counts
+// what it accepts. Pointed at a real Python project it counted five source files as tests; pointed
+// at this repository it counted 298 against a real 133, because a tool built out of regular
+// expressions calls `.test(` in nearly every file it has.
+//
+// `eval/test-file-recall.ts` measures both directions on planted controls. These are the two
+// properties a planted harness cannot check: that the answer does not depend on how many times it
+// is asked, and that it holds on a real tree rather than a fixture.
+describe('the gate in front of the test readers', () => {
+  it('gives the same answer the second time it is asked', () => {
+    // `DECLARED_IN_CODE` is a global regular expression, which carries `lastIndex` between calls.
+    // `matchAll` copies it and `.test()` does not, so the difference between those two is a check
+    // that passes once and then quietly stops agreeing with itself. Found by sabotage: replacing
+    // `inCode` with a plain `.test()` dropped recall to 9 of 10 and the reason was this, not the
+    // masking the sabotage was aimed at.
+    const file = 'src/checkout-behaviour.ts';
+    const body = "describe('checkout', () => {\n  it('charges once', () => { expect(c).toBe(1); });\n});";
+    const answers = [looksLikeTests(file, body), looksLikeTests(file, body), looksLikeTests(file, body)];
+    assert.deepEqual(answers, [true, true, true], 'the gate must not carry state between calls');
+  });
+
+  it('counts this repository\u2019s own test files, within a few of the files named like one', () => {
+    // The check that would have caught the original defect, on the tree it was wrong about. Not an
+    // exact figure: `engine/test/no-network.ts` is test infrastructure in the test directory and is
+    // fairly counted, so a band is the honest shape. It is 161 wide at the defect and 2 now.
+    const root = join(import.meta.dirname, '..', '..');
+    const named = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' })
+      .split(String.fromCharCode(10))
+      .filter((f) => /(^|\/)(test|tests)\/|\.(test|spec)\.[a-z]+$|_test\.(go|py|rb)$|Tests?\.(java|kt|cs)$/.test(f)).length;
+    let accepted = 0;
+    for (const file of testFiles(root, ['.'])) {
+      let text = '';
+      try {
+        text = readFileSync(file, 'utf8');
+      } catch {
+        continue;
+      }
+      if (looksLikeTests(relative(root, file).split(String.fromCharCode(92)).join('/'), text)) accepted += 1;
+    }
+    assert.ok(named > 100, `the ground truth should be this project's suite, got ${named}`);
+    assert.ok(
+      accepted < named * 1.2,
+      `the front door counts ${accepted} test files here against ${named} named like one. ` +
+        'A count that high is the Phase 200 defect: source files read as tests because they mention one.',
+    );
   });
 });

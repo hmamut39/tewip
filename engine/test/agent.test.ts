@@ -18,6 +18,7 @@ import { describe, it } from 'node:test';
 import { reachOf, toolsIn, trifectaIn, type AgentTool } from '../agent/tools.ts';
 import { guardsIn } from '../agent/guards.ts';
 import { memoryFlows } from '../agent/memory-flow.ts';
+import { agentDoors } from '../agent/agent-door.ts';
 import { blank } from '../agent/source-text.ts';
 import { promptFlows } from '../agent/prompt-flow.ts';
 import { scanConfig } from '../agent/claude-config.ts';
@@ -219,7 +220,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], poisoned: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
+    const page = renderAgent({ tools: [], injections: [], poisoned: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);
@@ -723,5 +724,53 @@ describe('text kept where it will be read back', () => {
     // The argument scan starts after the opening parenthesis for this reason: otherwise a
     // parameter named `store` would make every write to it look like untrusted text arriving.
     assert.deepEqual(flows('r.py', ['def rotate(store):', '    store.add_texts(["scheduled note"])'].join(NL)), []);
+  });
+});
+
+// Phase 194. OWASP ASI07, Insecure Inter-Agent Communication: an agent interface bound beyond the
+// machine it runs on. A conjunction, like the lethal trifecta - an agent protocol on its own is how
+// every multi-agent system is built, and a bind to every interface on its own is how everything in
+// a container runs. Either alone must stay silent.
+describe('an agent interface somebody else can reach', () => {
+  const doors = (file: string, body: string) => agentDoors(file, body);
+
+  it('sees an MCP transport served to every interface', () => {
+    const body = ['const t = new SSEServerTransport("/messages", res);', 'app.listen(3000, "0.0.0.0");'].join(NL);
+    const found = doors('s.ts', body);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].door, 'SSEServerTransport');
+    assert.equal(found[0].auth, null, 'nothing in this file checks a caller');
+  });
+
+  it('stays silent on loopback, which is the right answer', () => {
+    // What Tewip own A2A server does on purpose. Reporting it would turn the correct choice into
+    // a finding, which is the one outcome that would make this check worse than nothing.
+    assert.deepEqual(doors('l.ts', ['const t = new SSEServerTransport("/m", res);', 'app.listen(3000, "127.0.0.1");'].join(NL)), []);
+  });
+
+  it('stays silent on a web server with no agent protocol in it', () => {
+    assert.deepEqual(doors('w.ts', ['app.get("/health", (q, r) => r.send("ok"));', 'app.listen(3000, "0.0.0.0");'].join(NL)), []);
+  });
+
+  it('does not read a client fetching a peer card as a door', () => {
+    // The well-known path is identical in both directions, so the path alone cannot tell a server
+    // from a client. This decoy was invented by the first version and is why the statement around
+    // the match is read for an outbound call.
+    const body = ['const card = await fetch(peer + "/.well-known/agent-card.json").then((r) => r.json());', 'app.listen(3000, "0.0.0.0");'].join(NL);
+    assert.deepEqual(doors('c.ts', body), []);
+  });
+
+  it('does not count a bind written in a comment', () => {
+    // Tewip own serve.ts says in a comment that binding to 0.0.0.0 would be worse than any bug it
+    // found. Running this check over Tewip itself is how that case got written down.
+    const body = ['// opening a port on 0.0.0.0 would be worse than any bug', 'const t = new SSEServerTransport("/m", res);', 'app.listen(3000, "127.0.0.1");'].join(NL);
+    assert.deepEqual(doors('warned.ts', body), []);
+  });
+
+  it('reports an auth check as context rather than as a verdict', () => {
+    const body = ['app.get("/.well-known/agent-card.json", card);', 'app.use(requireAuth);', 'app.listen(3000, "0.0.0.0");'].join(NL);
+    const found = doors('a.ts', body);
+    assert.equal(found.length, 1, 'the door is still reported');
+    assert.equal(found[0].auth, 'requireAuth', 'and what was found beside it is named');
   });
 });

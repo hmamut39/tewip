@@ -35,7 +35,7 @@ const REACH_READS: Record<Reach, string> = {
 
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, poisoned, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
+  const { tools, injections, poisoned, doors, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -165,6 +165,24 @@ export function renderAgent(scan: AgentScan, root: string): string {
         'than that somebody walked through it.',
       '',
     );
+  }
+
+  if (doors.length > 0) {
+    lines.push(
+      '## An agent interface somebody else can reach',
+      '',
+      `${doors.length} file(s) serve an agent protocol and bind beyond this machine. This is a fact read from the ` +
+        'source, not a finding against it: Tewip cannot see the ingress, the service mesh or the security group ' +
+        'that may well be doing the authentication, and binding to every interface inside a container with a ' +
+        'gateway in front of it is correct. What it can say is where the door is.',
+      '',
+    );
+    for (const d of doors.slice(0, 20)) {
+      lines.push(`- ${d.file}:${d.line} — serves \`${d.door}\`, binds \`${d.binding}\``);
+      lines.push(d.auth ? `  Something in this file checks a caller: \`${d.auth}\`` : '  **Nothing in this file checks who is calling.** The check may be elsewhere; this says only that it is not here.');
+    }
+    if (doors.length > 20) lines.push(`…and ${doors.length - 20} more`);
+    lines.push('');
   }
 
   lines.push('## The lethal trifecta', '');

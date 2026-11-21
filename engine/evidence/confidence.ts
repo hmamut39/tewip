@@ -152,6 +152,16 @@ export const MEASURED: Confidence[] = [
     measured: { found: 6, of: 6, accused: 0, decoys: 5 },
   },
   {
+    check: 'agent (an interface others can reach)',
+    command: 'agent',
+    precision: '0 of 5 decoys counted as a door, including a loopback bind, a plain web server, and a client reading somebody else’s agent card',
+    recall: '5 of 5 exposed agent interfaces found, across the MCP SDK’s two HTTP transports and A2A',
+    from: 'eval/door-recall.ts',
+    groundTruth:
+      'OWASP ASI07, Insecure Inter-Agent Communication. A conjunction: an agent protocol served, and a bind to every interface, in one file. Either alone is normal and neither is reported. What it cannot say is whether an ingress, a mesh or a security group checks the caller - none of those is in the source - so the report states where the door is and says plainly that the thing in front of it is not something Tewip can see',
+    measured: { found: 5, of: 5, accused: 0, decoys: 5 },
+  },
+  {
     check: 'agent (prompt-injection flows)',
     command: 'agent',
     precision: '0 of 5 decoys accused, every one real code this check had reported',

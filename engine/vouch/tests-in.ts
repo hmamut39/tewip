@@ -6,6 +6,7 @@
 // unread rather than judged - a file Tewip cannot see into is not a file full of worthless tests.
 import { bracedTests, jsTests, pythonTests, rubyTests } from './find-tests.ts';
 import { C_COMMENTS, closingSlash, opensRegex, REGEX_LITERALS } from './slash.ts';
+import { lineSpans, rubyHeredoc, rubyPercentLiteral } from './ruby-literals.ts';
 
 export interface FoundTest {
   name: string;
@@ -99,10 +100,29 @@ export function textRanges(text: string, language?: Language): Array<[number, nu
   // cannot say, `withoutText` and `candidateMutants`. Every caller that knows now says so.
   const slashComments = language === undefined || C_COMMENTS.has(language);
   const regexes = language === undefined || REGEX_LITERALS.has(language);
+  // Ruby's percent literals and heredocs, which are text and are full of quotes. See
+  // engine/vouch/ruby-literals.ts for what not knowing them cost. The heredoc reader is asked per
+  // line, because a heredoc's body begins after the line its marker sits on.
+  const ruby = language === 'ruby';
+  const heredocAt = new Map<number, [number, number]>();
+  if (ruby) {
+    for (const [from, to] of lineSpans(text)) {
+      const body = rubyHeredoc(text, from, to);
+      if (body) heredocAt.set(to, body);
+    }
+  }
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     const next = text[i + 1];
-    if (slashComments && ch === '/' && next === '/') {
+    const heredoc = ruby ? heredocAt.get(i) : undefined;
+    if (heredoc) {
+      ranges.push(heredoc);
+      i = heredoc[1];
+    } else if (ruby && ch === '%' && rubyPercentLiteral(text, i) !== -1) {
+      const end = rubyPercentLiteral(text, i);
+      ranges.push([i, end]);
+      i = end;
+    } else if (slashComments && ch === '/' && next === '/') {
       const end = indexOrEnd(text, String.fromCharCode(10), i);
       ranges.push([i, end]);
       i = end;

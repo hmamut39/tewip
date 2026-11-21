@@ -31,20 +31,27 @@ import type { Language } from './tests-in.ts';
  * comment removed the rest of the line. Ruby came out too, for the same reason - `//` is the empty
  * pattern there - and it had to go back, because the accident it caused was holding something up.
  *
- * discourse's `youtube_onebox_spec.rb` contains
+ * What it is compensating for is `%r{...}`, Ruby's percent-literal pattern, which nothing here
+ * understands. discourse's `youtube_onebox_spec.rb` writes
  *
- *     stub_request(:get, %r{//www\.youtube\.com/oembed\?url=https://www\.youtube\.com/watch})
+ *     regex = %r{(http:|["']//)}
  *
- * and the `//` inside that percent-literal opened a comment that ran to the end of the line. That
- * accidental comment hid the `it` on that line - and `rubyTests` skips a declaration nested inside
- * an accepted one, so hiding the first one was what kept the next twenty visible. Reading Ruby
- * correctly made the first `it` real, its closing `end` was found far too late, and the file fell
- * from **22 tests to 2**. Across discourse's spec suite, being right about `//` cost 159 tests.
+ * a character class holding **both quote characters**. The scanner has no idea it is inside a
+ * pattern literal, so that `'` opens a single-quoted string, the next `'` is lines away, and the
+ * quote parity of everything after it is wrong. Declarations then sit inside a phantom string and
+ * are skipped as prose: the file falls from **22 tests to 2**, and across discourse's spec suite
+ * being right about `//` costs 159 tests.
  *
- * So the fragility is in how `rubyTests` finds the `end` that closes a block, and this wrong rule
- * is compensating for it. Fixing them in the other order loses real tests on a real repository,
- * which is not a trade worth making for a rule nothing measurable depends on. The `end` matcher is
- * the phase that has to come first, and then this line changes.
+ * Reading `//` as a comment truncates each of those lines at the slashes, which happens to cut the
+ * percent-literal off before its quotes can do any damage. That is the whole of why the wrong rule
+ * helps - luck, not design.
+ *
+ * Phase 201b recorded this as a fault in how `rubyTests` finds the `end` that closes a block.
+ * **That was wrong**, and it was wrong in the direction that wastes a phase: the declarations are
+ * not swallowed by an enclosing test at all. Measured in Phase 201d, no accepted test's body
+ * covers a single one of the twenty lost declarations - they are masked, one quote at a time. So
+ * the phase that has to come first is a reader for Ruby's literals: `%r{}`, `%w[]`, `%q()`, `%i[]`
+ * and heredocs, with their arbitrary delimiters. Then this line changes.
  */
 export const C_COMMENTS = new Set<Language>(['js', 'jvm', 'go', 'csharp', 'php', 'rust', 'ruby']);
 /** Languages where `#` begins a comment. Not JavaScript, where `#count = 0` is a class field. */

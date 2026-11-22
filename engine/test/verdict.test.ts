@@ -311,3 +311,38 @@ describe('the lines a sampled proof run never reached', () => {
     assert.match(report, /### Is everything passing/, 'and the questions that do apply still get theirs');
   });
 });
+
+// Phase 216. "Is the changed code tested?" is the row a release decision leans on, and its evidence
+// was three bare filenames. A test that imports the changed file and one that arrives at it through
+// six hops read identically, and a DTO half the project imports is "reached" by nearly every test.
+describe('the evidence for "is the changed code tested"', () => {
+  const reached = (covering: Evidence['covering']): string =>
+    decide({ ...sound, covering }).checks.find((c) => c.question === 'Is the changed code tested?')?.answer ?? '';
+
+  it('says how each named test reaches the change', () => {
+    const answer = reached([
+      { testFile: 'tests/a.test.js', how: 'imports it' },
+      { testFile: 'tests/b.test.js', how: 'reaches it through 4 import(s)' },
+    ]);
+    assert.match(answer, /tests\/a\.test\.js \(imports it\)/, 'a direct importer must say so');
+    assert.match(answer, /reaches it through 4 import\(s\)/, 'and a distant one must say how far');
+  });
+
+  it('names the direct importers first, because they are the stronger evidence', () => {
+    // On immich's config.dto.ts the three it chose to name were exif specs reached through the
+    // import graph, while the file's own config.dto.spec.ts was in the same list.
+    const answer = reached([
+      { testFile: 'tests/far-one.test.js', how: 'reaches it through 6 import(s)' },
+      { testFile: 'tests/far-two.test.js', how: 'reaches it through 5 import(s)' },
+      { testFile: 'tests/far-three.test.js', how: 'reaches it through 5 import(s)' },
+      { testFile: 'tests/its-own.test.js', how: 'imports it' },
+    ]);
+    assert.match(answer, /tests\/its-own\.test\.js \(imports it\)/, 'the direct importer must be among the names');
+    assert.doesNotMatch(answer, /far-three/, 'and must displace a distant one rather than be dropped');
+  });
+
+  it('still counts every covering test, not only the ones it names', () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ testFile: `tests/t${i}.test.js`, how: 'imports it' }));
+    assert.match(reached(many), /^9 test file\(s\) reach it/, 'the count is of all of them');
+  });
+});

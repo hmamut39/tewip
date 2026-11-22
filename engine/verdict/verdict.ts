@@ -98,7 +98,19 @@ export function decide(evidence: Evidence): Decision {
     checks.push({
       question: 'Is the changed code tested?',
       standing: 'met',
-      answer: `${evidence.covering.length} test file(s) reach it: ${evidence.covering.slice(0, 3).map((c) => c.testFile).join(', ')}`,
+      // Named with how each one reaches it, and the direct importers named first.
+      //
+      // "79 test file(s) reach it" over three bare filenames reads the same whether a test imports
+      // the changed file or arrives at it through six hops, and those are not the same evidence: a
+      // DTO that half the project imports is "reached" by almost every test in it. On immich's
+      // `config.dto.ts` the three it chose to name were exif specs, while the file's own
+      // `config.dto.spec.ts` sat in the same list. The qualifier was already computed and was
+      // being dropped on the way to the sentence. Phase 216.
+      answer: `${evidence.covering.length} test file(s) reach it: ${[...evidence.covering]
+        .sort((a, b) => Number(b.how.startsWith('imports')) - Number(a.how.startsWith('imports')))
+        .slice(0, 3)
+        .map((c) => `${c.testFile} (${c.how})`)
+        .join(', ')}`,
       decidedBy: 'imports followed through the source',
     });
   }

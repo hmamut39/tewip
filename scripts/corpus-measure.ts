@@ -20,15 +20,53 @@ import { NEEDS_A_LOOK } from '../engine/sbom/licences.ts';
 import { sourceFiles } from '../engine/walk.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 import { lookAround, total } from '../engine/start/look.ts';
+import { gather } from '../engine/verdict/verdict-command.ts';
+import { decide } from '../engine/verdict/verdict.ts';
 
 export interface Expectation {
   [key: string]: number;
 }
 
-export type Command = 'vouch' | 'schema' | 'access' | 'secrets' | 'agent' | 'infra' | 'sbom' | 'contract' | 'start';
+export type Command = 'vouch' | 'schema' | 'access' | 'secrets' | 'agent' | 'infra' | 'sbom' | 'contract' | 'start' | 'done';
 
 /** Counts, derived from the engine rather than from the words of a report. */
-export function measure(command: Command, root: string): Expectation {
+export function measure(command: Command, root: string, diff?: string): Expectation {
+  // The release gate, pinned at last.
+  //
+  // `done` is the command with the most riding on one word: somebody reads "ready" and merges. Of
+  // the nine commands pinned above it, five were read on a stranger's repository in Phase 216's
+  // trust pass and four were wrong in the sentence they printed. `done` had never been read on
+  // real code at all, and the first reading found it naming three distant tests while the changed
+  // file's own spec sat unnamed in the same list.
+  //
+  // The verdict is counted one-hot rather than as a word, because a verdict that flips from
+  // "cannot-say" to "ready" is the single most consequential number in this manifest and it has to
+  // move a number to be noticed. `direct` beside `covering` is the Phase 216 distinction: a test
+  // that imports the change and one six hops away are both "covering" and are not the same
+  // evidence, so pinning only the total would not have caught what that phase fixed.
+  if (command === 'done') {
+    const got = gather({ root, diff: diff ?? 'HEAD~1...HEAD' });
+    if (!got) return { 'no-change': 1 };
+    const e = got.evidence;
+    const d = decide(e);
+    return {
+      changed: got.changed.length,
+      changedSource: e.changedSource.length,
+      changedTests: e.changedTests.length,
+      covering: e.covering.length,
+      direct: e.covering.filter((c) => c.how === 'imports it').length,
+      viaPackage: e.covering.filter((c) => c.how === 'imports the package it is in').length,
+      cannotFail: e.cannotFail.length,
+      crashOnly: e.crashOnly,
+      couldNotJudge: e.couldNotJudge,
+      met: d.checks.filter((c) => c.standing === 'met').length,
+      'not-met': d.checks.filter((c) => c.standing === 'not-met').length,
+      'not-checked': d.checks.filter((c) => c.standing === 'not-checked').length,
+      ready: d.verdict === 'ready' ? 1 : 0,
+      'not-ready': d.verdict === 'not-ready' ? 1 : 0,
+      'cannot-say': d.verdict === 'cannot-say' ? 1 : 0,
+    };
+  }
   // The front door, pinned at last.
   //
   // `tewip start` is the first command anybody runs and the only number a new user has no way to

@@ -38,6 +38,25 @@ export interface Evidence {
   /** Test files that reach the changed source, and how. */
   covering: Array<{ testFile: string; how: string }>;
   /**
+   * Changed source files that declare tests inside themselves.
+   *
+   * Nothing *imports* a Rust `#[cfg(test)] mod tests`, a Go in-package `_test` or a Python
+   * `if __name__` block: the tests are in the file that changed, so an import graph will never
+   * find them however far it is followed. On ripgrep's clippy commit this gate said **"no test
+   * imports or reaches crates/regex/src/ban.rs ... and this change adds no test either, so nothing
+   * here could notice a mistake in it"** about two files that each carry their own `#[test]`.
+   *
+   * A gate that says "not ready" to a correct change is uninstalled within a week - Phase 46 -
+   * and this is that overclaim pointed at a language whose tests simply do not live where it
+   * looked. Phase 217.
+   */
+  selfTested: string[];
+  /**
+   * Changed source files in a language whose imports Tewip cannot follow, so a zero here means
+   * "not read" and not "nothing tests it". See `importsCanBeFollowed` for the measurement.
+   */
+  importsNotFollowed: string[];
+  /**
    * What a coverage report the project already produces says about the changed files, when there is
    * one. Imports cannot see a test that posts a GraphQL query or hits an HTTP route; a coverage
    * report can, because it records what actually ran.

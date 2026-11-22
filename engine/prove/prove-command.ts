@@ -9,7 +9,8 @@ import { dirname, relative, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { chooseFramework, detectFrameworks } from '../quality/frameworks.ts';
 import { coverageFor, testFiles } from '../review/coverage.ts';
-import { importingTests, proveFile, type Proof } from './prove.ts';
+import { proveFile, type Proof } from './prove.ts';
+import { importingTests } from './covering.ts';
 import { testsReaching } from './reaches.ts';
 
 export interface ProveCommand {

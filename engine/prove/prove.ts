@@ -289,10 +289,3 @@ const finish = (proof: Proof, started: number, stopGuarding?: () => void): Proof
 
 const firstLine = (output: string): string => output.split(String.fromCharCode(10)).map((l) => l.trim()).find(Boolean)?.slice(0, 160) ?? '';
 
-/** Which of the tests that cover a file really import it, and so could notice a change. */
-export function importingTests(root: string, coverage: Array<{ testFile: string; covers: string[]; how: string }>, file: string): string[] {
-  const wanted = file.split('\\').join('/');
-  return coverage
-    .filter((c) => c.how !== 'name' && c.covers.some((covered) => covered.split('\\').join('/') === wanted))
-    .map((c) => relative(root, join(root, c.testFile)).split('\\').join('/'));
-}

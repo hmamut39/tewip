@@ -64,6 +64,28 @@
             "high": 3
           },
           "verified": "2026-11-08. 38 infrastructure files, the most in the corpus: 11 findings of which 5 are in files that ship. Pins the ships/does-not-ship split, which is the distinction the report leads with."
+        },
+        {
+          "command": "done",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 2,
+            "changedSource": 0,
+            "changedTests": 0,
+            "covering": 0,
+            "direct": 0,
+            "viaPackage": 0,
+            "cannotFail": 0,
+            "crashOnly": 0,
+            "couldNotJudge": 0,
+            "met": 0,
+            "not-met": 0,
+            "not-checked": 4,
+            "ready": 0,
+            "not-ready": 0,
+            "cannot-say": 1
+          },
+          "verified": "2026-11-22, Phase 217. `74c301ef0ac` \"Update realm certificates\", two files, both of them `tests/base/src/test/resources/org/keycloak/tests/migration/migration-realm-1.9.8.Final-Migration*.json`. Read by hand: they are exported realm fixtures - JSON, no test in them. Both used to count as changed test files because `IS_TEST` matches the path `tests/`, and the report then answered \"Can the tests in this change fail? **Yes: every test in this change asserts something**\" about a change containing no tests, scoring it `met`. changedTests must stay 0 and met must stay 0: both rows about tests are `n/a` here, because there are none."
         }
       ]
     },
@@ -177,6 +199,28 @@
             "imagePackages": 60
           },
           "verified": "2026-11-08. Pinning sbom found it reporting \"0 package(s)\" over \"Nothing found that Tewip could not read\" on bitwarden-server, a large C# server with a .csproj in every project - a complete, confident, empty bill of materials that denied having gaps. Two causes: .NET was never in the ecosystem list though the comment above it claimed .NET since the file was written, and the check was existsSync at the repository root only, so no monorepo subdirectory manifest was ever seen. notRead is the number that guards it. Three gaps read by hand: packages.lock.json and .csproj for NuGet, and util/RustSdk/rust/Cargo.lock, which is a real Rust SDK this repository ships and whose dependencies are not in the bill of materials. components 0 with notRead 3 is the exact property that was broken - nothing readable, and it says so."
+        },
+        {
+          "command": "done",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 1,
+            "changedSource": 1,
+            "changedTests": 0,
+            "covering": 0,
+            "direct": 0,
+            "viaPackage": 0,
+            "cannotFail": 0,
+            "crashOnly": 0,
+            "couldNotJudge": 0,
+            "met": 0,
+            "not-met": 0,
+            "not-checked": 5,
+            "ready": 0,
+            "not-ready": 0,
+            "cannot-say": 1
+          },
+          "verified": "2026-11-22, Phase 217. `0d4d989ebf` \"[PM-41215] Remove feature flag pm-19976-use-sdk-password-generators (#8542)\", one file: `src/Core/Constants.cs`. `not-met` must stay 0. Before this phase this change was reported **Not ready** on the sentence \"no test imports or reaches src/Core/Constants.cs, and this change adds no test either, so nothing here could notice a mistake in it\". That is false: 63 files under `test/` name the types declared in that file (`Constants.`, `FeatureFlagKeys.`, `AuthConstants.`), counted by grep, many of them written out as `Bit.Core.FeatureFlagKeys.PM35215_BusinessPlanPriceMigration`. C# says `using Bit.Core;` and nothing Tewip looks for is in that line: 0 of 25 .cs files sampled evenly through this repository had a single import resolve, against 1,173 test files. covering 0 here means \"not read\", and the five not-checked rows are the honest count."
         }
       ]
     },
@@ -474,6 +518,28 @@
             "findings": 0
           },
           "verified": "2026-10-31. A genuine zero, and the interesting kind. The repository does hold a directory called `migrations` - src/cdk/schematics/ng-update/migrations - which is TypeScript that rewrites a user's project on `ng update`, not database work. Reading it as schema changes is the mistake this 0 holds in place. | 2026-11-07, Phase 148: a raw-SQL rule for ADD CONSTRAINT without NOT VALID, which PostgreSQL documents as a full scan under a lock and which had no rule at all - only the Laravel foreign-key shape did. On immich the net is one false positive removed and one true positive added: InitialMigration.ts:417 adds a CHECK to \"activity\", a table CREATE TABLE makes in the same file, so the existing new-table rule now correctly suppresses it where it used to be called breaks-old-code; AddPersonUserTableSharedBySharedWithConstraint.ts is a real constraint on an existing table. Four matches read by hand, all FOREIGN KEY or UNIQUE on tables that already exist."
+        },
+        {
+          "command": "done",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 2,
+            "changedSource": 1,
+            "changedTests": 1,
+            "covering": 8,
+            "direct": 0,
+            "viaPackage": 8,
+            "cannotFail": 0,
+            "crashOnly": 0,
+            "couldNotJudge": 0,
+            "met": 2,
+            "not-met": 0,
+            "not-checked": 4,
+            "ready": 0,
+            "not-ready": 0,
+            "cannot-say": 1
+          },
+          "verified": "2026-11-22, Phase 217. `3f9f22ba98` \"fix(material/datepicker): update parse error with signal forms when value stays null (#33951)\": `src/material/datepicker/datepicker-input-base.ts` and `datepicker.spec.ts`. This is the repository that found the defect. All eight covering tests were reported as `(imports it)`, and all eight were read: not one of them contains the string `datepicker-input-base`. They import `@angular/material/datepicker`, the front door of the folder - a `package` match, which `coverageFor` had always labelled correctly and which the caller flattened into \"imports it\". So `direct` must stay 0 and `viaPackage` 8. If direct ever becomes 8 again here, the distinction Phase 216 shipped has been lost one layer up."
         }
       ]
     },
@@ -635,6 +701,28 @@
             "stopped-early": 0
           },
           "verified": "2026-11-21, Phase 209. The repository this pin was built for: immich ships a Flutter app, so it is the Phase 185 shape - a project most of which Tewip cannot read. **unreadable 859 is exact**, counted independently from the git index without downloading a blob: 830 .dart, 28 .swift, 1 .cpp, and none of them under a directory the walk skips. If that number ever drops while the Dart files are still there, the front door has gone quiet about the majority of this project, which is precisely what it did to the Flutter SDK in Phase 185. markup 425 is exact against the index, and containers 5 is the 5 Dockerfiles. manifests 22 reconciles exactly for npm: 14 package.json files minus e2e/package.json, which the fixture rule excludes, minus two under .mise/locks/, a dot-directory the walk skips - leaving 11, beside pub 3, cargo 3, maven 2, rubygems 2 and pypi 1. migrations 97 are all kysely, out of 100 .ts files under a migrations directory; the other 3 are not migrations. tests 365 (js 360, python 1, rust 4) was **not** counted one by one - it anchors against drift rather than being read back, and this line says so rather than implying otherwise. stopped-early 0 is the one to watch: the look is bounded at 4,000 files and this checkout holds 3,518, so immich is 482 files from the edge. Crossing it turns every count above into 'at least this many', and this pin is what will say so."
+        },
+        {
+          "command": "done",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 5,
+            "changedSource": 2,
+            "changedTests": 1,
+            "covering": 79,
+            "direct": 14,
+            "viaPackage": 0,
+            "cannotFail": 0,
+            "crashOnly": 0,
+            "couldNotJudge": 0,
+            "met": 2,
+            "not-met": 0,
+            "not-checked": 4,
+            "ready": 0,
+            "not-ready": 0,
+            "cannot-say": 1
+          },
+          "verified": "2026-11-22, Phase 217. `188d64e` \"fix: public config properties (#32500)\", five files: `mobile/lib/utils/openapi_patching.dart`, `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `server/src/dtos/config.dto.ts` and its `.spec.ts`. The two TypeScript files are the source; the Dart file is not a language `languageOf` reads and the generated OpenAPI JSON is not a test, which is why changedSource is 2 and changedTests is 1 rather than 2 - `open-api/immich-openapi-specs.json` used to count as a test because its name ends `-specs.json`. All 14 direct importers were confirmed one at a time: each of those 14 files was read and each contains an import naming a changed file. The other 65 are reached through the import graph and were not read individually - a DTO this much of the server imports is reached by most of its tests, which is the reason `direct` is pinned beside `covering`. `viaPackage` must stay 0 here: immich's tests name the file, not the folder."
         }
       ]
     },
@@ -715,6 +803,28 @@
             "stopped-early": 0
           },
           "verified": "2026-11-21, Phase 207, the first time the front door has ever been pinned on real code. 38 test files, and the ground truth is exact: `git ls-files | grep -c '_test\\.go$'` is 38, every one of them. 1 manifest is go.mod. `stopped-early` is 0, which matters as much as the counts - the look is bounded at 4,000 files and a count from a bounded look is 'at least this many', so a repository crossing that line turns every number here into a sample reported as a total. That is Phase 185 exactly, on the Flutter SDK."
+        },
+        {
+          "command": "done",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 1,
+            "changedSource": 1,
+            "changedTests": 0,
+            "covering": 0,
+            "direct": 0,
+            "viaPackage": 0,
+            "cannotFail": 0,
+            "crashOnly": 0,
+            "couldNotJudge": 0,
+            "met": 0,
+            "not-met": 0,
+            "not-checked": 5,
+            "ready": 0,
+            "not-ready": 0,
+            "cannot-say": 1
+          },
+          "verified": "2026-11-22, Phase 217. `75ccf94d` \"feat: update version constant to v1.10.0 (#3952)\", one file: `version.go`, which declares `const Version = \"v1.10.0\"` and nothing else. Checked by hand: **no test in gin references that constant**. Grepping `*_test.go` for `Version` returns `runtime.Version()` in debug_test.go and the HTTP header strings \"Sec-WebSocket-Version\" and \"Gin-Version\" in context_test.go, and nothing else. So the old answer - \"nothing here could notice a mistake in it\" - was **true for this change**, and it is still pinned at `not-met: 0`. That is the point of this entry: Go imports a package and never a file, so Tewip cannot read whether a Go file is tested, and 0 of 25 sampled .go files resolved an import against 38 test files. Being right by luck is not evidence, and a gate that is right by luck on gin is wrong on bitwarden for the same reason."
         }
       ]
     },

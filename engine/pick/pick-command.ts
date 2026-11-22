@@ -8,7 +8,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { chooseFramework, detectFrameworks } from '../quality/frameworks.ts';
 import { changeSummary } from '../quality/grounding.ts';
 import { coverageFor, testFiles } from '../review/coverage.ts';
-import { importingTests } from '../prove/prove.ts';
+import { importingTests } from '../prove/covering.ts';
 import { allTestsReaching } from '../prove/reaches.ts';
 import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';

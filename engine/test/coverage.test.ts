@@ -10,6 +10,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { describesThisProject, findCoverage, readLcov, readXml, wasExecuted } from '../coverage/read-coverage.ts';
+import { coverageFor, familyOf, importsCanBeFollowed } from '../review/coverage.ts';
+
+const NL = String.fromCharCode(10);
 import { decide, type Evidence } from '../verdict/verdict.ts';
 
 describe('the four formats CI actually writes', () => {
@@ -70,6 +73,8 @@ describe('the verdict, once a coverage report is there', () => {
     changedSource: ['saleor/graphql/utils/sorting.py'],
     changedTests: ['saleor/graphql/product/tests/test_sorting.py'],
     covering: [],
+    selfTested: [],
+    importsNotFollowed: [],
     cannotFail: [],
     crashOnly: 0,
     couldNotJudge: 0,
@@ -104,5 +109,50 @@ describe('the verdict, once a coverage report is there', () => {
     const decision = decide(sound);
     const check = decision.checks.find((c) => c.question === 'Is the changed code tested?');
     assert.equal(check?.standing, 'not-checked');
+  });
+});
+
+// Phase 217. `importNames` reduces a file to its basename, so `lib/json_api_kit/url.rb` is looked
+// for as `url` - and discourse has 752 JavaScript test files, eight of which import something
+// ending in `url`. All eight were reported as importing the Ruby file, under "Yes: 8 test file(s)
+// reach it (imports it)". `plugins/discourse-post-voting/plugin.rb` was covered by
+// `uppy-checksum-plugin-test.js` on the same rule. A JavaScript file cannot import a Ruby one.
+describe('a test can only cover a file its own language can import', () => {
+  const mixed = (): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-mixed-'));
+    mkdirSync(join(root, 'lib'), { recursive: true });
+    mkdirSync(join(root, 'tests'), { recursive: true });
+    writeFileSync(join(root, 'lib', 'url.rb'), 'module Url' + NL + '  def self.join(a, b) = "#{a}#{b}"' + NL + 'end' + NL, 'utf8');
+    writeFileSync(join(root, 'lib', 'url.js'), 'export const join = (a, b) => a + b;' + NL, 'utf8');
+    writeFileSync(
+      join(root, 'tests', 'url.test.js'),
+      "import { join } from '../lib/url';" + NL + "it('joins', () => { expect(join('a', 'b')).toBe('ab'); });" + NL,
+      'utf8',
+    );
+    return root;
+  };
+
+  it('does not let a JavaScript test import a Ruby file of the same name', () => {
+    const root = mixed();
+    const tests = [join(root, 'tests', 'url.test.js')];
+    const strong = (file: string) => coverageFor(root, [file], tests).filter((c) => c.how !== 'name');
+    assert.equal(strong('lib/url.js').length, 1, 'the JavaScript file of that name really is imported');
+    assert.deepEqual(strong('lib/url.rb'), [], 'and the Ruby file of that name is not, whatever its basename');
+  });
+
+  it('knows which languages express an import as something it can read', () => {
+    // Measured on the corpus: 0 of 25 sampled files resolved in keycloak (1,958 test files),
+    // bitwarden (1,173), gin (38) or discourse (765). Only these two ever did.
+    assert.equal(importsCanBeFollowed('src/a.ts'), true);
+    assert.equal(importsCanBeFollowed('src/a.py'), true);
+    for (const file of ['src/a.cs', 'src/a.go', 'src/A.java', 'src/a.rb', 'src/a.php', 'src/a.rs'])
+      assert.equal(importsCanBeFollowed(file), false, `${file} has no import this can follow`);
+  });
+
+  it('puts a Vue or Svelte file in the JavaScript family, because it imports like one', () => {
+    assert.equal(familyOf('src/a.vue'), 'js');
+    assert.equal(familyOf('src/a.svelte'), 'js');
+    assert.equal(familyOf('src/a.tsx'), 'js');
+    assert.equal(familyOf('README.md'), null, 'and a document is in no family at all');
   });
 });

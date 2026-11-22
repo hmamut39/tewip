@@ -10,10 +10,11 @@ import { dirname, join, resolve } from 'node:path';
 import { seal } from '../attest/seal.ts';
 import { changedLinesByFile, proveChanged } from '../prove/changed.ts';
 import { changeSummary } from '../quality/grounding.ts';
-import { coverageFor, testFiles } from '../review/coverage.ts';
-import { importingTests } from '../prove/prove.ts';
+import { coverageFor, importsCanBeFollowed, testFiles } from '../review/coverage.ts';
+import { importingTestsWithHow } from '../prove/covering.ts';
 import { testsReaching } from '../prove/reaches.ts';
 import { vouchChanged } from '../vouch/changed.ts';
+import { languageOf, testsIn } from '../vouch/tests-in.ts';
 import { checkChanged, loadStandards } from '../standards/standards-command.ts';
 import { datasetFiles, readJsonl, readTriageRecords } from '../../reporters/store.ts';
 import type { RunSummary, TriageRecord } from '../../reporters/types.ts';
@@ -32,7 +33,22 @@ export interface DoneCommand {
   name?: string;
 }
 
-const SOURCE = /\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|java|kt|go|cs|rb|php)$/i;
+/**
+ * Source, decided by the list that actually judges code rather than by a second one written here.
+ *
+ * This was a hand-rolled extension list, and it was missing `.rs`, `.scala`, `.groovy`, `.kts` and
+ * `.fs` - all five of which `languageOf` has known for months and `tewip vouch` reads every day.
+ * A file the list did not name was not source, and a change containing no source makes "Is the
+ * changed code tested?" **not applicable**.
+ *
+ * On ripgrep's `--max-bytes` commit - four `.rs` files edited, three `.rs` test files added - the
+ * report said "Can the tests in this change fail? **yes: every test in this change asserts
+ * something**", having read all three Rust test files, and two rows above it said the question of
+ * whether the changed code is tested **does not apply**. One report, reading the tests of a change
+ * it had just called sourceless. `n/a` is the strongest of the wrong answers available: it does not
+ * say "unknown", it says the question is not worth asking. Phase 217.
+ */
+const isSource = (file: string): boolean => languageOf(file) !== null;
 const IS_TEST = /(^|[\\/])(tests?|spec|specs|__tests__|e2e)[\\/]|[._-](test|tests|spec|specs)\.[a-z]+$|(^|[\\/])test_[^\\/]+\.py$|_test\.(go|py|rb)$|Tests?\.(java|kt|cs)$/i;
 
 /** Every failure Tewip has kept for this project, and every run. */
@@ -95,8 +111,15 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
   const change = changeSummary(cmd.root, cmd.diff);
   if (!change || change.files.length === 0) return null;
   const changed = change.files.map((f) => f.split('\\').join('/'));
-  const changedSource = changed.filter((f) => SOURCE.test(f) && !IS_TEST.test(f) && existsSync(resolve(cmd.root, f)));
-  const changedTests = changed.filter((f) => IS_TEST.test(f) && existsSync(resolve(cmd.root, f)));
+  const changedSource = changed.filter((f) => isSource(f) && !IS_TEST.test(f) && existsSync(resolve(cmd.root, f)));
+  // In a test folder is not the same as being a test. `IS_TEST` matches a path, and a path says
+  // nothing about what is in the file: keycloak's change was two `migration-realm-1.9.8.Final-
+  // Migration.json` resources under `tests/base/src/test/resources/`, immich's included the
+  // generated `open-api/immich-openapi-specs.json`, and the report answered "Can the tests in this
+  // change fail? **Yes: every test in this change asserts something**" about a change containing
+  // no tests at all - a `met` row, counted towards the verdict. A file in a language Tewip cannot
+  // read tests in is not a test. Phase 217.
+  const changedTests = changed.filter((f) => IS_TEST.test(f) && languageOf(f) !== null && existsSync(resolve(cmd.root, f)));
 
   const known = testFiles(cmd.root);
     // A coverage report the project already produces, if there is one. Imports cannot see a test that
@@ -115,13 +138,32 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
 
   const covering: Evidence['covering'] = [];
   for (const file of changedSource) {
-    const direct = importingTests(cmd.root, coverageFor(cmd.root, [file], known), file);
-    for (const test of direct) if (!covering.some((c) => c.testFile === test)) covering.push({ testFile: test, how: 'imports it' });
+    // Said as it was found. A `package` match is a test importing the front door of the folder the
+    // changed file sits in - real, and not the same claim as naming the file. All eight tests
+    // angular-components listed for `datepicker-input-base.ts` were package matches, and the
+    // report called every one of them "imports it".
+    const direct = importingTestsWithHow(cmd.root, coverageFor(cmd.root, [file], known), file);
+    for (const test of direct)
+      if (!covering.some((c) => c.testFile === test.testFile))
+        covering.push({ testFile: test.testFile, how: test.how === 'package' ? 'imports the package it is in' : 'imports it' });
     if (direct.length > 0) continue;
     for (const reach of testsReaching(cmd.root, file, known.map((t) => t.split('\\').join('/')))) {
       if (!covering.some((c) => c.testFile === reach.testFile)) covering.push({ testFile: reach.testFile, how: `reaches it through ${reach.steps} import(s)` });
     }
   }
+
+  // Tests that live in the changed file itself, which no import graph can reach.
+  const selfTested = changedSource.filter((file) => {
+    const language = languageOf(file);
+    if (!language) return false;
+    try {
+      return testsIn(language, readFileSync(resolve(cmd.root, file), 'utf8')).length > 0;
+    } catch {
+      return false;
+    }
+  });
+
+  const importsNotFollowed = changedSource.filter((f) => !importsCanBeFollowed(f));
 
   const vouched = vouchChanged(cmd.root, changedTests);
   const { runs, records } = history(cmd.root, cmd.name);
@@ -154,6 +196,8 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
       changedSource,
       changedTests,
       covering,
+      selfTested,
+      importsNotFollowed,
     coverage,
       cannotFail: vouched.cannotFail.map((j) => ({ name: j.name, file: j.file, line: j.line, why: j.why })),
       crashOnly: vouched.crashOnly.length,

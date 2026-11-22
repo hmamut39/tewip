@@ -6,6 +6,11 @@
 // lists what it says nothing about, and that the order is fixed so a person can predict it.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { gather } from '../verdict/verdict-command.ts';
 import { decide, renderDecision, type Evidence } from '../verdict/verdict.ts';
 
 const NL = String.fromCharCode(10);
@@ -15,6 +20,8 @@ const sound: Evidence = {
   changedSource: ['src/refunds.js'],
   changedTests: ['tests/refunds.test.js'],
   covering: [{ testFile: 'tests/refunds.test.js', how: 'imports it' }],
+  selfTested: [],
+  importsNotFollowed: [],
   cannotFail: [],
   crashOnly: 0,
     couldNotJudge: 0,
@@ -344,5 +351,217 @@ describe('the evidence for "is the changed code tested"', () => {
   it('still counts every covering test, not only the ones it names', () => {
     const many = Array.from({ length: 9 }, (_, i) => ({ testFile: `tests/t${i}.test.js`, how: 'imports it' }));
     assert.match(reached(many), /^9 test file\(s\) reach it/, 'the count is of all of them');
+  });
+});
+
+// Phase 217. `done` kept a second list of what counts as source, written beside the one that
+// actually judges code, and it was missing `.rs`, `.scala`, `.groovy`, `.kts` and `.fs`. On
+// ripgrep the gate read three Rust test files, judged them, and two rows above said the question
+// of whether the changed code is tested does not apply - one report, reading the tests of a change
+// it had just called sourceless. Then, once Rust was visible, it said **"nothing here could notice
+// a mistake in it"** about two files that each carry their own `#[cfg(test)] mod tests`.
+//
+// Measured through `gather` on a real repository rather than against a hand-built Evidence,
+// because both halves of the defect were in the gathering. A fixture handing `decide` a
+// `selfTested` array would pass with `gather` never filling it in.
+describe('a language whose tests live in the file that changed', () => {
+  const rustProject = (): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-rs-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    mkdirSync(join(root, 'src'), { recursive: true });
+    const before = [
+      'pub fn strip(s: &str) -> String {',
+      '    s.trim().to_string()',
+      '}',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    use super::*;',
+      '',
+      '    #[test]',
+      '    fn trims() {',
+      '        assert_eq!(strip("  a  "), "a");',
+      '    }',
+      '}',
+      '',
+    ].join(NL);
+    writeFileSync(join(root, 'src', 'strip.rs'), before, 'utf8');
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    writeFileSync(join(root, 'src', 'strip.rs'), before.replace('s.trim()', 's.trim_start()'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'trim only the start');
+    return root;
+  };
+
+  const tested = (root: string) => {
+    const got = gather({ root, diff: 'HEAD~1...HEAD' });
+    const check = decide(got!.evidence).checks.find((c) => c.question === 'Is the changed code tested?');
+    return { got: got!, check: check! };
+  };
+
+  it('counts a Rust file as source at all', () => {
+    const { got } = tested(rustProject());
+    assert.deepEqual(got.evidence.changedSource, ['src/strip.rs'], 'a .rs file the commit rewrote is source');
+  });
+
+  it('never calls a file carrying its own tests untested', () => {
+    const { got, check } = tested(rustProject());
+    assert.deepEqual(got.evidence.selfTested, ['src/strip.rs'], 'the #[cfg(test)] module in the changed file must be found');
+    assert.notEqual(check.standing, 'not-met', 'a file with its own #[test] is the one answer the evidence rules out');
+    assert.notEqual(check.standing, 'not-applicable', 'and the change is not sourceless either');
+    assert.equal(check.standing, 'not-checked');
+    assert.match(check.answer, /declare tests inside themselves/, 'and it must say why it cannot tell');
+    assert.match(check.answer, /src\/strip\.rs/, 'naming the file it read them out of');
+  });
+});
+
+// Phase 217. `src/Core/Constants.cs` was told "no test imports or reaches it, and this change adds
+// no test either, so nothing here could notice a mistake in it", and the whole change was failed
+// on it. 63 of bitwarden's test files name the types declared in that file. C# says `using
+// Bit.Core;`; nothing Tewip looks for is in that line, and over the corpus not one import resolved
+// in C#, Go, Java or Ruby - 1,958 keycloak test files, 1,173 bitwarden, 765 discourse, 0 hits.
+describe('a language whose imports cannot be read', () => {
+  const csharpProject = (): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-cs-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    mkdirSync(join(root, 'src', 'Core'), { recursive: true });
+    mkdirSync(join(root, 'test', 'Core.Test'), { recursive: true });
+    const before = [
+      'namespace Bit.Core;',
+      '',
+      'public static class Constants',
+      '{',
+      '    public const int MaxDevices = 10;',
+      '}',
+      '',
+    ].join(NL);
+    writeFileSync(join(root, 'src', 'Core', 'Constants.cs'), before, 'utf8');
+    // A real test, naming the changed type the only way C# ever does.
+    writeFileSync(
+      join(root, 'test', 'Core.Test', 'ConstantsTests.cs'),
+      ['using Bit.Core;', '', 'public class ConstantsTests', '{', '    [Fact]', '    public void Caps() => Assert.Equal(10, Constants.MaxDevices);', '}', ''].join(NL),
+      'utf8',
+    );
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    writeFileSync(join(root, 'src', 'Core', 'Constants.cs'), before.replace('= 10', '= 15'), 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'raise the cap');
+    return root;
+  };
+
+  it('never says nothing could notice a mistake when it could not look', () => {
+    const root = csharpProject();
+    const got = gather({ root, diff: 'HEAD~1...HEAD' });
+    assert.deepEqual(got!.evidence.changedSource, ['src/Core/Constants.cs']);
+    assert.deepEqual(got!.evidence.covering, [], 'no C# import resolves, which is the whole point');
+    assert.deepEqual(got!.evidence.importsNotFollowed, ['src/Core/Constants.cs'], 'and it must know that is why');
+    const check = decide(got!.evidence).checks.find((c) => c.question === 'Is the changed code tested?')!;
+    assert.notEqual(check.standing, 'not-met', 'a zero from a language it cannot read is not a zero');
+    assert.equal(check.standing, 'not-checked');
+    assert.doesNotMatch(check.answer, /nothing here could notice a mistake/, 'the sentence that failed bitwarden');
+    assert.match(check.answer, /imports Tewip cannot read/, 'it must say which part of itself stopped');
+    assert.match(check.answer, /coverage report/, 'and what the project can do about it');
+  });
+
+  it('still says no for a language it can read, where a zero really is a zero', () => {
+    // The branch must not become a blanket excuse: in JavaScript and Python an unresolved import
+    // means the test is not there, and the gate has to keep being able to say so.
+    const check = decide({ ...sound, covering: [], changedTests: [], selfTested: [], importsNotFollowed: [] }).checks.find(
+      (c) => c.question === 'Is the changed code tested?',
+    )!;
+    assert.equal(check.standing, 'not-met');
+    assert.match(check.answer, /nothing here could notice a mistake in it/);
+  });
+});
+
+// Phase 217. Two claims in the same report that the diff did not support.
+//
+// angular-components: all eight tests listed for `datepicker-input-base.ts` were printed as
+// "(imports it)", and not one of them contains that string - they import
+// `@angular/material/datepicker`, the front door of the folder. Phase 216 split "imports it" from
+// "reaches it through N import(s)" so a reader could weigh the evidence; `importingTests` returned
+// `imports` and `package` as one list and the caller labelled both of them "imports it".
+//
+// keycloak: the change was two `migration-realm-1.9.8.Final-Migration.json` resources sitting
+// under `tests/base/src/test/resources/`, and the report said "Can the tests in this change fail?
+// **Yes: every test in this change asserts something**". A path is not a language.
+describe('what kind of evidence it is, and what counts as a test file', () => {
+  const git = (root: string) => (...args: string[]) =>
+    execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+  const commit = (root: string, message: string) => {
+    const g = git(root);
+    g('add', '-A');
+    g('commit', '-qm', message);
+  };
+
+  const start = (root: string) => {
+    const g = git(root);
+    g('init', '-q');
+    g('config', 'user.email', 't@example.com');
+    g('config', 'user.name', 'T');
+  };
+
+  it('does not call a package-level match "imports it"', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-pkg-'));
+    mkdirSync(join(root, 'src', 'thing'), { recursive: true });
+    mkdirSync(join(root, 'tests'), { recursive: true });
+    const before = 'export const base = (n) => n + 1;' + NL;
+    writeFileSync(join(root, 'src', 'thing', 'base.js'), before, 'utf8');
+    writeFileSync(join(root, 'src', 'thing', 'index.js'), "export * from './base.js';" + NL, 'utf8');
+    // Imports the folder, never the file. This is the shape of all eight angular-components tests.
+    writeFileSync(
+      join(root, 'tests', 'thing.test.js'),
+      "import { base } from '../src/thing';" + NL + "it('adds', () => { expect(base(1)).toBe(2); });" + NL,
+      'utf8',
+    );
+    start(root);
+    commit(root, 'first');
+    writeFileSync(join(root, 'src', 'thing', 'base.js'), before.replace('n + 1', 'n + 2'), 'utf8');
+    commit(root, 'change the base');
+
+    const got = gather({ root, diff: 'HEAD~1...HEAD' });
+    assert.deepEqual(got!.evidence.changedSource, ['src/thing/base.js']);
+    const reach = got!.evidence.covering.find((c) => c.testFile === 'tests/thing.test.js');
+    assert.ok(reach, 'the test does reach the change, through the front door');
+    assert.equal(reach!.how, 'imports the package it is in', 'and must not claim it names the file');
+    assert.notEqual(reach!.how, 'imports it');
+  });
+
+  it('names a file that really imports the change before one that imports its folder', () => {
+    const answer = decide({
+      ...sound,
+      covering: [
+        { testFile: 'tests/far.test.js', how: 'reaches it through 5 import(s)' },
+        { testFile: 'tests/pkg.test.js', how: 'imports the package it is in' },
+        { testFile: 'tests/own.test.js', how: 'imports it' },
+      ],
+    }).checks.find((c) => c.question === 'Is the changed code tested?')!.answer;
+    assert.match(answer, /own\.test\.js \(imports it\).*pkg\.test\.js \(imports the package/, 'strongest first');
+    assert.ok(answer.indexOf('pkg.test.js') < answer.indexOf('far.test.js'), 'and a folder import beats a distant one');
+  });
+
+  it('does not count a JSON file under a test folder as a test', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-res-'));
+    mkdirSync(join(root, 'tests', 'resources'), { recursive: true });
+    writeFileSync(join(root, 'tests', 'resources', 'migration-realm-Migration.json'), '{ "realm": "a" }' + NL, 'utf8');
+    start(root);
+    commit(root, 'first');
+    writeFileSync(join(root, 'tests', 'resources', 'migration-realm-Migration.json'), '{ "realm": "b" }' + NL, 'utf8');
+    commit(root, 'change the resource');
+
+    const got = gather({ root, diff: 'HEAD~1...HEAD' });
+    assert.deepEqual(got!.evidence.changedTests, [], 'a JSON resource is not a test, wherever it sits');
+    const check = decide(got!.evidence).checks.find((c) => c.question === 'Can the tests in this change fail?')!;
+    assert.equal(check.standing, 'not-applicable', 'so there is nothing to say about tests that are not there');
+    assert.doesNotMatch(check.answer, /every test in this change asserts something/, 'the sentence keycloak got');
   });
 });

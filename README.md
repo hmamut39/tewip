@@ -30,6 +30,14 @@ and which cannot see a test that posts a GraphQL query, hits an HTTP route or re
 On a Django, Rails or Spring codebase that is most of the suite, so `tewip done` used to answer
 *"cannot say"* to the question that matters most.
 
+It is narrower than that, and the report now says so. Following an import means finding `from x`,
+`import x` or `require(x)` in a test. C# writes `using Bit.Core;`, Go imports a package and never a
+file, in Java an import is never a path, and Ruby's `require_relative` is not `require(`. Sampling
+25 source files evenly through each corpus repository, **not one import resolved** in keycloak
+(1,958 test files), bitwarden-server (1,173), gin (38) or discourse (765), against 26 of 25 in
+immich and 10 of 25 in dispatch. So in those languages a zero means *not read*, and `done` reports
+it as "not checked" with that reason rather than as "nothing tests this".
+
 A coverage report settles it, and CI almost certainly produces one already. Nothing to configure:
 
 | format | written by | found at |

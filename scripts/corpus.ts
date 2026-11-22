@@ -17,7 +17,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { measure, type Command, type Expectation } from './corpus-measure.ts';
 
-interface Check { command: Command; expect: Expectation; verified: string }
+interface Check { command: Command; expect: Expectation; verified: string; diff?: string }
 interface Repo { name: string; url: string; commit: string; why: string; checks: Check[] }
 
 const MANIFEST = resolve('corpus/expected.json');
@@ -28,7 +28,15 @@ const CACHE = process.env.TEWIP_CORPUS ?? join(process.env.TEMP ?? '/tmp', 'tewi
 const git = (args: string[], cwd?: string): string =>
   execFileSync('git', ['-c', 'core.longpaths=true', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 });
 
-/** The repository at exactly that commit, cloned once and reused. */
+/**
+ * The repository at exactly that commit, cloned once and reused.
+ *
+ * A check carrying a `diff` needs more than the tip. The fetch below is `--depth 1`, so
+ * `HEAD~1` is not an object this clone has and `git diff HEAD~1...HEAD` fails with "unknown
+ * revision" - which `changeSummary` reports as no change, and a `done` check measuring no change
+ * is a check measuring nothing while printing a tidy row. One `--deepen 1` costs about three
+ * seconds and is only paid by the repositories that ask for it.
+ */
 function checkout(repo: Repo): string {
   const dir = join(CACHE, repo.name);
   mkdirSync(CACHE, { recursive: true });
@@ -37,15 +45,40 @@ function checkout(repo: Repo): string {
     git(['clone', '--filter=blob:none', '--no-checkout', '--quiet', repo.url, dir]);
   }
   // `--depth 1` of a bare SHA needs the fetch, not the clone: a shallow clone only brings the tip.
+  // Depth 2 when a check needs a diff, so `HEAD~1` is an object this clone has.
+  //
+  // Deepening afterwards does not work here. `--unshallow` and `--deepen` both want blobs a
+  // blobless clone never fetched, and on angular-components both failed with "missing blob object
+  // ... remote did not send all necessary objects"; fetching the parent commit by name left
+  // `HEAD~1` unresolvable anyway, because `.git/shallow` still listed HEAD as a root. Asking for
+  // depth 2 up front moves that boundary instead of arguing with it.
+  const depth = repo.checks.some((c) => c.diff) ? '2' : '1';
   try {
-    git(['fetch', '--quiet', '--depth', '1', 'origin', repo.commit], dir);
+    git(['fetch', '--quiet', '--filter=blob:none', '--depth', depth, 'origin', repo.commit], dir);
   } catch {
     git(['fetch', '--quiet', 'origin'], dir);
   }
   // Forced, because a previous run may have left files behind, and Windows refuses some paths.
   git(['checkout', '--quiet', '--force', repo.commit], dir);
+  if (repo.checks.some((c) => c.diff)) warnIfNoParent(dir, repo.name);
   dropSymlinkStandIns(dir);
   return dir;
+}
+
+/**
+ * Say so when a check needs a diff and the parent commit is not here.
+ *
+ * Without this the run is silent about it: `git diff HEAD~1...HEAD` fails with "unknown revision",
+ * `changeSummary` reports no change, and a `done` check measuring no change prints a tidy row
+ * having measured nothing. A warning is enough - the check will fail on its own numbers, and one
+ * repository that cannot be deepened must not take the other thirteen down with it.
+ */
+function warnIfNoParent(dir: string, name: string): void {
+  try {
+    git(['rev-parse', '--verify', '--quiet', 'HEAD~1'], dir);
+  } catch {
+    console.log(`  (the commit before ${name}'s pinned one is not in this clone: a check needing a diff will measure nothing)`);
+  }
 }
 
 /**
@@ -119,7 +152,7 @@ for (const repo of chosen) {
   const root = checkout(repo);
   for (const check of repo.checks) {
     const started = Date.now();
-    const got = measure(check.command, root);
+    const got = measure(check.command, root, check.diff);
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     const keys = [...new Set([...Object.keys(check.expect), ...Object.keys(got)])].sort();
     const differences = keys.filter((k) => (check.expect[k] ?? 0) !== (got[k] ?? 0));

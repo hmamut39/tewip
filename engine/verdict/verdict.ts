@@ -15,6 +15,7 @@
 //    to guess when it does not know, and a guess that says "ready" is how this whole category of tool
 //    loses its reputation.
 export type { Check, Decision, Evidence, Standing, Verdict } from './evidence.ts';
+import { isItTested } from './is-it-tested.ts';
 import type { Check, Decision, Evidence, Verdict } from './evidence.ts';
 
 /** The questions that cannot be skipped on the way to "ready". */
@@ -43,77 +44,7 @@ export function decide(evidence: Evidence): Decision {
     checks.push({ question: 'Is everything passing?', standing: 'met', answer: 'nothing touching this change failed in the last kept run', decidedBy: 'kept history' });
   }
 
-  // 2. Does anything test the change at all?
-  if (evidence.changedSource.length === 0) {
-    checks.push({ question: 'Is the changed code tested?', standing: 'not-applicable', answer: 'this change touches no source file', decidedBy: 'the diff' });
-  } else if (evidence.coverage && evidence.coverage.notExecuted.length > 0) {
-    // The report names these files and never ran a line of them. That is not "cannot say" - it is
-    // the suite being measured and found not to reach this code.
-    checks.push({
-      question: 'Is the changed code tested?',
-      standing: 'not-met',
-      answer: `${evidence.coverage.notExecuted.slice(0, 3).join(', ')} ${evidence.coverage.notExecuted.length === 1 ? 'is' : 'are'} in ${evidence.coverage.from} with no line executed, so the suite runs none of this`,
-      decidedBy: `${evidence.coverage.from}, which records what ran rather than what imports what`,
-    });
-  } else if (evidence.coverage && evidence.coverage.executed.length > 0) {
-    // Settles the question imports could not. Phases 46 and 52 both ended at "cannot say" here, on
-    // every real Saleor pull request, because a test that posts a GraphQL query never imports the
-    // resolver chain it exercises.
-    checks.push({
-      question: 'Is the changed code tested?',
-      standing: 'met',
-      answer: `the suite executes ${evidence.coverage.executed.slice(0, 3).join(', ')}${evidence.coverage.executed.length > 3 ? ` and ${evidence.coverage.executed.length - 3} more` : ''}`,
-      decidedBy: `${evidence.coverage.from}, which records what ran rather than what imports what`,
-    });
-  } else if (evidence.covering.length === 0 && evidence.changedTests.length > 0) {
-    // Nothing *imports* the changed file, and the same change ships tests. Coverage here is followed
-    // through imports, which is a fact rather than a name match - and which cannot see a test that
-    // reaches the code through a framework's entry point. A Saleor test posts a GraphQL query and
-    // asserts the error it gets back; the resolver chain in between is never imported by name.
-    //
-    // Found in Phase 46 by running this verdict over six real merged Saleor pull requests. Four came
-    // back **Not ready**, and all four shipped a test for exactly the change they were making. A gate
-    // that says "not ready" to a correct pull request is uninstalled within a week, and it is the
-    // same overclaim as a false accusation, pointed at the change instead of at a test.
-    //
-    // So: cannot say. Which is this project's whole point, and this check had no way to say it.
-    checks.push({
-      question: 'Is the changed code tested?',
-      standing: 'not-checked',
-      answer:
-        `no test imports or reaches ${evidence.changedSource.slice(0, 3).join(', ')}, but this change also ` +
-        `edits ${evidence.changedTests.length} test file(s). Coverage is followed through imports, which cannot see a test ` +
-        'that reaches the code through a GraphQL resolver, an HTTP route or any other framework entry point - ' +
-        'so whether those tests cover this is a question the imports cannot answer',
-      decidedBy: 'imports followed through the source, which is a fact rather than a name match',
-    });
-  } else if (evidence.covering.length === 0) {
-    checks.push({
-      question: 'Is the changed code tested?',
-      standing: 'not-met',
-      answer: `no test imports or reaches ${evidence.changedSource.slice(0, 3).join(', ')}, and this change adds no test either, so nothing here could notice a mistake in it`,
-      decidedBy: 'imports followed through the source, which is a fact rather than a name match',
-    });
-  } else {
-    checks.push({
-      question: 'Is the changed code tested?',
-      standing: 'met',
-      // Named with how each one reaches it, and the direct importers named first.
-      //
-      // "79 test file(s) reach it" over three bare filenames reads the same whether a test imports
-      // the changed file or arrives at it through six hops, and those are not the same evidence: a
-      // DTO that half the project imports is "reached" by almost every test in it. On immich's
-      // `config.dto.ts` the three it chose to name were exif specs, while the file's own
-      // `config.dto.spec.ts` sat in the same list. The qualifier was already computed and was
-      // being dropped on the way to the sentence. Phase 216.
-      answer: `${evidence.covering.length} test file(s) reach it: ${[...evidence.covering]
-        .sort((a, b) => Number(b.how.startsWith('imports')) - Number(a.how.startsWith('imports')))
-        .slice(0, 3)
-        .map((c) => `${c.testFile} (${c.how})`)
-        .join(', ')}`,
-      decidedBy: 'imports followed through the source',
-    });
-  }
+  checks.push(isItTested(evidence));
 
   // 3. Can the tests in this change fail at all? A test that cannot fail is worse than no test.
   if (evidence.changedTests.length === 0) {

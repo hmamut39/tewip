@@ -5,7 +5,10 @@
 // words probably does. The first is a fact, the second a guess, and the report says which is which -
 // because "these 6 tests cover your change" is only useful if it is true.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, join, relative, resolve, sep } from 'node:path';
+import { familyOf, importNames, importsIt, packageNames } from './imports.ts';
+
+export { familyOf, importNames, importsCanBeFollowed, importsIt } from './imports.ts';
 
 export interface TestCoverage {
   testFile: string;
@@ -86,64 +89,6 @@ export const isCode = (file: string): boolean =>
  */
 export const isCoverableCode = (file: string): boolean => isCode(file) && !TEST_FILE.test(file) && !/\.d\.[cm]?ts$/i.test(file);
 
-/** The module names a file can be imported by: its path, its name, and its folder's front door. */
-export function importNames(root: string, changed: string): string[] {
-  const full = resolve(root, changed);
-  const noExt = full.slice(0, full.length - extname(full).length);
-  const names = new Set<string>([basename(noExt), relative(root, noExt).split(sep).join('/')]);
-  // Python: a.b.c for src/a/b/c.py, and the package it sits in.
-  const parts = relative(root, noExt).split(sep).filter((p) => p !== 'src');
-  names.add(parts.join('.'));
-  names.add(parts.slice(0, -1).join('.'));
-  if (basename(noExt) === 'index' || basename(noExt) === '__init__') names.add(basename(dirname(noExt)));
-  return [...names].filter((n) => n.length > 1);
-}
-
-/**
- * The package a changed file is re-exported from. In a project with one front door - which is most
- * libraries - every test imports "../src" and nothing imports "../src/utils.ts", so without this a
- * review finds no tests at all for a real change. Measured: 8 of 16 real commits were missed this
- * way before.
- */
-function packageNames(root: string, changed: string): string[] {
-  const full = resolve(root, changed);
-  const out: string[] = [];
-  let dir = dirname(full);
-  for (let up = 0; up < 3; up++) {
-    for (const entry of ['index.ts', 'index.js', 'index.mjs', 'index.tsx', '__init__.py']) {
-      const front = join(dir, entry);
-      if (!existsSync(front)) continue;
-      let source = '';
-      try {
-        source = readFileSync(front, 'utf8');
-      } catch {
-        continue;
-      }
-      const stem = basename(full).replace(/\.[^.]+$/, '');
-      // Either it names this file, or it re-exports everything beside it.
-      if (front !== full && (source.includes(stem) || /export\s+\*/.test(source))) {
-        out.push(relative(root, dir).split(sep).join('/'), basename(dir));
-      }
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return [...new Set(out)].filter(Boolean);
-}
-
-/** Does this source import that file? Exported so the prover can follow imports further. */
-export function importsIt(source: string, names: string[]): boolean {
-  for (const name of names) {
-    const quoted = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patterns = [
-      new RegExp(`(?:from|import|require\\()\\s*['"][^'"]*${quoted}(?:\\.[cm]?[jt]sx?)?['"]`),
-      new RegExp(`(?:^|\\n)\\s*(?:from\\s+${quoted}\\s+import|import\\s+${quoted})\\b`),
-    ];
-    if (patterns.some((p) => p.test(source))) return true;
-  }
-  return false;
-}
 
 const words = (text: string): string[] => (text.toLowerCase().match(/[a-z][a-z0-9]{2,}/g) ?? []).filter((w) => !STOP.has(w));
 const STOP = new Set(['src', 'lib', 'app', 'test', 'tests', 'spec', 'index', 'main', 'the', 'and', 'for', 'com', 'org', 'utils', 'util', 'js', 'ts', 'py']);
@@ -204,7 +149,11 @@ export function coverageFor(root: string, changedAll: string[], tests = testFile
     if (!existsSync(resolve(root, file))) continue;
     const direct = importNames(root, file);
     const viaPackage = packageNames(root, file);
+    const family = familyOf(file);
     for (const test of tests) {
+      // A test can only import a file its own language can import. Without this, a basename is
+      // enough: see `familyOf`.
+      if (family && familyOf(test) !== family) continue;
       const source = read(test);
       if (importsIt(source, direct)) {
         coveredByImport.add(file);

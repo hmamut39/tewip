@@ -12,7 +12,8 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { chooseFramework, detectFrameworks } from '../quality/frameworks.ts';
 import { coverageFor, testFiles } from '../review/coverage.ts';
-import { importingTests, proveFile, type Proof } from './prove.ts';
+import { proveFile, type Proof } from './prove.ts';
+import { importingTests } from './covering.ts';
 import { testsReaching } from './reaches.ts';
 
 const SOURCE = /\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|java|kt|go|cs|rb|php)$/i;

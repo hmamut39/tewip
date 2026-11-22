@@ -60,6 +60,27 @@ export const LAST_RESORT_CONFIDENCE = 0.7;
 /** Measured 15 November 2026 across every labelled corpus, after the history guard below. */
 export const LAST_RESORT_MEASURED = { right: 27, of: 27, tests: 22, heldOutRight: 1, heldOutOf: 1 };
 
+/**
+ * The widening somebody will try, measured and refused. Phase 221.
+ *
+ * The assertion clause looks like tidying beside the locator clause, and dropping it is the obvious
+ * way to buy recall: the locator signal is the stronger of the two, carrying +39.8 points among
+ * assertions and +25.4 among non-assertions. Asked on the population this rule is selected on, a
+ * rule that fires on any failure naming no locator fires 49 times and is right 40 - so it would
+ * find 13 real bugs this one misses, and name 9 bugs that are not there.
+ *
+ * Refused. Nine wrong causes is nine teams sent after nothing, and the rule only ships at all
+ * because it is 27 of 27. What makes this worth writing down rather than leaving as a judgement is
+ * the held-out column: the wider rule is 7 of 7 on gutenberg-local, where the assertion clause
+ * inverts outright - 4 of 19 against 6 of 6. That is six cases, and it is the single most likely
+ * place a future harvest changes this answer.
+ *
+ * Re-derive with `node eval/real-bug-holdout.ts`, which also explains why the same question answers
+ * backwards when measured through `diagnosePipeline`: that pipeline contains this rule, so the
+ * UNKNOWN set it returns is the residue after this rule has already taken these 27 cases.
+ */
+export const LAST_RESORT_WIDENING_REFUSED = { fires: 49, right: 40, wouldAddRight: 13, wouldAddWrong: 9, heldOutRight: 7, heldOutOf: 7 };
+
 /** The slice of a test's history this rule needs; the same fields `real-bug-assertion` reads. */
 export interface LastResortHistory {
   runs: number;
@@ -81,7 +102,9 @@ export interface LastResort {
  * names a locator is REAL_BUG 36% of the time and one that does not is 76%. An error that talks
  * about an element is usually talking about finding it, which is drift or a race; an assertion that
  * talks only about values has already found what it was looking for and disagrees with what it
- * holds.
+ * holds. Both figures still re-derive, on the population this rule is selected on rather than on
+ * what is left after it has run - see `eval/real-bug-holdout.ts`, and `LAST_RESORT_WIDENING_REFUSED`
+ * for what dropping the assertion clause would cost.
  */
 export function lastResortDiagnosis(errorMessage: string | undefined | null, history: LastResortHistory): LastResort | null {
   const error = errorMessage ?? '';

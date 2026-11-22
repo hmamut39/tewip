@@ -166,10 +166,10 @@ export const MODEL_REFUSES = ['LOCATOR_DRIFT', 'TEST_DATA'];
  */
 export const RULES_MEASURED_AT = {
   /** From `rulesFingerprint()` in eval/fingerprint.ts. */
-  hash: 'f66532c651c97277',
+  hash: '482b88f230582988',
   /** How many source files the rules reach, so a collapsed closure is visible rather than silent. */
   files: 22,
-  at: '2026-11-15',
+  at: '2026-11-22',
   /**
    * Every harness that has to be re-run when that hash moves. All of them, named.
    *

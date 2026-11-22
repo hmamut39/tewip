@@ -86,13 +86,50 @@ async function measureOne(labels: string, data: string, name: string, root: stri
   return out;
 }
 
-export async function measure(root = process.cwd(), residueOnly = false): Promise<DatasetSignals[]> {
+export async function measure(root = process.cwd(), residueOnly = false, sets: Array<{ dataset: string; labels: string; data: string }> = DATASET_ACCURACY): Promise<DatasetSignals[]> {
   const out: DatasetSignals[] = [];
-  for (const d of DATASET_ACCURACY) {
+  for (const d of sets) {
     const one = await measureOne(d.labels, d.data, d.dataset, root, residueOnly);
     if (one) out.push(one);
   }
   return out;
+}
+
+/**
+ * Does the signal survive being asked within each project, rather than across all of them?
+ *
+ * This is the question the pooled table cannot answer, and the one that decides whether there is
+ * anything here. Pooled, two signals move REAL_BUG clear of its 41% base rate among the cases the
+ * rules refuse. In **none of the seven projects** does any signal move it. Those projects have base
+ * rates of 0%, 31%, 33%, 33%, 54%, 58% and 75%, and they differ in how many of their failures are
+ * assertions - which is all it takes for pooling to manufacture a correlation that exists nowhere
+ * inside it.
+ *
+ * So the signal is asked against each project's own base rate and the differences are combined,
+ * which is what controlling for the project means here. `lift` is the average of the within-project
+ * differences, weighted by how many cases each project contributes; `agree` counts how many
+ * projects it points the same way in. A signal real enough to act on moves the rate inside
+ * projects, not merely between them. Phase 221.
+ */
+export function stratified(all: DatasetSignals[], signal: string, present: boolean): { lift: number; agree: number; of: number; n: number } {
+  let weighted = 0;
+  let n = 0;
+  let agree = 0;
+  let of = 0;
+  for (const d of all) {
+    const bucket = d.buckets.find((b) => b.signal === signal && b.present === present);
+    if (!bucket || bucket.n === 0 || d.cases === 0) continue;
+    const base = d.baseK / d.cases;
+    // The project's own base rate is the thing to beat, and a project whose every case is in this
+    // bucket says nothing about the signal: it has no contrast to offer.
+    if (bucket.n === d.cases) continue;
+    const diff = bucket.k / bucket.n - base;
+    weighted += diff * bucket.n;
+    n += bucket.n;
+    of += 1;
+    if (diff > 0) agree += 1;
+  }
+  return { lift: n === 0 ? 0 : weighted / n, agree, of, n };
 }
 
 const pct = (n: number, of: number) => (of === 0 ? 'n/a' : `${((n / of) * 100).toFixed(0)}%`);
@@ -175,7 +212,10 @@ function report(all: DatasetSignals[], residueOnly: boolean): void {
     '## What this settles',
     '',
     anyMover
-      ? 'At least one failure-time signal moves REAL_BUG clear of its base rate on the pooled data. Phase 56 concluded the opposite from one project, so that conclusion does not generalise and the rules may have a reachable gain in it.'
+      ? 'At least one failure-time signal moves REAL_BUG clear of its base rate on the pooled data. Phase 56 concluded the opposite from one project, so that conclusion does not generalise.'
+        + ' It is not a reachable gain, and this table cannot tell you that: `diagnosePipeline` contains the last-resort rule, so the cases counted here are the ones left'
+        + ' **after** that rule has already taken its 27 - which are precisely the assertion-and-no-locator failures these two signals describe. Measured on the population a'
+        + ' wider rule would actually see, the widening fires 49 times and is right 40: 13 more real bugs found and 9 causes named that are not there. `node eval/real-bug-holdout.ts`.'
       : "No failure-time signal moves REAL_BUG clear of its base rate on the pooled data. Phase 56's finding holds across every project here, not only the one it was measured on: the ceiling is evidential, not algorithmic. A better model or a better prompt cannot fix it, because the information is not present when the test fails - it arrives later, in the commit that fixes it.",
     '',
     'Buckets under 20 cases are reported as `too few` rather than scored. That is not caution for its own',

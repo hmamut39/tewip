@@ -10,7 +10,7 @@
 // sending people after bugs that are not there.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LAST_RESORT_CONFIDENCE, LAST_RESORT_MEASURED, lastResortDiagnosis } from '../last-resort.ts';
+import { LAST_RESORT_CONFIDENCE, LAST_RESORT_MEASURED, LAST_RESORT_WIDENING_REFUSED, lastResortDiagnosis } from '../last-resort.ts';
 
 /** A test that started failing and has failed the same way ever since. */
 const stable = { runs: 6, failingStreak: 3, failuresBeforeStreak: 0, streakDistinctErrors: 1 };
@@ -70,5 +70,41 @@ describe('the last-resort real-bug rule', () => {
     assert.equal(LAST_RESORT_MEASURED.right, LAST_RESORT_MEASURED.of, 'the record says it was right every time it fired');
     assert.ok(LAST_RESORT_MEASURED.tests > 1, 'and over more than one test');
     assert.ok(LAST_RESORT_MEASURED.heldOutOf > 0, 'including a corpus it was not selected on');
+  });
+});
+
+// Phase 221. The assertion clause reads like tidying beside the locator clause, and dropping it is
+// the obvious way to buy recall. It was measured on the population this rule is selected on - not
+// on what is left after the rule has run, which is what `diagnosePipeline` returns and which
+// answers the question backwards - and it costs more than it buys.
+describe('the clause somebody will try to drop', () => {
+  const stableStreak = { runs: 6, failingStreak: 3, failuresBeforeStreak: 0, streakDistinctErrors: 1 };
+
+  it('declines a failure that names no element but asserts nothing', () => {
+    // Exactly the cases a wider rule would add, in the shapes they really take in the corpora:
+    // a Playwright test timeout, a waitForEvent timeout, a navigation error. Nine of the twenty-two
+    // such failures were not bugs.
+    for (const error of [
+      'Test timeout of 120000ms exceeded.',
+      'TimeoutError: browserContext.waitForEvent: Timeout 10000ms exceeded while waiting for event "page"',
+      'Error: page.goto: net::ERR_ABORTED',
+    ]) {
+      assert.equal(lastResortDiagnosis(error, stableStreak), null, `a wider rule would fire here: ${error}`);
+    }
+  });
+
+  it('keeps the price of widening written down, so it stays a decision', () => {
+    const w = LAST_RESORT_WIDENING_REFUSED;
+    assert.equal(w.right + (w.fires - w.right), w.fires, 'the fires account for themselves');
+    assert.equal(w.right - LAST_RESORT_MEASURED.right, w.wouldAddRight, '13 real bugs the shipped rule misses');
+    assert.equal(w.fires - LAST_RESORT_MEASURED.of - w.wouldAddRight, w.wouldAddWrong, 'and 9 causes that are not there');
+    assert.ok(w.wouldAddWrong > 0, 'a widening with no cost would have been taken');
+    assert.ok(
+      w.right / w.fires < LAST_RESORT_MEASURED.right / LAST_RESORT_MEASURED.of,
+      'the wider rule is less right than the shipped one, which is the whole reason it was refused',
+    );
+    // Held out it looks perfect, which is six cases and is why this is recorded rather than acted on.
+    assert.equal(w.heldOutRight, w.heldOutOf);
+    assert.ok(w.heldOutOf < 20, 'and one corpus of seven fires is not enough to overturn the above');
   });
 });

@@ -200,3 +200,111 @@ describe('the command a review tells you to run', () => {
     assert.match(prefix, /^cd engine\/sub && $/);
   });
 });
+
+// Phase 219. Read on immich's five-file change, where the report named fifteen tests, every one of
+// them for the same changed file, and said nothing about the other.
+describe('what the risk review leaves out, and whether it says so', () => {
+  // 24 covering tests: 15 that import one changed file, 9 that only share a word with the other.
+  // The list is ordered by strength, so cutting it at 15 cut all nine of the second file's.
+  const twoFiles = () => {
+    const imports = Array.from({ length: 15 }, (_, i) => ({
+      testFile: `test/dto-${i}.test.ts`,
+      covers: ['src/config.dto.ts'],
+      how: 'imports' as const,
+    }));
+    const guesses = Array.from({ length: 9 }, (_, i) => ({
+      testFile: `test/fetch-${i}.test.ts`,
+      covers: ['packages/sdk/src/fetch-client.ts'],
+      how: 'name' as const,
+    }));
+    return reviewChange('main...HEAD', ['src/config.dto.ts', 'packages/sdk/src/fetch-client.ts'], [...imports, ...guesses], [], []);
+  };
+
+  it('names a test for every covered file before giving any file a second one', () => {
+    const text = renderReview(twoFiles());
+    assert.match(text, /fetch-0\.test\.ts/, 'the other changed file must get a line at all');
+    assert.match(text, /src\/config\.dto\.ts/, 'and the first one keeps its own');
+  });
+
+  it('says how many it did not list', () => {
+    assert.match(renderReview(twoFiles()), /and \d+ more, not listed/, '24 tests, 15 shown, and it used to say nothing');
+  });
+
+  it('keeps the strongest evidence first even while making room', () => {
+    const shownLines = renderReview(twoFiles()).split(NL).filter((l) => l.startsWith('- **'));
+    assert.match(shownLines[0], /dto-0\.test\.ts/, 'an importer leads');
+    assert.ok(shownLines.length <= 15, 'and the bound is still the bound');
+  });
+
+  it('names a file whose only coverage is a guess, which neither other section claims', () => {
+    const text = renderReview(twoFiles());
+    assert.match(text, /## Changed, and only guessed at/);
+    assert.match(text, /packages\/sdk\/src\/fetch-client\.ts/);
+    assert.doesNotMatch(text, /## Changed, but nothing tests it/, 'something does match it, so that section is wrong');
+  });
+
+  it('does not say a test never failed when no run has ever been kept', () => {
+    const quiet = renderReview(twoFiles());
+    assert.doesNotMatch(quiet, /never failed in the history/, 'fifteen reassurances drawn from nothing');
+    // And it still says so where there is a history to say it from.
+    const withHistory = reviewChange(
+      'main...HEAD',
+      ['src/cart.ts'],
+      [
+        { testFile: 'test/cart.test.ts', covers: ['src/cart.ts'], how: 'imports' as const },
+        { testFile: 'test/other.test.ts', covers: ['src/cart.ts'], how: 'imports' as const },
+      ],
+      [failure('test/cart.test.ts', 'REAL_BUG', '2026-09-04T00:00:00Z')],
+      [],
+    );
+    assert.match(renderReview(withHistory), /never failed in the history/, 'other.test.ts really never has');
+  });
+});
+
+// Phase 219, second half. The false accusation Phase 217 took out of `tewip done` was still in
+// `tewip review`, three times in one report, about bitwarden's `src/Core/Constants.cs`:
+// "A mistake there would reach production unnoticed", "No test in this project reaches any of the
+// changed files. Tewip can write one", and a section headed "Changed, but nothing tests it".
+// 63 files under test/ name the types declared in that file.
+describe('a changed file in a language whose imports cannot be read', () => {
+  const csharp = () => reviewChange('main...HEAD', ['src/Core/Constants.cs'], [], [], uncovered(['src/Core/Constants.cs'], []));
+
+  it('does not say a mistake there would reach production unnoticed', () => {
+    const r = csharp();
+    assert.deepEqual(r.uncovered, [], 'a zero it could not measure is not a zero');
+    assert.deepEqual(r.notRead, ['src/Core/Constants.cs'], 'and it has to know which it is');
+    assert.doesNotMatch(r.notes.join(' '), /would reach production unnoticed/);
+    assert.doesNotMatch(renderReview(r), /## Changed, but nothing tests it/);
+  });
+
+  it('says which part of itself stopped, and what would answer it', () => {
+    const text = renderReview(csharp());
+    assert.match(text, /## Changed, and not read/);
+    assert.match(text, /imports Tewip cannot read/);
+    assert.match(text, /coverage report/);
+  });
+
+  it('does not offer to write a test for code it could not read', () => {
+    // The offer was made to bitwarden about a file 63 of its own test files already name.
+    assert.doesNotMatch(csharp().notes.join(' '), /Tewip can write one/);
+  });
+
+  it('still says nothing tests it where a zero really is a zero', () => {
+    // JavaScript and Python are the two languages whose imports this can follow, so there the
+    // gate has to keep being able to say no. The branch must not become a blanket excuse.
+    const js = reviewChange('main...HEAD', ['src/new.js'], [], [], uncovered(['src/new.js'], []));
+    assert.deepEqual(js.uncovered, ['src/new.js']);
+    assert.deepEqual(js.notRead, []);
+    assert.match(js.notes.join(' '), /would reach production unnoticed/);
+    assert.match(js.notes.join(' '), /Tewip can write one/);
+    assert.match(renderReview(js), /## Changed, but nothing tests it/);
+  });
+
+  it('does not offer to write a test for a change with no code in it', () => {
+    // keycloak's change was two exported realm fixtures under tests/base/src/test/resources/.
+    const json = reviewChange('main...HEAD', ['tests/resources/migration-realm-Migration.json'], [], [], []);
+    assert.deepEqual(json.uncovered, [], 'a JSON fixture is not code a test could reach');
+    assert.doesNotMatch(json.notes.join(' '), /Tewip can write one/);
+    assert.doesNotMatch(json.notes.join(' '), /No test in this project reaches/);
+  });
+});

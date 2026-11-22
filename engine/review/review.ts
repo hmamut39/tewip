@@ -7,7 +7,7 @@ import { relative, sep } from 'node:path';
 // which is why this costs nothing and why nothing else can produce it.
 import { componentOf } from '../../outlets/items.ts';
 import type { TriageRecord } from '../../reporters/types.ts';
-import type { TestCoverage } from './coverage.ts';
+import { isCoverableCode, notRead, type TestCoverage } from './coverage.ts';
 import { renderExpectations, type ExpectationChange } from './expectations.ts';
 import { renderAgreements, type Agreement } from './agreements.ts';
 
@@ -41,6 +41,31 @@ export interface Review {
   runFirst: string[];
   /** What a person should know before reading the diff, in plain sentences. */
   notes: string[];
+  /**
+   * No failure has ever been kept for this project, so "never failed" is not a fact about a test.
+   *
+   * Every line of the covering list carried **"never failed in the history Tewip has kept"** on a
+   * project with no history - fifteen reassurances drawn from nothing, three lines above a footer
+   * saying there is no history yet. Phase 214 called this a clean bill of health over files it had
+   * not opened; this is the same thing about runs that do not exist. Phase 219.
+   */
+  noHistory: boolean;
+  /**
+   * Changed files whose only coverage is a shared word - a guess, by this report's own account.
+   *
+   * These fall between the two sections. `uncovered` does not claim them, because something does
+   * match; "Run these first" drops them, because it keeps only real imports. So the one file in
+   * immich's change that no test imports - `packages/sdk/src/fetch-client.ts` - appeared in
+   * neither, and nothing in the report said a word about it.
+   */
+  guessedAt: string[];
+  /**
+   * Changed files nothing reached because this cannot read that language's imports at all.
+   *
+   * Not the same claim as `uncovered`, and it was being made as though it were. See `notRead` in
+   * coverage.ts for what bitwarden was told about a file 63 of its test files name. Phase 219.
+   */
+  notRead: string[];
   /** Checks that were already agreed and this change edits, withdraws or renames. */
   expectations: ExpectationChange[];
   /** Decisions outside the tests that this change alters. */
@@ -53,6 +78,7 @@ const countBy = <T>(xs: T[], key: (x: T) => string): Map<string, number> => {
   for (const x of xs) out.set(key(x), (out.get(key(x)) ?? 0) + 1);
   return out;
 };
+
 
 /** The review, assembled from the change, what covers it, and what has gone wrong here before. */
 export function reviewChange(range: string, changed: string[], coverage: TestCoverage[], history: TriageRecord[], notCovered: string[], expectations: ExpectationChange[] = [], agreements: Agreement[] = []): Review {
@@ -102,6 +128,10 @@ export function reviewChange(range: string, changed: string[], coverage: TestCov
     .slice(0, 10)
     .map((t) => t.testFile);
 
+  // Derived here rather than passed in, so no caller can leave it out and get the old sentence
+  // back. See `notRead` in coverage.ts for what bitwarden was told without it.
+  const cannotRead = notRead(changed, coverage);
+
   const notes: string[] = [];
   const flaky = tests.filter((t) => t.flakedTimes >= 3);
   if (flaky.length > 0) {
@@ -116,7 +146,19 @@ export function reviewChange(range: string, changed: string[], coverage: TestCov
   if (risky.length > 0) {
     notes.push(`${risky[0].area} has had ${risky[0].realBugs} real bug(s) in the history Tewip has kept. It is the part of this change worth a second pair of eyes.`);
   }
-  if (tests.length === 0 && changed.length > 0) {
+  if (cannotRead.length > 0) {
+    notes.push(
+      `${cannotRead.length} changed file(s) are in a language whose imports Tewip cannot read (${cannotRead.slice(0, 3).join(', ')}), so nothing here is evidence about them either way. A coverage report from the test run this project already does would settle it.`,
+    );
+  }
+  // Only where a zero means a zero, and only where there is code to test.
+  //
+  // Offering to write a test for a file this could not read is how bitwarden was told to write one
+  // for code 63 of its own test files already name. And keycloak's change was two exported realm
+  // fixtures - `migration-realm-1.9.8.Final-Migration.json` - about which this said "No test in
+  // this project reaches any of the changed files. Tewip can write one", there being nothing in
+  // that change a test could reach. Phase 219.
+  if (tests.length === 0 && changed.some(isCoverableCode) && cannotRead.length === 0) {
     notes.push('No test in this project reaches any of the changed files. Tewip can write one: `tewip plan "<what the change should do>"` then `tewip write`.');
   }
 
@@ -134,75 +176,13 @@ export function reviewChange(range: string, changed: string[], coverage: TestCov
     notes.unshift(`This change alters ${agreements.length} thing(s) the project had already decided outside its tests (${[...new Set(agreements.map((a) => a.kind))].join(', ')}). They are listed below with what they were.`);
   }
 
-  return { range, files: changed, tests, uncovered: notCovered, expectations, agreements, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
+  // A file nothing imports, that only a shared word matched.
+  const strongly = new Set(coverage.filter((c) => c.how !== 'name').flatMap((c) => c.covers));
+  const guessedAt = changed.filter((f) => !strongly.has(f) && coverage.some((c) => c.covers.includes(f)));
+
+  return { range, files: changed, tests, uncovered: notCovered, noHistory: history.length === 0, guessedAt, notRead: cannotRead, expectations, agreements, areas: [...areas.values()].sort((a, b) => b.realBugs - a.realBugs || b.failures - a.failures), runFirst, notes };
 }
 
-const when = (at: string): string => {
-  if (!at) return 'never';
-  const days = Math.round((Date.now() - Date.parse(at)) / 86_400_000);
-  if (!Number.isFinite(days)) return 'once';
-  return days <= 1 ? 'yesterday' : days < 14 ? `${days} days ago` : days < 60 ? `${Math.round(days / 7)} weeks ago` : `${Math.round(days / 30)} months ago`;
-};
-
-/** The review as a person reads it, before they read the diff. */
-/**
- * The `cd` a suggested command needs, when the runner does not run from the repository root.
- *
- * A framework builds its commands relative to its own working directory, which in a layered
- * project is not where the report is read. `tewip review` printed
- * `node --test "test/flaky.test.ts"` for a file at engine/test/flaky.test.ts, and copying it gave
- * "Could not find 'test/flaky.test.ts'". The command is the one line in a review somebody acts on;
- * it has to work where they paste it.
- */
-export function runFrom(root: string, cwd: string): string {
-  const where = relative(root, cwd).split(sep).join('/');
-  return where && where !== '.' ? `cd ${where} && ` : '';
-}
-
-export function renderReview(review: Review, runCommand?: (files: string[]) => string): string {
-  const lines = [`# Risk review: ${review.range}`, '', `${review.files.length} changed file(s).`, ''];
-
-  if (review.notes.length > 0) {
-    lines.push('## Before you read the diff', '');
-    for (const note of review.notes) lines.push(`- ${note}`);
-    lines.push('');
-  }
-
-  const renegotiated = renderExpectations(review.expectations);
-  if (renegotiated.length > 0) lines.push(...renegotiated, '');
-  const altered = renderAgreements(review.agreements);
-  if (altered.length > 0) lines.push(...altered, '');
-
-  lines.push('## Tests that cover this change', '');
-  if (review.tests.length === 0) lines.push('None found.', '');
-  for (const test of review.tests.slice(0, 15)) {
-    const past = test.flakedTimes + test.bugTimes > 0 ? ` — failed before: ${test.bugTimes} real bug(s), ${test.flakedTimes} flaky, last ${when(test.lastFailed)}` : ' — never failed in the history Tewip has kept';
-    const how = test.how === 'imports' ? 'imports the changed code' : test.how === 'package' ? 'imports the package that exports it' : 'shares its words, so this one is a guess';
-    lines.push(`- **${test.testFile}** (${how})${past}`);
-    lines.push(`  - covers: ${test.covers.slice(0, 4).join(', ')}${test.covers.length > 4 ? `, +${test.covers.length - 4}` : ''}`);
-  }
-  lines.push('');
-
-  if (review.uncovered.length > 0) {
-    lines.push('## Changed, but nothing tests it', '');
-    for (const file of review.uncovered.slice(0, 15)) lines.push(`- ${file}`);
-    lines.push('');
-  }
-
-  if (review.areas.some((a) => a.failures > 0)) {
-    lines.push('## What has gone wrong here before', '');
-    for (const area of review.areas.filter((a) => a.failures > 0).slice(0, 6)) {
-      lines.push(`- **${area.area}**: ${area.failures} failure(s) — ${area.realBugs} real bug(s), ${area.flaky} flaky`);
-    }
-    lines.push('');
-  }
-
-  if (review.runFirst.length > 0) {
-    lines.push('## Run these first', '');
-    lines.push(runCommand ? '```' : '', runCommand ? runCommand(review.runFirst) : review.runFirst.map((f) => `- ${f}`).join('\n'), runCommand ? '```' : '');
-    lines.push('');
-  }
-
-  lines.push('---', '', 'Read from this project\'s own failure history. No model was called, so this cost nothing.');
-  return lines.join('\n');
-}
+// The report lives in render-review.ts; re-exported here so nothing that reads a review has to
+// know where it is drawn.
+export { renderReview, runFrom } from './render-review.ts';

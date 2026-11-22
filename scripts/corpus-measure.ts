@@ -20,6 +20,9 @@ import { NEEDS_A_LOOK } from '../engine/sbom/licences.ts';
 import { sourceFiles } from '../engine/walk.ts';
 import { triageSecret } from '../engine/secure/triage.ts';
 import { lookAround, total } from '../engine/start/look.ts';
+import { coverageFor, isCoverableCode, uncovered } from '../engine/review/coverage.ts';
+import { reviewChange } from '../engine/review/review.ts';
+import { changeSummary } from '../engine/quality/grounding.ts';
 import { gather } from '../engine/verdict/verdict-command.ts';
 import { decide } from '../engine/verdict/verdict.ts';
 
@@ -27,7 +30,7 @@ export interface Expectation {
   [key: string]: number;
 }
 
-export type Command = 'vouch' | 'schema' | 'access' | 'secrets' | 'agent' | 'infra' | 'sbom' | 'contract' | 'start' | 'done';
+export type Command = 'vouch' | 'schema' | 'access' | 'secrets' | 'agent' | 'infra' | 'sbom' | 'contract' | 'start' | 'done' | 'review';
 
 /** Counts, derived from the engine rather than from the words of a report. */
 export function measure(command: Command, root: string, diff?: string): Expectation {
@@ -91,6 +94,32 @@ export function measure(command: Command, root: string, diff?: string): Expectat
       containers: found.containers,
       unreadable: total(found.unreadable),
       'stopped-early': found.stoppedEarly ? 1 : 0,
+    };
+  }
+  // The risk review, pinned because its evidence is a list and a list is what gets quietly cut.
+  //
+  // Read on immich in Phase 219: 24 tests covered a five-file change, the report named fifteen,
+  // and because the list is ordered by how strongly each test knows the code, the fifteen were all
+  // for one changed file and all nine for the other began at index 15. Nothing said so. `imports`,
+  // `viaPackage` and `guessed` are pinned separately for that reason - the three are not the same
+  // claim, and a number that moves between them is a change in what the report asserts.
+  if (command === 'review') {
+    const files = changeSummary(root, diff ?? 'HEAD~1...HEAD')?.files.map((f) => f.split(String.fromCharCode(92)).join('/')) ?? [];
+    if (files.length === 0) return { 'no-change': 1 };
+    const coverage = coverageFor(root, files);
+    const r = reviewChange(diff ?? 'HEAD~1...HEAD', files, coverage, [], uncovered(files, coverage));
+    return {
+      changed: files.length,
+      coverable: files.filter(isCoverableCode).length,
+      tests: r.tests.length,
+      imports: r.tests.filter((t) => t.how === 'imports').length,
+      viaPackage: r.tests.filter((t) => t.how === 'package').length,
+      guessed: r.tests.filter((t) => t.how === 'name').length,
+      uncovered: r.uncovered.length,
+      notRead: r.notRead.length,
+      guessedAt: r.guessedAt.length,
+      runFirst: r.runFirst.length,
+      notes: r.notes.length,
     };
   }
   if (command === 'vouch') {

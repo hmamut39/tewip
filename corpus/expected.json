@@ -86,6 +86,24 @@
             "cannot-say": 1
           },
           "verified": "2026-11-22, Phase 217. `74c301ef0ac` \"Update realm certificates\", two files, both of them `tests/base/src/test/resources/org/keycloak/tests/migration/migration-realm-1.9.8.Final-Migration*.json`. Read by hand: they are exported realm fixtures - JSON, no test in them. Both used to count as changed test files because `IS_TEST` matches the path `tests/`, and the report then answered \"Can the tests in this change fail? **Yes: every test in this change asserts something**\" about a change containing no tests, scoring it `met`. changedTests must stay 0 and met must stay 0: both rows about tests are `n/a` here, because there are none."
+        },
+        {
+          "command": "review",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 2,
+            "coverable": 0,
+            "tests": 0,
+            "imports": 0,
+            "viaPackage": 0,
+            "guessed": 0,
+            "uncovered": 0,
+            "notRead": 0,
+            "guessedAt": 0,
+            "runFirst": 0,
+            "notes": 0
+          },
+          "verified": "2026-11-22, Phase 219. `74c301ef0ac` \"Update realm certificates\", two files, both exported realm fixtures under `tests/base/src/test/resources/org/keycloak/tests/migration/`. Read by hand: JSON, no test in them, and nothing in the change a test could reach - `coverable` is 0 and must stay 0. The review used to answer \"No test in this project reaches any of the changed files. Tewip can write one\", which is the same category error Phase 217 found here, where `done` said \"every test in this change asserts something\" about the same two files. `notes` must stay 0: there is nothing to say before this diff."
         }
       ]
     },
@@ -221,6 +239,24 @@
             "cannot-say": 1
           },
           "verified": "2026-11-22, Phase 217. `0d4d989ebf` \"[PM-41215] Remove feature flag pm-19976-use-sdk-password-generators (#8542)\", one file: `src/Core/Constants.cs`. `not-met` must stay 0. Before this phase this change was reported **Not ready** on the sentence \"no test imports or reaches src/Core/Constants.cs, and this change adds no test either, so nothing here could notice a mistake in it\". That is false: 63 files under `test/` name the types declared in that file (`Constants.`, `FeatureFlagKeys.`, `AuthConstants.`), counted by grep, many of them written out as `Bit.Core.FeatureFlagKeys.PM35215_BusinessPlanPriceMigration`. C# says `using Bit.Core;` and nothing Tewip looks for is in that line: 0 of 25 .cs files sampled evenly through this repository had a single import resolve, against 1,173 test files. covering 0 here means \"not read\", and the five not-checked rows are the honest count."
+        },
+        {
+          "command": "review",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 1,
+            "coverable": 1,
+            "tests": 0,
+            "imports": 0,
+            "viaPackage": 0,
+            "guessed": 0,
+            "uncovered": 0,
+            "notRead": 1,
+            "guessedAt": 0,
+            "runFirst": 0,
+            "notes": 1
+          },
+          "verified": "2026-11-22, Phase 219. `0d4d989ebf`, one file: `src/Core/Constants.cs`. `uncovered` must stay 0 and `notRead` must stay 1. Before this phase the review said it three ways at once: \"1 changed file(s) have no test that imports them ... **A mistake there would reach production unnoticed**\", \"**No test in this project reaches any of the changed files.** Tewip can write one\", and a section headed \"Changed, but nothing tests it\". 63 files under `test/` name the types declared in that file - counted by grep over `Constants.`, `FeatureFlagKeys.` and `AuthConstants.` - so the offer was to write a test for code that already has sixty-three. C# says `using Bit.Core;`: 0 of 25 .cs files sampled evenly through this repository resolved an import, against 1,173 test files. The one remaining note is the honest one."
         }
       ]
     },
@@ -540,6 +576,24 @@
             "cannot-say": 1
           },
           "verified": "2026-11-22, Phase 217. `3f9f22ba98` \"fix(material/datepicker): update parse error with signal forms when value stays null (#33951)\": `src/material/datepicker/datepicker-input-base.ts` and `datepicker.spec.ts`. This is the repository that found the defect. All eight covering tests were reported as `(imports it)`, and all eight were read: not one of them contains the string `datepicker-input-base`. They import `@angular/material/datepicker`, the front door of the folder - a `package` match, which `coverageFor` had always labelled correctly and which the caller flattened into \"imports it\". So `direct` must stay 0 and `viaPackage` 8. If direct ever becomes 8 again here, the distinction Phase 216 shipped has been lost one layer up."
+        },
+        {
+          "command": "review",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 2,
+            "coverable": 1,
+            "tests": 8,
+            "imports": 0,
+            "viaPackage": 8,
+            "guessed": 0,
+            "uncovered": 0,
+            "notRead": 0,
+            "guessedAt": 0,
+            "runFirst": 8,
+            "notes": 0
+          },
+          "verified": "2026-11-22, Phase 219. `3f9f22ba98`. All eight are `package` matches and `imports` must stay 0: they import `@angular/material/datepicker`, the front door of the folder, and not one of the eight contains the string `datepicker-input-base` - each was opened and checked. The report calls them \"imports the package that exports it\", which is the true claim; Phase 217 found `done` calling the same eight \"imports it\"."
         }
       ]
     },
@@ -723,6 +777,24 @@
             "cannot-say": 1
           },
           "verified": "2026-11-22, Phase 217. `188d64e` \"fix: public config properties (#32500)\", five files: `mobile/lib/utils/openapi_patching.dart`, `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `server/src/dtos/config.dto.ts` and its `.spec.ts`. The two TypeScript files are the source; the Dart file is not a language `languageOf` reads and the generated OpenAPI JSON is not a test, which is why changedSource is 2 and changedTests is 1 rather than 2 - `open-api/immich-openapi-specs.json` used to count as a test because its name ends `-specs.json`. All 14 direct importers were confirmed one at a time: each of those 14 files was read and each contains an import naming a changed file. The other 65 are reached through the import graph and were not read individually - a DTO this much of the server imports is reached by most of its tests, which is the reason `direct` is pinned beside `covering`. `viaPackage` must stay 0 here: immich's tests name the file, not the folder."
+        },
+        {
+          "command": "review",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 5,
+            "coverable": 2,
+            "tests": 24,
+            "imports": 15,
+            "viaPackage": 0,
+            "guessed": 9,
+            "uncovered": 0,
+            "notRead": 0,
+            "guessedAt": 1,
+            "runFirst": 10,
+            "notes": 0
+          },
+          "verified": "2026-11-22, Phase 219. `188d64e`, the change that found the defect. 24 tests cover it and the report named fifteen - every one of them for `server/src/dtos/config.dto.ts`, because the list is ordered by how strongly each test knows the code and all nine touching `packages/sdk/src/fetch-client.ts` begin at index 15. Nothing said it had been cut. Checked by hand: all 15 `imports` matches were opened and each contains an import naming a changed file; all 9 `guessed` ones were opened and none contains the string `fetch-client`. That is why `guessedAt` is 1 and `uncovered` is 0 - something matches that file, so it was in neither section, and the report said nothing whatever about it. `notes` is 0 because this clone has no kept failure history and nothing else here is worth saying before the diff."
         }
       ]
     },
@@ -825,6 +897,24 @@
             "cannot-say": 1
           },
           "verified": "2026-11-22, Phase 217. `75ccf94d` \"feat: update version constant to v1.10.0 (#3952)\", one file: `version.go`, which declares `const Version = \"v1.10.0\"` and nothing else. Checked by hand: **no test in gin references that constant**. Grepping `*_test.go` for `Version` returns `runtime.Version()` in debug_test.go and the HTTP header strings \"Sec-WebSocket-Version\" and \"Gin-Version\" in context_test.go, and nothing else. So the old answer - \"nothing here could notice a mistake in it\" - was **true for this change**, and it is still pinned at `not-met: 0`. That is the point of this entry: Go imports a package and never a file, so Tewip cannot read whether a Go file is tested, and 0 of 25 sampled .go files resolved an import against 38 test files. Being right by luck is not evidence, and a gate that is right by luck on gin is wrong on bitwarden for the same reason."
+        },
+        {
+          "command": "review",
+          "diff": "HEAD~1...HEAD",
+          "expect": {
+            "changed": 1,
+            "coverable": 1,
+            "tests": 0,
+            "imports": 0,
+            "viaPackage": 0,
+            "guessed": 0,
+            "uncovered": 0,
+            "notRead": 1,
+            "guessedAt": 0,
+            "runFirst": 0,
+            "notes": 1
+          },
+          "verified": "2026-11-22, Phase 219. `75ccf94d`, `version.go`, which declares `const Version` and nothing else. Checked by hand and recorded in the `done` entry: no test in gin references that constant. So \"nothing tests it\" was **true here**, and `uncovered` is still pinned at 0 - Go imports a package and never a file, so Tewip cannot read whether a Go file is tested, and a report that is right by luck on gin is wrong on bitwarden for the same reason. `notRead` 1 is what it actually knows."
         }
       ]
     },

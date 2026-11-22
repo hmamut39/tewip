@@ -22,6 +22,7 @@ const sound: Evidence = {
   covering: [{ testFile: 'tests/refunds.test.js', how: 'imports it' }],
   selfTested: [],
   importsNotFollowed: [],
+  testsStoppedEarly: false,
   cannotFail: [],
   crashOnly: 0,
     couldNotJudge: 0,
@@ -563,5 +564,41 @@ describe('what kind of evidence it is, and what counts as a test file', () => {
     const check = decide(got!.evidence).checks.find((c) => c.question === 'Can the tests in this change fail?')!;
     assert.equal(check.standing, 'not-applicable', 'so there is nothing to say about tests that are not there');
     assert.doesNotMatch(check.answer, /every test in this change asserts something/, 'the sentence keycloak got');
+  });
+
+  it('carries the bounded walk out of the gathering, not only out of decide', () => {
+    // The sentence below was guarded and the wiring to it was not: hardcoding the flag false in
+    // `gather` broke nothing, because nothing ran `gather` against a bounded walk. n8n has 8,308
+    // test files against a bound of 20,000, so the bound is what has to be lowered.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-bound-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    mkdirSync(join(root, 'tests'), { recursive: true });
+    writeFileSync(join(root, 'src.js'), 'export const n = 1;' + NL, 'utf8');
+    for (const name of ['a', 'b', 'c']) {
+      writeFileSync(join(root, 'tests', `${name}.test.js`), "import { n } from '../src.js';" + NL + `it('${name}', () => { expect(n).toBe(1); });` + NL, 'utf8');
+    }
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    git('add', '-A');
+    git('commit', '-qm', 'first');
+    writeFileSync(join(root, 'src.js'), 'export const n = 2;' + NL, 'utf8');
+    git('add', '-A');
+    git('commit', '-qm', 'change it');
+
+    const whole = gather({ root, diff: 'HEAD~1...HEAD' });
+    assert.equal(whole!.evidence.testsStoppedEarly, false, 'three files is under any bound');
+    const bounded = gather({ root, diff: 'HEAD~1...HEAD', testLimit: 1 });
+    assert.equal(bounded!.evidence.testsStoppedEarly, true, 'and a bounded walk has to reach the evidence');
+    assert.match(decide(bounded!.evidence).notChecked.join(' | '), /hit its bound/, 'and the report');
+  });
+
+  it('admits the test walk gave up, because then every count above is "at least"', () => {
+    // n8n: 8,308 test files, 4,003 returned, nothing in the list saying so.
+    const quiet = decide(sound).notChecked.join(' | ');
+    assert.doesNotMatch(quiet, /stopped looking/, 'and it must not say so when it did finish');
+    const bounded = decide({ ...sound, testsStoppedEarly: true }).notChecked.join(' | ');
+    assert.match(bounded, /hit its bound/, 'a bounded walk has to be declared');
+    assert.match(bounded, /at least that many/, 'and what that does to the counts');
   });
 });

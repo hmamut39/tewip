@@ -57,6 +57,13 @@ export interface Evidence {
    */
   importsNotFollowed: string[];
   /**
+   * The walk for test files hit its bound, so every count about coverage is "at least".
+   *
+   * n8n has 8,308 test files and the walk returned 4,003 of them, as a list indistinguishable
+   * from a complete one - which made what covers a change a sample reported as a total. Phase 218.
+   */
+  testsStoppedEarly: boolean;
+  /**
    * What a coverage report the project already produces says about the changed files, when there is
    * one. Imports cannot see a test that posts a GraphQL query or hits an HTTP route; a coverage
    * report can, because it records what actually ran.

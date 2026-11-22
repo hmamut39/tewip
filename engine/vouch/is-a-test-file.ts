@@ -61,6 +61,25 @@ function inCode(text: string, ranges: Array<[number, number]>, pattern: RegExp):
 /** The declaration shapes that are code. `* @test` is deliberately absent: it **is** a comment. */
 const DECLARED_IN_CODE = /(?<![.\w$#])(it|test|describe|Scenario)\s*\(|^\s*def\s+test_|@Test\b|\[(Test|Fact|Theory)\]|\bfunc\s+Test[A-Z]/gm;
 
+/**
+ * Does this file declare a test, read out of the file itself?
+ *
+ * Separate from `looksLikeTests` because that one takes a directory as proof, and a directory
+ * proves nothing. firefly-iii has eleven production classes under `app/Events/Test/`,
+ * `app/Listeners/Test/` and `app/Notifications/Test/` - the Laravel feature that sends a user a
+ * test notification - and every one of them was a test file on the strength of a folder called
+ * `Test`. Not one extends a `TestCase` or carries an attribute, which is what this asks.
+ *
+ * `looksLikeTests` keeps the shortcut, because for vouching a file in a test folder named like a
+ * test is a test and the masking below is the expensive part. Discovery cannot afford the
+ * shortcut: it decides what is allowed to cover a change. Phase 218.
+ */
+export function declaresATest(file: string, text: string): boolean {
+  if (minifiedOrVendored(file, text)) return false;
+  if (/[.-]config\.[cm]?[jt]s$/i.test(file)) return false;
+  return declaresIn(file, text);
+}
+
 /** Does this file look like tests at all? Vouching for a source file is a category error. */
 export function looksLikeTests(file: string, text: string): boolean {
   if (minifiedOrVendored(file, text)) return false;
@@ -75,6 +94,11 @@ export function looksLikeTests(file: string, text: string): boolean {
   // Named like a test? Then nothing below can change the answer, and the masking it needs is the
   // one expensive thing this function does. Same result, and it runs only where it decides.
   if (named) return true;
+  return declaresIn(file, text);
+}
+
+/** The content half: every way a declaration of a test shows up in the eight languages. */
+function declaresIn(file: string, text: string): boolean {
   const language = languageOf(file);
   const ranges = textRanges(text, language ?? undefined);
   const declares =
@@ -118,5 +142,5 @@ export function looksLikeTests(file: string, text: string): boolean {
     // where `context = {}` is just as ordinary.
     (languageOf(file) === 'ruby' &&
       /^\s*(?:RSpec\.)?(?:describe|context)\s+[^=\n]*\sdo\b|^\s*(?:x|f)?it\s+["'].*\bdo\b/m.test(text));
-  return named || declares;
+  return declares;
 }

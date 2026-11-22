@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { seal } from '../attest/seal.ts';
 import { changedLinesByFile, proveChanged } from '../prove/changed.ts';
 import { changeSummary } from '../quality/grounding.ts';
-import { coverageFor, importsCanBeFollowed, testFiles } from '../review/coverage.ts';
+import { coverageFor, importsCanBeFollowed, testFilesFound } from '../review/coverage.ts';
 import { importingTestsWithHow } from '../prove/covering.ts';
 import { testsReaching } from '../prove/reaches.ts';
 import { vouchChanged } from '../vouch/changed.ts';
@@ -30,6 +30,15 @@ export interface DoneCommand {
   json?: string;
   /** Exit non-zero unless the verdict is "ready". */
   strict?: boolean;
+  /**
+   * How many test files to walk before giving up. Defaults to the bound in coverage.ts.
+   *
+   * Here because the bounded path cannot otherwise be reached: n8n, the largest suite in the
+   * corpus, has 8,308 test files against a bound of 20,000, and a guard that builds 20,000 files
+   * to prove the reporting works is not a guard anybody will run. Lowering it is also the honest
+   * answer for a repository larger than any measured here.
+   */
+  testLimit?: number;
   name?: string;
 }
 
@@ -121,7 +130,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
   // read tests in is not a test. Phase 217.
   const changedTests = changed.filter((f) => IS_TEST.test(f) && languageOf(f) !== null && existsSync(resolve(cmd.root, f)));
 
-  const known = testFiles(cmd.root);
+  const { files: known, stoppedEarly: testsStoppedEarly } = testFilesFound(cmd.root, cmd.testLimit);
     // A coverage report the project already produces, if there is one. Imports cannot see a test that
   // posts a GraphQL query, hits an HTTP route or renders a controller - and Phases 46 and 52 both
   // ended at "cannot say" on every real Saleor pull request because of it. A coverage report records
@@ -198,6 +207,7 @@ export function gather(cmd: DoneCommand): { evidence: Evidence; changed: string[
       covering,
       selfTested,
       importsNotFollowed,
+      testsStoppedEarly,
     coverage,
       cannotFail: vouched.cannotFail.map((j) => ({ name: j.name, file: j.file, line: j.line, why: j.why })),
       crashOnly: vouched.crashOnly.length,

@@ -182,6 +182,9 @@ export function decide(evidence: Evidence): Decision {
     checks,
     notChecked: [
       ...unknown.map((c) => `${c.question.toLowerCase().replace(/\?$/, '')} - ${c.answer}`),
+      ...(evidence.testsStoppedEarly
+        ? ['the tests past the point this stopped looking: the walk for test files hit its bound, so every count above is "at least that many"']
+        : []),
       'whether the change does what was intended, which no tool here can know',
       'the running application, its dependencies and its secrets, unless `tewip secure` was run separately',
     ],

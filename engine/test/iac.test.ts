@@ -184,3 +184,50 @@ describe('the report', () => {
     assert.match(page, /Kubernetes/, 'including the part it has no real data for');
   });
 });
+
+// Phase 212. "Your container runs as root" is a sentence somebody takes to their platform team, so
+// it has to be true. Found by reading what `infra` says about immich rather than counting it.
+describe('who the container actually runs as', () => {
+  const NL = String.fromCharCode(10);
+  const rootFindings = (...lines: string[]) => readDockerfile('Dockerfile', lines.join(NL)).filter((f) => f.rule === 'runs-as-root');
+
+  it('follows USER back to the stage this one is built FROM', () => {
+    // Docker inherits USER from the parent stage. Reading only the final stage does not, so this
+    // image - which runs as `node` - was accused of running as root, at high severity.
+    const found = rootFindings('FROM node:22 AS base', 'USER node', 'FROM base AS prod', 'COPY . .');
+    assert.deepEqual(found, [], 'a USER inherited from the parent stage is the USER in force');
+  });
+
+  it('still names an inherited root, which is inherited just the same', () => {
+    const found = rootFindings('FROM node:22 AS base', 'USER root', 'FROM base AS prod', 'COPY . .');
+    assert.equal(found.length, 1, 'inheriting root is still running as root');
+    assert.match(found[0].what, /the last USER in this image is root/);
+  });
+
+  it("lets the final stage's own USER win over the one it inherits", () => {
+    assert.deepEqual(rootFindings('FROM node:22 AS base', 'USER root', 'FROM base AS prod', 'USER app'), []);
+  });
+
+  it('still names an image that sets no USER anywhere in the file', () => {
+    // immich's machine-learning image, which really does run as root: the fix must not quieten it.
+    const found = rootFindings('FROM python:3.13 AS prod-cpu', 'RUN pip install x', 'FROM prod-cpu AS prod', 'COPY . .');
+    assert.equal(found.length, 1, 'no USER in any stage of the chain is still a finding');
+  });
+
+  it('does not loop when two stages name each other', () => {
+    // `FROM a AS b` / `FROM b AS a` is not valid Docker, but a reader handed it must not hang.
+    assert.doesNotThrow(() => rootFindings('FROM b AS a', 'FROM a AS b', 'COPY . .'));
+  });
+
+  it('files each finding under the sentence that is true of it', () => {
+    // The report grouped by rule id and printed the first `what` over all of them, so a finding
+    // whose sentence is "the last USER is root" was listed under "this image has no USER" with
+    // the line `USER root` beside it as evidence - a heading its own quote contradicts.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-iac-group-'));
+    writeFileSync(join(root, 'Dockerfile'), ['FROM node:22 AS prod', 'COPY . .'].join(NL), 'utf8');
+    writeFileSync(join(root, 'Dockerfile.two'), ['FROM node:22 AS prod', 'USER root'].join(NL), 'utf8');
+    const doc = renderIac(scanIac(root));
+    assert.match(doc, /### this image has no USER[^\n]*\(1\)/, 'the image with no USER is counted on its own sentence');
+    assert.match(doc, /### the last USER in this image is root[^\n]*\(1\)/, 'and the one that sets root on its own');
+  });
+});

@@ -110,6 +110,10 @@ export function scanIac(root: string): IacScan {
   walk(root);
   const notChecked = [
     'vulnerabilities in the base images: that needs a registry and a feed, and this command reaches neither',
+    // Phase 212. A USER set inside a base image is inherited and is invisible from here, so
+    // "this image has no USER" is read from this file and not from the image it pulls. A USER set
+    // in an earlier stage of the same file **is** followed, because that is readable.
+    'what a base image sets for itself: a USER inside `FROM registry/image` is inherited and cannot be read from a Dockerfile, so a "runs as root" finding on a pulled base is about what this file does not set, not about what the image does',
     'anything that is actually running: this reads files, not a cluster and not a cloud account',
     ...(terraformFiles > 0 ? TERRAFORM_NOT_CHECKED : ['Terraform: no .tf file was found here']),
     ...(manifests > 0 ? KUBERNETES_NOT_CHECKED : ['Kubernetes: no file here declares an apiVersion and a kind']),
@@ -135,9 +139,22 @@ export function renderIac(scan: IacScan): string {
   const group = (title: string, items: typeof scan.findings, note: string) => {
     if (items.length === 0) return;
     lines.push(`## ${title} — ${items.length}`, '', note, '');
+    // Grouped by the sentence, not only by the rule id.
+    //
+    // One rule can say two different things, and `runs-as-root` says both "this image has no USER"
+    // and "the last USER in this image is root". Grouping on the rule alone printed the first of
+    // those as the heading over all of them, so immich's `server/Dockerfile.dev:43` was listed
+    // under **"this image has no USER"** with the line `USER root` beside it as its evidence - a
+    // heading and a quote that contradict each other, about a finding that was correct.
+    //
+    // Found in Phase 212 by reading what `infra` says about a real repository rather than counting
+    // what it found. The counts do not move: this changes which sentence each finding is filed
+    // under, which is the sentence a reader checks it against.
     const byRule = new Map<string, typeof items>();
-    for (const f of items) byRule.set(f.rule, [...(byRule.get(f.rule) ?? []), f]);
-    for (const [rule, group_] of byRule) {
+    const NUL = String.fromCharCode(0);
+    for (const f of items) byRule.set(`${f.rule}${NUL}${f.what}`, [...(byRule.get(`${f.rule}${NUL}${f.what}`) ?? []), f]);
+    for (const [key, group_] of byRule) {
+      const rule = key.split(NUL)[0];
       // Trimmed before the full stop is added: a `because` that already ends in one printed '..'
       lines.push(`### ${group_[0].what} (${group_.length}) \`${rule}\``, '', group_[0].because.replace(/\.$/, '') + '.', '');
       for (const f of group_.slice(0, 8)) lines.push(`- \`${f.file}:${f.line}\` — \`${f.evidence.replace(/`/g, "'")}\``);

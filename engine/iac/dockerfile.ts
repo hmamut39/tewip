@@ -73,6 +73,50 @@ function lastStage(all: Instruction[]): Instruction[] {
 
 const ROOT = /^(root|0)(:|$)/;
 
+/** Each stage declared in this file, by its lowercased name, as the instructions that follow it. */
+function stagesOf(all: Instruction[]): Map<string, Instruction[]> {
+  const out = new Map<string, Instruction[]>();
+  const starts = all.map((x, i) => (x.keyword === 'FROM' ? i : -1)).filter((i) => i >= 0);
+  for (const [n, at] of starts.entries()) {
+    const name = /\sAS\s+(\S+)\s*$/i.exec(all[at].rest)?.[1]?.toLowerCase();
+    if (name) out.set(name, all.slice(at, starts[n + 1] ?? all.length));
+  }
+  return out;
+}
+
+/**
+ * The USER in force at the end of a stage, following `FROM` back through stages in this file.
+ *
+ * Docker inherits USER from the parent stage, and reading only the final stage does not. So
+ *
+ *     FROM node:22 AS base
+ *     USER node
+ *     FROM base AS prod
+ *     COPY . .
+ *
+ * was reported as **"this image has no USER, so everything in it runs as root"** - about an image
+ * that runs as `node`. A high-severity false accusation, and the kind that is read and acted on,
+ * because "your container runs as root" is a sentence somebody takes to their platform team.
+ *
+ * Found in Phase 212 while reading what `infra` says about immich. Its own Dockerfiles set no USER
+ * anywhere, so every finding there was right; this is the case next door that was not, and no
+ * repository in the corpus had it.
+ *
+ * A chain that leaves this file - a registry image - ends the walk: what that image sets is not
+ * readable from here, which is the honest limit and is now printed with the findings.
+ */
+function userInForce(stages: Map<string, Instruction[]>, stage: Instruction[], seen = new Set<string>()): Instruction | null {
+  const users = stage.filter((x) => x.keyword === 'USER');
+  if (users.length > 0) return users[users.length - 1];
+  const from = stage.find((x) => x.keyword === 'FROM');
+  if (!from) return null;
+  const parent = from.rest.split(/\s+/)[0]?.toLowerCase();
+  // A name this file declares, and not one already walked: `FROM a AS b` / `FROM b AS a` loops.
+  if (!parent || !stages.has(parent) || seen.has(parent)) return null;
+  seen.add(parent);
+  return userInForce(stages, stages.get(parent) as Instruction[], seen);
+}
+
 export function readDockerfile(file: string, source: string): IacFinding[] {
   const all = instructionsOf(source);
   if (all.length === 0) return [];
@@ -83,9 +127,9 @@ export function readDockerfile(file: string, source: string): IacFinding[] {
   const add = (i: Instruction, rule: string, what: string, because: string, risk: 'high' | 'medium' = 'medium') =>
     found.push({ file, line: i.line, rule, what, because, evidence: i.text.slice(0, 160), risk });
 
-  // Who the process is. Only the last stage matters: a builder running as root ships nothing.
-  const users = shipped.filter((x) => x.keyword === 'USER');
-  const last = users[users.length - 1];
+  // Who the process is. Only the last stage ships - a builder running as root ships nothing - but
+  // the last stage inherits the USER of the stage it is built FROM, so the chain is followed.
+  const last = userInForce(stagesOf(all), shipped);
   const from = shipped.find((x) => x.keyword === 'FROM');
   if (!last && from) {
     found.push({

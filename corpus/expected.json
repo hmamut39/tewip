@@ -521,11 +521,11 @@
             "injections": 0,
             "guards": 0,
             "reach-reads": 8,
-            "reach-writes": 2,
+            "reach-writes": 3,
             "reach-destructive": 2,
-            "reach-not-sure": 1
+            "reach-not-sure": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does. | 2026-11-22, Phase 215: reach-not-sure 1 -> 0 and reach-writes 2 -> 3. **The sentence above is wrong about why**, and the correction is the finding. `linkRecords` is not a tool whose name and description say nothing: it declares `readOnlyHint: false` and `destructiveHint: false` at mcp.service.ts:1206, which is the author saying it writes and cannot destroy. `declaredHint` only read those two hints when they were **true**, so a pair written false was treated as no information, and the tool was printed under \"read these yourself\" beside `createRecords` and `updateRecords` - which carry the same two annotations and were classified only because their names begin with a verb Tewip knows. The hand verification that wrote the old sentence read the name and the description and did not look at the declaration. `unlinkRecords` is unchanged and was checked again: `destructiveHint: true` really is on line 1257, and is not read out of the comment above it that discusses being destructive."
         },
         {
           "command": "contract",

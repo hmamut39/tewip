@@ -182,6 +182,21 @@ function declaredHint(text: string, from: number): { reach: Reach; why: string }
     : window;
   if (/destructiveHint\s*:\s*true/.test(where)) return { reach: 'destructive', why: 'its own annotation says destructiveHint: true' };
   if (/readOnlyHint\s*:\s*true/.test(where)) return { reach: 'reads', why: 'it declares readOnlyHint: true' };
+  // Both written and both false is a decision too, and it was being read as no information.
+  //
+  // The MCP specification defines `readOnlyHint` as "if true, the tool does not modify its
+  // environment", so an author who writes `readOnlyHint: false` beside `destructiveHint: false` has
+  // said: this one writes, and it cannot destroy. nocodb's `linkRecords` declares exactly that and
+  // came back **not decided** - printed under "read these yourself", beside `createRecords` and
+  // `updateRecords` which carry the *same* two annotations and are classified only because their
+  // names begin with a verb Tewip knows. A tool called `linkRecords` is not a worse-documented
+  // tool; it is a tool whose name is not on a list.
+  //
+  // Only when both are present and both false. An absent `readOnlyHint` defaults to false in the
+  // specification and says nothing about intent, so absence is still absence. Phase 215.
+  if (/readOnlyHint\s*:\s*false/.test(where) && /destructiveHint\s*:\s*false/.test(where)) {
+    return { reach: 'writes', why: 'its annotations say readOnlyHint: false and destructiveHint: false - it writes, and does not destroy' };
+  }
   return null;
 }
 

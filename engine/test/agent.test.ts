@@ -107,6 +107,26 @@ describe('what a tool reaches', () => {
     assert.equal(toolsIn('a.ts', destructive)[0].reach, 'destructive');
   });
 
+  it('reads both hints written false as a decision, not as silence', () => {
+    // nocodb's `linkRecords` declares readOnlyHint: false and destructiveHint: false - the author
+    // saying it writes and cannot destroy - and came back **not decided**, printed under "read
+    // these yourself", beside createRecords and updateRecords which carry the same two
+    // annotations and are classified only because their names start with a verb Tewip knows.
+    const text = 'server.registerTool("linkRecords", { annotations: { readOnlyHint: false, destructiveHint: false } });';
+    assert.equal(toolsIn('a.ts', text)[0].reach, 'writes');
+  });
+
+  it('does not read an absent readOnlyHint as a decision', () => {
+    // The specification defaults readOnlyHint to false, so absence says nothing about intent and
+    // must stay undecided rather than being counted as a write.
+    const text = 'server.registerTool("doSomething", { annotations: { openWorldHint: false } });';
+    assert.notEqual(toolsIn('a.ts', text)[0].reach, 'writes');
+  });
+
+  it('still lets destructiveHint true win over the pair', () => {
+    const text = 'server.registerTool("unlinkRecords", { annotations: { readOnlyHint: false, destructiveHint: true } });';
+    assert.equal(toolsIn('a.ts', text)[0].reach, 'destructive');
+  });
   it('follows an annotation written once and reused', () => {
     // How Tewip's own server does it, and the shape a check written from the documentation misses.
     const text = [

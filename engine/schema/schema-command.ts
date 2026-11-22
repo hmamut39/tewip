@@ -8,9 +8,9 @@
 // That check is a search of the repository, so it is evidence rather than proof, and it is worded as
 // such. A mention in a comment counts as a mention; Tewip says where it looked and lets the reader judge.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { normalise } from '../quality/source-text.ts';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { changeSummary } from '../quality/grounding.ts';
 import { dialectOf, forwardOnly, irreversible, readFramework, type Dialect } from './frameworks.ts';
 import { droppingWhatIsNew } from './kept.ts';
@@ -48,11 +48,48 @@ export interface StillUsed {
 }
 
 
+/** True when this path is a directory, which is the obvious thing to point the command at. */
+const isDirectory = (p: string): boolean => {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
 /** The schema files in this change. */
 export function schemaFiles(cmd: SchemaCommand): string[] {
   const named = cmd.files !== undefined && cmd.files.length > 0;
   const given = named ? cmd.files! : (changeSummary(cmd.root, cmd.diff)?.files ?? []);
   return given
+    // A directory is the obvious thing to point this at - `tewip schema db/migrate` - and it was
+    // read as a file. `existsSync` says yes to a directory, `readFileSync` then throws EISDIR, and
+    // the report said "the file could not be read" above the headline
+    //
+    //     0 of 1 migration file(s) read. **0** change(s) would break the running version or
+    //     destroy data
+    //
+    // which is a clean bill of health over a directory of 97 migrations. immich's, in Phase 214.
+    // The walk already existed for the corpus; the command simply never used it on a path somebody
+    // typed. A directory with no migration in it still yields nothing, and the report says that
+    // differently from a pass.
+    //
+    // Walked from the project root and filtered, never from the directory itself. `migrationsUnder`
+    // decides by the path it has built up during the walk, so starting at the migrations directory
+    // removes the word `migrations` from every path it then tests:
+    // `migrationsUnder('<immich>')` finds 134 and `migrationsUnder('<immich>/server/src/schema/migrations')`
+    // finds **0**. A helper whose answer depends on where it was started is a trap, and this is the
+    // call site that would have fallen into it.
+    .flatMap((f) => {
+      const abs = resolve(cmd.root, f);
+      if (!isDirectory(abs)) return [f];
+      const under = `${relative(cmd.root, abs).split('\\').join('/')}/`.replace(/^\.\//, '');
+      // `migrationsUnder` answers in paths already relative to the root it walked, so putting
+      // them through `relative()` again resolved them against the working directory and produced
+      // nothing. The whole fix read as not working until the returned shape was looked at.
+      const all = migrationsUnder(cmd.root).map((m) => m.split('\\').join('/'));
+      return under === '/' ? all : all.filter((m) => m.startsWith(under));
+    })
     .map((f) => f.split('\\').join('/'))
     // Asking for a file by name overrides the path filter: the filter exists to find migrations in
     // a diff of a hundred files, not to argue with somebody who pointed at one. A TypeORM migration
@@ -154,7 +191,14 @@ export function renderSchema(migrations: Migration[], used: StillUsed[]): string
     '',
     migrations.length === 0
       ? 'No migration or schema file in this change.'
-      : `${migrations.filter((m) => !m.unread).length} of ${migrations.length} migration file(s) read. **${serious.length}** change(s) would break the running version or destroy data; ${all.length - serious.length} other finding(s).`,
+      : // Nothing read at all is not a count of nothing found. The note below has said since this
+        // report was written that "read, and nothing found" must never look like "not read", and
+        // the headline said **"0 of 1 migration file(s) read. 0 change(s) would break the running
+        // version or destroy data"** - a clean bill of health over a file it could not open. Phase
+        // 214, found by pointing the command at a directory and reading what came back.
+        migrations.every((m) => m.unread)
+        ? `**Not one of these ${migrations.length} file(s) could be read, so nothing here has been checked.** This is not a report that the migration is safe - it is a report that Tewip read none of it. The reason for each is below.`
+        : `${migrations.filter((m) => !m.unread).length} of ${migrations.length} migration file(s) read. **${serious.length}** change(s) would break the running version or destroy data; ${all.length - serious.length} other finding(s).`,
     '',
     // "Read, and nothing found" must never look like "not read". A reader who cannot tell them apart will
     // take silence for safety, which is the one thing this report must not allow.

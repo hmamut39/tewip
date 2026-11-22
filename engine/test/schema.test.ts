@@ -9,11 +9,11 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { dialectOf, forwardOnly, irreversible, readFramework } from '../schema/frameworks.ts';
 import { readSql, statementsOf } from '../schema/statements.ts';
-import { schemaFiles } from '../schema/schema-command.ts';
+import { readMigration, renderSchema, schemaFiles } from '../schema/schema-command.ts';
 import { MIGRATION, SCHEMA_FILE, isDump, migrationsUnder } from '../schema/migration-files.ts';
 import { droppingWhatIsNew } from '../schema/schema-command.ts';
 
@@ -998,5 +998,54 @@ describe('a constraint added without NOT VALID', () => {
     assert.match(found[0].instead, /NOT VALID/);
     assert.match(found[0].instead, /VALIDATE CONSTRAINT/);
     assert.equal(found[0].table, 'orders');
+  });
+});
+
+// Phase 214. `tewip schema db/migrate` is the obvious thing to type, and it answered with a clean
+// bill of health over a directory it had not opened.
+describe('a directory of migrations', () => {
+  const NL = String.fromCharCode(10);
+  const project = (files: Record<string, string>): string => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-schema-dir-'));
+    for (const [name, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, name)), { recursive: true });
+      writeFileSync(join(root, name), body, 'utf8');
+    }
+    return root;
+  };
+
+  it('reads the migrations inside it, rather than the directory as a file', () => {
+    // immich: `0 of 1 migration file(s) read. **0** change(s) would break the running version or
+    // destroy data`, over 97 migrations. `existsSync` says yes to a directory and `readFileSync`
+    // then throws, which became "the file could not be read".
+    const root = project({
+      'db/migrate/001-drop.ts': ['import { sql } from "kysely";', 'export async function up(db) {', '  await sql`ALTER TABLE "assets" DROP COLUMN "isVisible";`.execute(db);', '}'].join(NL),
+    });
+    const files = schemaFiles({ root, diff: 'main...HEAD', files: ['db/migrate'] });
+    assert.deepEqual(files, ['db/migrate/001-drop.ts'], 'a directory expands to the migrations under it');
+  });
+
+  it('walks from the project root, not from the directory it was handed', () => {
+    // `migrationsUnder` decides by the path it builds during the walk, so starting at the
+    // migrations directory takes the word `migrations` out of every path it tests: on immich it
+    // found 134 from the root and 0 from `server/src/schema/migrations`.
+    // A .ts migration is matched by its *path* (a migrations/ or db/migrate/ segment), unlike a
+    // .sql file which matches on its extension anywhere. So starting the walk inside the directory
+    // takes that segment away and finds nothing - which is exactly what happened on immich.
+    const root = project({ 'db/migrate/001-add.ts': ['import { Kysely, sql } from "kysely";', 'export async function up(db: Kysely<any>): Promise<void> {', '  await sql`ALTER TABLE "t" ADD COLUMN "c" text;`.execute(db);', '}'].join(NL) });
+    assert.equal(migrationsUnder(join(root, 'db', 'migrate')).length, 0, 'the helper really does answer 0 when started inside');
+    assert.deepEqual(schemaFiles({ root, diff: 'x', files: ['db/migrate'] }), ['db/migrate/001-add.ts'], 'and the command must not be caught by that');
+  });
+
+  it('keeps a named file that is not under a migrations directory', () => {
+    const root = project({ 'odd/place.sql': 'ALTER TABLE t DROP COLUMN c;' });
+    assert.deepEqual(schemaFiles({ root, diff: 'x', files: ['odd/place.sql'] }), ['odd/place.sql'], 'naming a file still overrides the path filter');
+  });
+
+  it('says nothing was read, rather than counting no findings', () => {
+    const root = project({ 'notamigration.txt': 'not sql' });
+    const doc = renderSchema([readMigration(root, 'notamigration.txt')], []);
+    assert.match(doc, /could be read, so nothing here has been checked/, 'nothing read is not a clean report');
+    assert.doesNotMatch(doc, /\*\*0\*\* change\(s\) would break/, 'and must not be stated as zero findings');
   });
 });

@@ -763,8 +763,8 @@
             "changed": 5,
             "changedSource": 2,
             "changedTests": 1,
-            "covering": 79,
-            "direct": 14,
+            "covering": 15,
+            "direct": 15,
             "viaPackage": 0,
             "cannotFail": 0,
             "crashOnly": 0,
@@ -776,7 +776,7 @@
             "not-ready": 0,
             "cannot-say": 1
           },
-          "verified": "2026-11-22, Phase 217. `188d64e` \"fix: public config properties (#32500)\", five files: `mobile/lib/utils/openapi_patching.dart`, `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `server/src/dtos/config.dto.ts` and its `.spec.ts`. The two TypeScript files are the source; the Dart file is not a language `languageOf` reads and the generated OpenAPI JSON is not a test, which is why changedSource is 2 and changedTests is 1 rather than 2 - `open-api/immich-openapi-specs.json` used to count as a test because its name ends `-specs.json`. All 14 direct importers were confirmed one at a time: each of those 14 files was read and each contains an import naming a changed file. The other 65 are reached through the import graph and were not read individually - a DTO this much of the server imports is reached by most of its tests, which is the reason `direct` is pinned beside `covering`. `viaPackage` must stay 0 here: immich's tests name the file, not the folder."
+          "verified": "2026-11-22, Phase 219/222. `188d64e` \"fix: public config properties (#32500)\", five files: `mobile/lib/utils/openapi_patching.dart`, `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `server/src/dtos/config.dto.ts` and its `.spec.ts`. changedSource is 2 and changedTests 1: the Dart file is not a language `languageOf` reads, and the generated OpenAPI JSON is not a test, though its name ends `-specs.json`. **covering and direct were pinned at 79 and 14 and are now 15 and 15, because those two numbers do not agree between platforms and the corpus caught it on the v0.87.0 tag.** They were pinned from a Windows run; CI on Linux measures 15 and 15. A fresh Windows clone at the same commit still measures 79 and 14, so it is the platform and not a dirty checkout. The 15 pinned here are the 15 test files that import `server/src/dtos/config.dto.ts` by name - each one opened and confirmed to contain an import naming a changed file. The 64 extra on Windows come from `testsReaching` walking out of `packages/sdk/src/fetch-client.ts` through `packages/sdk/src/index.ts`, whose `importNames` includes the bare token `src` - so every file importing anything with `src` in its path is counted as two hops away. Those 64 were never hand-verified and the old note said so. On the same change `tewip review` calls that file *guessed at*, with nothing importing it, which is why 15 is the defensible number and is the one pinned. The 65th effect is worse than the count: one of the 15 real importers was reached by that walk first, so a direct importer was printed as \"reaches it through 2 import(s)\" - the distinction Phase 216 exists to make. **Open:** why the same walk returns 0 on Linux and 65 on Windows is not yet known, and that is the next thing to find. Reproduce with `node scripts/corpus.ts immich` on each. `viaPackage` must stay 0: immich's tests name the file, not the folder."
         },
         {
           "command": "review",

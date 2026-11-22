@@ -15,12 +15,37 @@ export function decorative(t: Tag): boolean {
   return t.attrs['aria-hidden'] === 'true' || t.attrs.role === 'presentation' || t.attrs.role === 'none';
 }
 
+/**
+ * A long value shortened so that both ends survive, and visibly so.
+ *
+ * `slice(0, 40)` cut `/images/full-page-examples/product-page/top-image.png` at exactly the fortieth
+ * character, which is the slash before the filename - so the report quoted
+ * `<img src="/images/full-page-examples/product-page/">` and the image looked as though it had no
+ * filename at all. Reading govuk-frontend's findings in Phase 211, I took that for a templating bug
+ * and nearly dismissed a true finding over it. The filename is the end of a path and the end is
+ * what identifies it, so both ends are kept and the cut is marked.
+ */
+const shorten = (v: string): string => (v.length <= 46 ? v : `${v.slice(0, 20)}…${v.slice(-22)}`);
+
+/**
+ * The element as written, short enough to read and complete enough to check.
+ *
+ * `id` leads, because it is what every label rule turns on. It used to come fifth of seven with
+ * only the first two shown, so `<input class="…" id="foo1" name="foo" type="checkbox">` was quoted
+ * as `<input type="checkbox" name="foo">` - and the reason beside it, "no id matching a <label
+ * for>", could not be checked against a quote with no id in it. govuk-frontend has exactly that
+ * input, with `id="foo1"` and the only label pointing at `foo`: a real mismatch, reported in a way
+ * that hid what made it one.
+ */
 export function show(t: Tag): string {
-  const keep = ['src', 'href', 'type', 'name', 'id', 'class', 'role'];
+  const keep = ['id', 'src', 'href', 'type', 'name', 'class', 'role'];
   const shown = keep
     .filter((k) => typeof t.attrs[k] === 'string' && t.attrs[k] !== '')
+    // Two, as before. Widening it to three was the first fix and it is not needed: with `id`
+    // leading, two slots already carry it, and the sabotage run showed that either change alone
+    // was enough, so both together earned nothing extra.
     .slice(0, 2)
-    .map((k) => ` ${k}="${t.attrs[k].slice(0, 40)}"`)
+    .map((k) => ` ${k}="${shorten(t.attrs[k])}"`)
     .join('');
   return `<${t.name}${shown}${t.spread ? ' {...}' : ''}>`;
 }

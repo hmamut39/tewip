@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { JS_LIKE, MARKUP, tags } from '../access/markup.ts';
+import { show } from '../access/element.ts';
 import { checkFile } from '../access/checks.ts';
 import { findBarriers, keyOf, readAccepted, renderAccess, runAccess } from '../access/access-command.ts';
 import { NOT_CHECKED, RULES } from '../access/wcag.ts';
@@ -473,5 +474,37 @@ describe('the budget counts the files the caller wants', () => {
   it('counts nothing it did not read, so notRead is honest', () => {
     const { notRead } = findBarriers(tree(5, 50));
     assert.equal(notRead, 0, 'nothing was skipped here, and the report must not imply otherwise');
+  });
+});
+
+// Phase 211. A finding's quoted element is what makes the verdict checkable, and it was dropping
+// the attribute the verdict turned on.
+//
+// Both of these come from govuk-frontend, read by hand. The design system built by accessibility
+// specialists has a real `for`/`id` mismatch in its review app - `id="foo1"` with the only label
+// pointing at `foo` - and Tewip found it, then quoted the element as `<input type="checkbox"
+// name="foo">`, beside the reason "no id matching a <label for>". A reader cannot check that
+// sentence against a quote with no id in it.
+describe('the element a finding quotes', () => {
+  it('shows the id, because every label rule turns on it', () => {
+    const t = tags('<input class="govuk-checkboxes__input" id="foo1" name="foo" type="checkbox" value="bar">')[0];
+    assert.ok(t, 'the input parses');
+    assert.match(show(t), /id="foo1"/, 'the id is what the label rules match on, so it must be quoted');
+  });
+
+  it('keeps the end of a long value, and marks where it was cut', () => {
+    // `slice(0, 40)` landed exactly on the slash before the filename, so the report quoted
+    // `<img src="/images/full-page-examples/product-page/">` and the image looked as though it had
+    // no filename. I took that for a templating bug and nearly dismissed a true finding.
+    const t = tags('<img style="max-width: 100%;" src="/images/full-page-examples/product-page/top-image.png">')[0];
+    const shown = show(t);
+    assert.match(shown, /top-image\.png/, 'the filename is the end of a path and is what identifies it');
+    assert.match(shown, /…/, 'a value that was cut must say so, or the quote reads as complete');
+    assert.ok(shown.length < 120, `the quote must stay readable, got ${shown.length} characters`);
+  });
+
+  it('still says when a tag may carry attributes it cannot see', () => {
+    const t = tags('<img {...props} />', true)[0];
+    assert.match(show(t), /\{\.\.\.\}/, 'a spread means no attribute can be ruled out, and the quote must show it');
   });
 });

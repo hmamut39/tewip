@@ -175,12 +175,40 @@ export function decide(test: FlakyTest, { minRuns, alwaysFailsAbove }: { minRuns
   return { verdict: 'watch', why: `it failed in ${percent}: not often enough, or not consistently enough one thing, to act on yet.` };
 }
 
-/** What a week of this costs, so the number means something to whoever pays for CI. */
-export function weeklyCost(tests: FlakyTest[], days: number): { minutes: number; attempts: number } {
+/**
+ * What a week of this costs, over the days there are actually runs for.
+ *
+ * It divided by the window somebody asked for, not the window the data covers, so the same history
+ * gave a different answer for every `--days`. On this project's kept Gutenberg history - 650 runs
+ * spanning **5.3 days** - the identical 180 tests and 1,305 failed attempts came out as:
+ *
+ * | `--days` | reported                                      |
+ * | -------- | --------------------------------------------- |
+ * | 90       | 13 CI minutes and 102 failed attempts a week  |
+ * | 365      | 3 CI minutes and 25 a week                    |
+ * | 3650     | **0 CI minutes and 3 a week**                 |
+ *
+ * The last of those sat three lines above a list of 48 tests to quarantine whose own figures add
+ * up to about a hundred CI minutes - a headline contradicting its own body, and wrong by a factor
+ * of nearly 700. The true rate over the days that have runs is about 1,700 failed attempts a week.
+ *
+ * A rate is a number per unit of time, and the unit has to be time that happened. `overDays` comes
+ * back with it so the sentence can say what it was measured over, because a week extrapolated from
+ * five days is worth saying out loud. Phase 220.
+ */
+// `runs` is required, not defaulted. An empty default answered without them: the span came out 0,
+// the floor of one hour took over, and the rate was the total multiplied by 168 - a wrong number
+// that is wrong consistently, so comparing two windows could not see it. There is no rate without
+// the runs, and a caller that forgets them should fail rather than be answered.
+export function weeklyCost(tests: FlakyTest[], days: number, runs: RunSummary[]): { minutes: number; attempts: number; overDays: number } {
   const wasted = tests.reduce((sum, t) => sum + t.wastedMs, 0);
   const attempts = tests.reduce((sum, t) => sum + t.failedAttempts, 0);
-  const weeks = Math.max(days / 7, 0.1);
-  return { minutes: Math.round(wasted / 60_000 / weeks), attempts: Math.round(attempts / weeks) };
+  const when = runs.map((r) => Date.parse(r.finishedAt ?? r.startedAt ?? '')).filter((t) => Number.isFinite(t));
+  // The span of the runs, never longer than the window asked for, and never zero.
+  const spanned = when.length > 1 ? (Math.max(...when) - Math.min(...when)) / 86_400_000 : 0;
+  const overDays = Math.min(days, Math.max(spanned, 1 / 24));
+  const weeks = overDays / 7;
+  return { minutes: Math.round(wasted / 60_000 / weeks), attempts: Math.round(attempts / weeks), overDays };
 }
 
 /**

@@ -48,13 +48,35 @@ function project(n: number): string {
   return root;
 }
 
+
+/** The same shape of history, but every run inside two days - under a week, so the rate is said to be extrapolated. */
+function shortProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'tewip-flaky-short-'));
+  const dir = join(root, '.tewip', 'history', 'proj');
+  mkdirSync(dir, { recursive: true });
+  const ids = ['cart > quick 0', 'cart > quick 1'];
+  const hours = (n: number) => new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
+  const every = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const failed = [1, 2, 3];
+  const runs: RunSummary[] = every.map((i) => ({ schemaVersion: 1, runId: `r${i}`, gitSha: '', branch: i === 1 ? 'main' : `pr-${i}`, startedAt: hours(i * 4), finishedAt: hours(i * 4), status: 'failed', attempts: Object.fromEntries(ids.map((id) => [id, 2])) }) as RunSummary);
+  const records: TriageRecord[] = [];
+  for (const id of ids) {
+    for (const i of failed) {
+      records.push({ schemaVersion: 1, testId: id, file: 'tests/cart.spec.ts', status: 'failed', errorMessage: '', errorStack: '', duration: 30_000, retry: 0, attachments: [], runId: `r${i}`, gitSha: '', timestamp: hours(i * 4), diagnosis: undefined } as unknown as TriageRecord);
+    }
+  }
+  writeFileSync(join(dir, 'runs.jsonl'), runs.map((r) => JSON.stringify(r)).join(NL) + NL, 'utf8');
+  writeFileSync(join(dir, 'triage.jsonl'), records.map((r) => JSON.stringify(r)).join(NL) + NL, 'utf8');
+  return root;
+}
+
 /** Runs the report and gives back everything it printed. */
-async function report(root: string): Promise<string> {
+async function report(root: string, days = 30): Promise<string> {
   const said: string[] = [];
   const log = console.log;
   console.log = (...args: unknown[]) => void said.push(args.map(String).join(' '));
   try {
-    await runFlaky({ root, days: 30, apply: false });
+    await runFlaky({ root, days, apply: false });
   } finally {
     console.log = log;
   }
@@ -118,5 +140,29 @@ describe('the flaky report names what it did not check', () => {
   it('is in the report itself, not only in the function', async () => {
     const out = await report(project(3));
     assert.match(out, /^## What this did not check$/m);
+  });
+});
+
+// Phase 220. The headline is a rate, and it was the total divided by the window somebody typed
+// rather than by the time that passed. On this project's kept Gutenberg history - 650 runs over
+// 5.3 days - the same 180 tests and 1,305 failed attempts came out as 102 a week at `--days 90`,
+// 25 at 365 and **3 at 3650**, the last of them three lines above 48 tests to quarantine whose own
+// figures add up to about a hundred CI minutes.
+describe('what a week of this costs', () => {
+  const headline = (text: string): string => text.split(NL).find((l) => l.includes('a week.')) ?? '';
+
+  it('says the same thing however wide a window is asked for', async () => {
+    const root = project(3);
+    const near = headline(await report(root, 30));
+    const far = headline(await report(root, 3650));
+    assert.ok(near.length > 0, 'there is a headline to compare');
+    assert.equal(near, far, 'ten years of window over nine days of runs is still nine days of runs');
+    assert.doesNotMatch(far, /About 0 CI minute\(s\) and 0 failed attempt\(s\)/, 'and it must not round away');
+  });
+
+  it('says what the week was measured over when it is less than one', async () => {
+    const root = shortProject();
+    const text = await report(root, 90);
+    assert.match(text, /measured over the \d\.\d day\(s\) this history actually covers/);
   });
 });

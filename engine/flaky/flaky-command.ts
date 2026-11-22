@@ -60,8 +60,10 @@ export async function runFlaky(cmd: FlakyCommand): Promise<FlakyTest[]> {
     if (tests.length === 0) continue;
     all.push(...tests);
 
-    const cost = weeklyCost(tests, cmd.days);
-    lines.push(`## ${name}`, '', `${tests.length} test(s) failed at least once. About ${cost.minutes} CI minute(s) and ${cost.attempts} failed attempt(s) a week.`, '');
+    // Over the days there are runs for, and it says which: see `weeklyCost`.
+    const cost = weeklyCost(tests, cmd.days, runs);
+    const over = cost.overDays < 7 ? ` That is a week's worth, measured over the ${cost.overDays.toFixed(1)} day(s) this history actually covers.` : '';
+    lines.push(`## ${name}`, '', `${tests.length} test(s) failed at least once. About ${cost.minutes} CI minute(s) and ${cost.attempts} failed attempt(s) a week.${over}`, '');
 
     const group = (verdict: FlakyTest['verdict'], title: string, explain: string) => {
       const chosen = tests.filter((t) => t.verdict === verdict);

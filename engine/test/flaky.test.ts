@@ -54,11 +54,45 @@ describe('what the history says about a test', () => {
     assert.equal(test.verdict, 'watch');
   });
 
-  it('counts what it costs per week, not just in total', () => {
+  // Phase 220 corrected this test, which had encoded the defect. It asked for a 14-day window over
+  // runs that span nine days and asserted the 14-day answer - so the rate was the total divided by
+  // the window somebody typed, not by the time that passed. On this project's kept Gutenberg
+  // history, 650 runs over 5.3 days, that gave three different answers for the same data: 102
+  // failed attempts a week at `--days 90`, 25 at 365, and **3** at 3650 - the last of them three
+  // lines above 48 tests to quarantine whose own figures add up to about a hundred CI minutes.
+  it('counts what it costs per week, over the days there are runs for', () => {
     const records = [0, 2, 4, 6].map((i) => record('cart > a', `r${i}`, 'TIMING', day(i + 1), 60_000));
-    const cost = weeklyCost(flakyTests(records, runs), 14);
-    assert.equal(cost.minutes, 2, 'four minutes over two weeks is two a week');
-    assert.equal(cost.attempts, 2);
+    const tests = flakyTests(records, runs);
+    // The runs span day 1 to day 10, which is nine days. Four wasted minutes over nine days.
+    const cost = weeklyCost(tests, 14, runs);
+    assert.equal(cost.overDays, 9, 'nine days of runs, whatever window was asked for');
+    assert.equal(cost.minutes, 3, 'four minutes over nine days is about three a week');
+    assert.equal(cost.attempts, 3);
+  });
+
+  it('gives the same rate however wide a window is asked for', () => {
+    const records = [0, 2, 4, 6].map((i) => record('cart > a', `r${i}`, 'TIMING', day(i + 1), 60_000));
+    const tests = flakyTests(records, runs);
+    const at = (days: number) => weeklyCost(tests, days, runs);
+    assert.deepEqual(at(14), at(365), 'the data did not change, so the rate must not');
+    assert.deepEqual(at(365), at(3650));
+    assert.ok(at(3650).attempts > 0, 'and a ten-year window must not round it to nothing');
+  });
+
+  it('never divides by more time than the runs cover', () => {
+    const records = [0, 2].map((i) => record('cart > a', `r${i}`, 'TIMING', day(i + 1), 60_000));
+    const tests = flakyTests(records, runs);
+    // A window narrower than the data still bounds it: a rate is never claimed over days the
+    // caller excluded.
+    assert.equal(weeklyCost(tests, 2, runs).overDays, 2, 'the window is still a bound');
+    assert.equal(weeklyCost(tests, 14, runs).overDays, 9, 'and the span is the other one');
+  });
+
+  it('does not divide by zero when there is only one run', () => {
+    const one = [run('r0', day(1), 'main', ALL)];
+    const cost = weeklyCost(flakyTests([record('cart > a', 'r0', 'TIMING', day(1), 60_000)], one), 90, one);
+    assert.ok(Number.isFinite(cost.minutes), 'one run is no span at all');
+    assert.ok(cost.overDays > 0);
   });
 
   it('says which tests have earned their way out of quarantine', () => {

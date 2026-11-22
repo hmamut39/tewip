@@ -14,6 +14,7 @@ import { describe, it } from 'node:test';
 import { readDockerfile } from '../iac/dockerfile.ts';
 import { readCompose } from '../iac/compose.ts';
 import { renderIac, scanIac } from '../iac/iac-command.ts';
+import { ships } from '../ships.ts';
 
 const NL = String.fromCharCode(10);
 const file = (...lines: string[]) => lines.join(NL) + NL;
@@ -229,5 +230,35 @@ describe('who the container actually runs as', () => {
     const doc = renderIac(scanIac(root));
     assert.match(doc, /### this image has no USER[^\n]*\(1\)/, 'the image with no USER is counted on its own sentence');
     assert.match(doc, /### the last USER in this image is root[^\n]*\(1\)/, 'and the one that sets root on its own');
+  });
+});
+
+// Phase 213. "What this project ships" has to mean it, and two commands were answering differently:
+// `infra` asked by path and `sbom` never asked at all.
+describe('what counts as shipping', () => {
+  it('reads the filename as well as the path', () => {
+    // immich's devcontainer is `server/Dockerfile.dev`, not `.devcontainer/Dockerfile`, so a path
+    // test could not see it. The name says the same thing and is as reliable a convention.
+    assert.equal(ships('server/Dockerfile'), true);
+    assert.equal(ships('server/Dockerfile.dev'), false);
+    assert.equal(ships('.devcontainer/Dockerfile'), false);
+    assert.equal(ships('compose.dev.yaml'), false);
+    assert.equal(ships('docker-compose.yml'), true);
+  });
+
+  it('does not take a file that merely contains the letters', () => {
+    // The marker has to be a whole dot-separated part, or `latest.yml` becomes a test fixture.
+    assert.equal(ships('deploy/latest.yml'), true);
+    assert.equal(ships('config/devise.yml'), true);
+  });
+
+  it('keeps a development image out of the ships section and still shows it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-ships-'));
+    const NL = String.fromCharCode(10);
+    writeFileSync(join(root, 'Dockerfile'), ['FROM node:22 AS prod', 'COPY . .'].join(NL), 'utf8');
+    writeFileSync(join(root, 'Dockerfile.dev'), ['FROM node:22 AS dev', 'USER root'].join(NL), 'utf8');
+    const doc = renderIac(scanIac(root));
+    assert.match(doc, /## In what ships — 1/, 'only the shipping image counts against what ships');
+    assert.match(doc, /## In development and test setups — 1/, 'and the development one is still shown, not dropped');
   });
 });

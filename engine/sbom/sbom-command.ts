@@ -14,6 +14,7 @@ import { inventory, type Component, type Inventory } from './inventory.ts';
 import { NEEDS_A_LOOK, type Standing } from './licences.ts';
 import { baseImages, imagePackages, renderImagePackages, type ImagePackage } from './image-packages.ts';
 import { isDockerfile } from '../iac/dockerfile.ts';
+import { ships } from '../ships.ts';
 import { readFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { scanSourceFiles } from '../walk.ts';
@@ -93,8 +94,15 @@ export function imageContents(root: string): { packages: ImagePackage[]; bases: 
     } catch {
       continue;
     }
-    dockerfiles += 1;
     const where = relative(root, path).split(String.fromCharCode(92)).join('/');
+    // A bill of materials for what the project **ships**, which is this document's title, so a
+    // Dockerfile that exists to develop or test the project is not part of it. immich's
+    // `server/Dockerfile.dev` apt-installs `vim`, `nano`, `inetutils-ping` and
+    // `openjdk-21-jre-headless` into a devcontainer, and all four were listed here as things the
+    // project ships. `infra` has asked this question since it was written and kept its findings in
+    // two sections for it; this command had never asked it at all. Phase 213.
+    if (!ships(where)) continue;
+    dockerfiles += 1;
     packages.push(...imagePackages(where, text));
     for (const b of baseImages(text)) if (!bases.includes(b)) bases.push(b);
   }

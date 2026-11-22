@@ -15,6 +15,7 @@ import { isDockerfile, readDockerfile, type IacFinding } from './dockerfile.ts';
 import { readCompose } from './compose.ts';
 import { readTerraform, TERRAFORM_NOT_CHECKED } from './terraform.ts';
 import { KUBERNETES_NOT_CHECKED, looksKubernetes, readKubernetes } from './kubernetes.ts';
+import { ships as shipsFrom } from '../ships.ts';
 
 export interface IacCommand {
   root: string;
@@ -31,7 +32,6 @@ const TERRAFORM = /\.tf$/i;
 // be called `deploy.yaml` or to sit in a Helm `templates/` folder as to say kubernetes anywhere.
 const YAML = /\.ya?ml$/i;
 /** Paths whose contents configure somebody's laptop or a test rig, not production. */
-const NOT_SHIPPED = /(^|\/)(\.devcontainer|\.github|test|tests|e2e|examples?|docs?|fixtures?|sample)s?(\/|$)/i;
 
 export interface IacScan {
   findings: Array<IacFinding & { ships: boolean }>;
@@ -98,7 +98,7 @@ export function scanIac(root: string): IacScan {
       // anywhere, and a CI workflow is YAML too and is none of this command's business.
       const isManifest = maybeManifest && looksKubernetes(source);
       if (maybeManifest && !isManifest) continue;
-      const ships = !NOT_SHIPPED.test(rel);
+      const ships = shipsFrom(rel);
       const read = isCompose ? readCompose : isTerraform ? readTerraform : isManifest ? readKubernetes : readDockerfile;
       if (isCompose) composeFiles += 1;
       else if (isTerraform) terraformFiles += 1;

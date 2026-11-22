@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { classify, NEEDS_A_LOOK } from '../sbom/licences.ts';
 import { inventory } from '../sbom/inventory.ts';
-import { cycloneDx, renderSbom } from '../sbom/sbom-command.ts';
+import { cycloneDx, imageContents, renderSbom } from '../sbom/sbom-command.ts';
 
 const NL = String.fromCharCode(10);
 const project = (files: Record<string, string>): string => {
@@ -274,5 +274,30 @@ describe('a manifest nobody on the list recognised', () => {
     const dart = notRead.filter((n) => /pubspec|Dart/.test(n));
     assert.equal(dart.length, 1, `pubspec is reported ${dart.length} times: ${JSON.stringify(dart)}`);
     assert.ok(!notRead.some((n) => /go\.mod.*does not recognise/.test(n)), 'go.mod is handled, so it is not unrecognised');
+  });
+});
+
+// Phase 213. The title of this report is "What this project ships", and it was counting a
+// devcontainer's apt packages. immich's `server/Dockerfile.dev` contributed vim, nano,
+// inetutils-ping and openjdk-21-jre-headless to the bill of materials for what it ships.
+describe('the bill of materials covers what ships', () => {
+  const NL = String.fromCharCode(10);
+
+  it('leaves out a Dockerfile that exists to develop the project', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tewip-sbom-ships-'));
+    writeFileSync(join(root, 'Dockerfile'), ['FROM node:22', 'RUN apt-get install -y curl'].join(NL), 'utf8');
+    writeFileSync(join(root, 'Dockerfile.dev'), ['FROM node:22', 'RUN apt-get install -y vim nano'].join(NL), 'utf8');
+    const image = imageContents(root);
+    assert.equal(image.dockerfiles, 1, 'only the shipping Dockerfile is counted');
+    assert.deepEqual(image.packages.map((p) => p.name).sort(), ['curl'], 'vim and nano are developer tools and do not ship');
+  });
+
+  it('still counts a base image the shipping file also builds from', () => {
+    // immich's `server/Dockerfile` uses base-server-dev as its *builder* stage, so that base does
+    // ship even though the devcontainer uses it too. Its bases count was right and had to stay.
+    const root = mkdtempSync(join(tmpdir(), 'tewip-sbom-base-'));
+    writeFileSync(join(root, 'Dockerfile'), ['FROM ghcr.io/acme/base-dev:1 AS builder', 'FROM node:22 AS prod'].join(NL), 'utf8');
+    writeFileSync(join(root, 'Dockerfile.dev'), ['FROM ghcr.io/acme/base-dev:1 AS dev'].join(NL), 'utf8');
+    assert.ok(imageContents(root).bases.some((b) => b.includes('base-dev')), 'a builder stage of a shipping image is still a base it ships from');
   });
 });

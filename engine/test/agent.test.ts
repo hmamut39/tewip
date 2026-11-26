@@ -240,7 +240,7 @@ describe('the report', () => {
   });
 
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], poisoned: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
+    const page = renderAgent({ tools: [], injections: [], poisoned: [], borrowed: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);

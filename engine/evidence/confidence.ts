@@ -97,6 +97,17 @@ export const MEASURED: Confidence[] = [
     groundTruth: "the shape each framework's own quickstart declares a tool in",
   },
   {
+    check: 'agent (borrowed credential)',
+    command: 'agent',
+    precision: '0 findings across 66,307 files of the corpus - and two of the three it reported on the way there were correct implementations, now decoys in the harness below',
+    pinnedIn: ['n8n', 'nocodb', 'immich', 'saleor', 'gin'],
+    recall: '5 of 5 passthroughs read, 0 of 7 correct implementations accused',
+    from: 'eval/identity-recall.ts',
+    measured: { found: 5, of: 5, accused: 0, decoys: 7 },
+    groundTruth:
+      'OWASP ASI03, Identity and Privilege Abuse, against a normative rule rather than an opinion: the Model Context Protocol authorization spec (2026-07-28) states that a server "MUST NOT pass through the token it received from the MCP client", and gives the confused deputy as the reason. Each case is a passthrough written the way its library documents the pieces - the MCP TypeScript SDK\u2019s `extra.authInfo.token`, an Express or Hono inbound header, FastAPI\u2019s bearer dependency. What it cannot say is anything about scope or audience claims, which are runtime facts about a signed value, nor whether the agent\u2019s own permissions are wider than its task needs - that is the other half of ASI03 and lives in an IAM policy rather than in this source',
+  },
+  {
     check: 'infra (Kubernetes)',
     command: 'infra',
     precision: '0 of 8 compliant manifests accused, and 0 findings invented across 4 real repositories in the corpus',

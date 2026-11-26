@@ -165,6 +165,9 @@ export function measure(command: Command, root: string, diff?: string): Expectat
       filesRead: scan.filesRead,
       tools: scan.tools.length,
       injections: scan.injections.length,
+      // OWASP ASI03: the caller's own credential handed onward. Pinned so the "0 findings" in
+      // confidence.ts is a number this re-derives rather than a sentence somebody ran once.
+      borrowed: scan.borrowed.length,
       guards: scan.guards.length,
     };
     for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;

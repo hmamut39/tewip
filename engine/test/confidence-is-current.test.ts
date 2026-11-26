@@ -22,6 +22,7 @@ import { measure as agentRecall } from '../../eval/agent-recall.ts';
 import { measure as containerRecall } from '../../eval/container-recall.ts';
 import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as memoryRecall } from '../../eval/memory-recall.ts';
+import { measure as identityRecall } from '../../eval/identity-recall.ts';
 import { measure as doorRecall } from '../../eval/door-recall.ts';
 import { measure as goalRecall } from '../../eval/goal-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
@@ -124,6 +125,15 @@ const HARNESSES: Record<string, () => Counts> = {
     return {
       found: doors.filter((d) => d.found).length,
       of: doors.length,
+      accused: decoys.filter((d) => d.found).length,
+      decoys: decoys.length,
+    };
+  },
+  identity: () => {
+    const { flows, decoys } = identityRecall();
+    return {
+      found: flows.filter((f) => f.found).length,
+      of: flows.length,
       accused: decoys.filter((d) => d.found).length,
       decoys: decoys.length,
     };

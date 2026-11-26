@@ -9,6 +9,7 @@ import { toolsIn, type AgentTool } from './tools.ts';
 import { blank } from './source-text.ts';
 import { promptFlows, type PromptFlow } from './prompt-flow.ts';
 import { memoryFlows, type MemoryFlow } from './memory-flow.ts';
+import { identityFlows, type IdentityFlow } from './identity-flow.ts';
 import { agentDoors, type AgentDoor } from './agent-door.ts';
 import { budgetSetToNothing, guardsIn, type Guard } from './guards.ts';
 import { scanConfig, type ConfigScan } from './claude-config.ts';
@@ -57,6 +58,8 @@ export interface AgentScan {
   injections: PromptFlow[];
   /** Untrusted text written to a store that outlives the request. OWASP ASI06. */
   poisoned: MemoryFlow[];
+  /** The caller's own credential, handed onward to something the agent calls. OWASP ASI03. */
+  borrowed: IdentityFlow[];
   /** An agent interface bound beyond this machine. OWASP ASI07. */
   doors: AgentDoor[];
   guards: Guard[];
@@ -76,6 +79,7 @@ export function scanAgent(root: string): AgentScan {
   const tests: Array<{ file: string; text: string }> = [];
   const injections: PromptFlow[] = [];
   const poisoned: MemoryFlow[] = [];
+  const borrowed: IdentityFlow[] = [];
   const doors: AgentDoor[] = [];
   const guards: Guard[] = [];
   let emptyBudget: AgentScan['emptyBudget'] = null;
@@ -113,6 +117,7 @@ export function scanAgent(root: string): AgentScan {
     tools.push(...toolsIn(where, text, blanked));
     injections.push(...promptFlows(where, text));
     poisoned.push(...memoryFlows(where, text));
+    borrowed.push(...identityFlows(where, text));
     doors.push(...agentDoors(where, text));
     guards.push(...guardsIn(where, text, blanked));
     if (!emptyBudget) {
@@ -131,6 +136,7 @@ export function scanAgent(root: string): AgentScan {
     tools,
     injections,
     poisoned,
+    borrowed,
     doors,
     guards,
     filesRead,

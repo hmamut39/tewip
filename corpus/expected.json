@@ -310,9 +310,10 @@
             "filesRead": 2627,
             "tools": 0,
             "injections": 0,
-            "guards": 0
+            "guards": 0,
+            "borrowed": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. 2,627 Python files and nothing to report, which is the answer. Pinned as the case where this check must stay quiet: two Saleor migrations were reported as gating an agent tools in Phase 153 because a pattern fragment matched \"list\"."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. 2,627 Python files and nothing to report, which is the answer. Pinned as the case where this check must stay quiet: two Saleor migrations were reported as gating an agent tools in Phase 153 because a pattern fragment matched \"list\". | 2026-11-26, Phase 224: borrowed = 0 added. OWASP ASI03, the caller's own credential handed onward to something the agent calls. Measured across 66,307 files of this corpus: 0 findings. Three appeared on the way there and all three were read by hand and were correct implementations - Netflix dispatch logging a malformed header, and two Discourse controllers handing an inbound webhook header to a verifier - and all three are now decoys in eval/identity-recall.ts rather than exceptions in the rule."
         }
       ]
     },
@@ -643,9 +644,10 @@
             "reach-reads": 8,
             "reach-writes": 3,
             "reach-destructive": 2,
-            "reach-not-sure": 0
+            "reach-not-sure": 0,
+            "borrowed": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does. | 2026-11-22, Phase 215: reach-not-sure 1 -> 0 and reach-writes 2 -> 3. **The sentence above is wrong about why**, and the correction is the finding. `linkRecords` is not a tool whose name and description say nothing: it declares `readOnlyHint: false` and `destructiveHint: false` at mcp.service.ts:1206, which is the author saying it writes and cannot destroy. `declaredHint` only read those two hints when they were **true**, so a pair written false was treated as no information, and the tool was printed under \"read these yourself\" beside `createRecords` and `updateRecords` - which carry the same two annotations and were classified only because their names begin with a verb Tewip knows. The hand verification that wrote the old sentence read the name and the description and did not look at the declaration. `unlinkRecords` is unchanged and was checked again: `destructiveHint: true` really is on line 1257, and is not read out of the comment above it that discusses being destructive."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. nocodb runs a real MCP server at packages/nocodb/src/mcp/mcp.service.ts with 13 tools. Reach comes from the authors own annotations where they wrote one - destructiveHint on deleteRecords and unlinkRecords, readOnlyHint on the readers - and linkRecords is not-sure because neither its name nor its description says what it does. | 2026-11-22, Phase 215: reach-not-sure 1 -> 0 and reach-writes 2 -> 3. **The sentence above is wrong about why**, and the correction is the finding. `linkRecords` is not a tool whose name and description say nothing: it declares `readOnlyHint: false` and `destructiveHint: false` at mcp.service.ts:1206, which is the author saying it writes and cannot destroy. `declaredHint` only read those two hints when they were **true**, so a pair written false was treated as no information, and the tool was printed under \"read these yourself\" beside `createRecords` and `updateRecords` - which carry the same two annotations and were classified only because their names begin with a verb Tewip knows. The hand verification that wrote the old sentence read the name and the description and did not look at the declaration. `unlinkRecords` is unchanged and was checked again: `destructiveHint: true` really is on line 1257, and is not read out of the comment above it that discusses being destructive. | 2026-11-26, Phase 224: borrowed = 0 added. OWASP ASI03, the caller's own credential handed onward to something the agent calls. Measured across 66,307 files of this corpus: 0 findings. Three appeared on the way there and all three were read by hand and were correct implementations - Netflix dispatch logging a malformed header, and two Discourse controllers handing an inbound webhook header to a verifier - and all three are now decoys in eval/identity-recall.ts rather than exceptions in the rule."
         },
         {
           "command": "contract",
@@ -705,9 +707,10 @@
             "tools": 0,
             "injections": 0,
             "guards": 1,
-            "dry-run": 1
+            "dry-run": 1,
+            "borrowed": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. One guard, the dryRun flag on the immich CLI, which is all that file declares. Pinned as the smallest non-zero case."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. One guard, the dryRun flag on the immich CLI, which is all that file declares. Pinned as the smallest non-zero case. | 2026-11-26, Phase 224: borrowed = 0 added. OWASP ASI03, the caller's own credential handed onward to something the agent calls. Measured across 66,307 files of this corpus: 0 findings. Three appeared on the way there and all three were read by hand and were correct implementations - Netflix dispatch logging a malformed header, and two Discourse controllers handing an inbound webhook header to a verifier - and all three are now decoys in eval/identity-recall.ts rather than exceptions in the rule."
         },
         {
           "command": "infra",
@@ -836,9 +839,10 @@
             "filesRead": 0,
             "tools": 0,
             "injections": 0,
-            "guards": 0
+            "guards": 0,
+            "borrowed": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. Zero files read, because this check opens .py, .ts, .js, .tsx and .jsx and gin is Go. Pinned precisely because it is a zero: adding a Go reader has to change this number deliberately rather than quietly."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. Zero files read, because this check opens .py, .ts, .js, .tsx and .jsx and gin is Go. Pinned precisely because it is a zero: adding a Go reader has to change this number deliberately rather than quietly. | 2026-11-26, Phase 224: borrowed = 0 added. OWASP ASI03, the caller's own credential handed onward to something the agent calls. Measured across 66,307 files of this corpus: 0 findings. Three appeared on the way there and all three were read by hand and were correct implementations - Netflix dispatch logging a malformed header, and two Discourse controllers handing an inbound webhook header to a verifier - and all three are now decoys in eval/identity-recall.ts rather than exceptions in the rule."
         },
         {
           "command": "infra",
@@ -989,9 +993,10 @@
             "tool-allow-list": 21,
             "asks-a-person": 9,
             "reach-not-sure": 3,
-            "reach-reads": 2
+            "reach-reads": 2,
+            "borrowed": 0
           },
-          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. All nine asks-a-person findings read by hand: n8n planner agent calls interrupt({type:\"plan\"}) and its credential, data-table and execution tools each compute needsApproval. Before Phase 153 this repo reported one guard kind and Tewip said it asked a person nothing. injections 0 is the number that matters most: it was 3 before Phase 152 and all three were false."
+          "verified": "2026-11-08. Agent added to the corpus: it is the flagship check, it changed in four consecutive phases, and its precision was a sentence in confidence.ts that nothing re-derived. Every number here read by hand first. All nine asks-a-person findings read by hand: n8n planner agent calls interrupt({type:\"plan\"}) and its credential, data-table and execution tools each compute needsApproval. Before Phase 153 this repo reported one guard kind and Tewip said it asked a person nothing. injections 0 is the number that matters most: it was 3 before Phase 152 and all three were false. | 2026-11-26, Phase 224: borrowed = 0 added. OWASP ASI03, the caller's own credential handed onward to something the agent calls. Measured across 66,307 files of this corpus: 0 findings. Three appeared on the way there and all three were read by hand and were correct implementations - Netflix dispatch logging a malformed header, and two Discourse controllers handing an inbound webhook header to a verifier - and all three are now decoys in eval/identity-recall.ts rather than exceptions in the rule."
         }
       ]
     }

@@ -35,13 +35,20 @@ jobs:
         with:
           node-version: '24'
 
-      # Keyed on the manifest: a new pinned commit must be fetched, an unchanged one must not.
+      # Keyed on the manifest, and only on the manifest.
+      #
+      # `restore-keys: corpus-` used to fall back to clones saved under an older manifest, which
+      # is a cache that can hand back a tree other than the one the numbers were verified against.
+      # immich's `done` measured 73 covering tests from a fresh clone, on both Linux and Windows,
+      # and 15 under a restored cache - the same commit, two different answers, and four days spent
+      # reading that as a platform difference. Whatever the mechanism, a corpus whose clones might
+      # not be the commit they claim has no numbers, so the fallback is gone: a changed manifest
+      # now pays for a cold cache, which costs minutes and is the cheaper half of that trade.
       - name: Reuse the clones
         uses: actions/cache@v5
         with:
           path: ~/.cache/tewip-corpus
           key: corpus-${{ hashFiles('corpus/expected.json') }}
-          restore-keys: corpus-
 
       # A dispatched run is somebody asking, so it reports what moved and exits 0. The weekly run
       # and a release tag are the guard and still fail, which is where failing belongs: nobody

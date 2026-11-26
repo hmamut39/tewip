@@ -37,7 +37,7 @@ const git = (args: string[], cwd?: string): string =>
  * is a check measuring nothing while printing a tidy row. One `--deepen 1` costs about three
  * seconds and is only paid by the repositories that ask for it.
  */
-function checkout(repo: Repo): string {
+function checkout(repo: Repo, attempt = 1): string {
   const dir = join(CACHE, repo.name);
   mkdirSync(CACHE, { recursive: true });
   if (!existsSync(join(dir, '.git'))) {
@@ -61,6 +61,30 @@ function checkout(repo: Repo): string {
   // Forced, because a previous run may have left files behind, and Windows refuses some paths.
   git(['checkout', '--quiet', '--force', repo.commit], dir);
   if (repo.checks.some((c) => c.diff)) warnIfNoParent(dir, repo.name);
+  // Does this working tree actually hold the pinned commit?
+  //
+  // Nothing asked before, and for four days a number that differed between a fresh clone and a
+  // restored cache was read as a Windows-versus-Linux disagreement. What is verified: immich's
+  // `done` measures 73 covering tests from a fresh clone on **both** platforms and 15 under this
+  // workflow's restored cache. What is not: the mechanism. A forced checkout restores a file
+  // deleted by hand, so a merely-missing file is not it.
+  //
+  // This is cheap and it is the question worth asking out loud either way - a corpus whose clones
+  // may not be the commit they claim has no numbers at all. Checked before the stand-ins below are
+  // removed, because those removals are deliberate and would look like the same fault. Phase 223.
+  const missing = () => git(['ls-files', '--deleted'], dir).split(String.fromCharCode(10)).filter(Boolean);
+  let absent = missing();
+  if (absent.length > 0) {
+    console.log(`  ${absent.length} tracked file(s) absent from the cached clone (${absent.slice(0, 2).join(', ')}) - restoring them`);
+    git(['checkout', '--quiet', '--force', '--', '.'], dir);
+    absent = missing();
+  }
+  if (absent.length > 0) {
+    if (attempt > 1) throw new Error(`${repo.name}: ${absent.length} tracked file(s) still absent after a fresh clone, e.g. ${absent.slice(0, 3).join(', ')}`);
+    console.log(`  still ${absent.length} absent - the clone is not repairable, cloning again`);
+    rmSync(dir, { recursive: true, force: true });
+    return checkout(repo, attempt + 1);
+  }
   dropSymlinkStandIns(dir);
   return dir;
 }

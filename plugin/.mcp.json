@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "tewip-ai@0.87.0",
+        "tewip-ai@0.88.0",
         "mcp"
       ]
     }

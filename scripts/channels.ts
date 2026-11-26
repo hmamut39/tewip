@@ -6,9 +6,11 @@
 // Each query is printed alongside its answer. That is not decoration: the reason this check failed
 // twice by hand was a wrong question that returned a plausible number, and a question nobody can
 // see is a question nobody can correct.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { renderChannels, shippedPathspecs, type ChannelReading } from '../engine/release/channels.ts';
+import { sourceOf } from '../engine/agent/server-pinning.ts';
 
 const read = (file: string) => JSON.parse(readFileSync(file, 'utf8'));
 
@@ -86,6 +88,7 @@ function changedSinceVersionSet(
 const pkg = read('package.json');
 const server = read('server.json');
 const extension = read('extensions/vscode/package.json');
+const plugin = read('plugin-standalone/.claude-plugin/plugin.json');
 /** Both marketplaces publish the same folder, so they share one answer. */
 const extensionContent = changedSinceVersionSet('extensions/vscode/package.json', extension.version, ['extensions/vscode']);
 
@@ -188,10 +191,73 @@ async function marketplaceChannel(): Promise<ChannelReading> {
   return { name: 'VS Code Marketplace', expected: extension.version, actual: version, problem: version ? undefined : problem ?? 'the gallery returned no version for this extension', asked, ...extensionContent };
 }
 
-// Guarded so a test can import `npmChannel` without this firing four network requests and then
+/**
+ * The Claude Code plugin marketplace: hmamut39/tewip-plugin, which is a public git repository
+ * holding a copy of `plugin-standalone/`.
+ *
+ * Added in Phase 229, and it should have been here from the start. This file's own header says the
+ * rule is to ask every channel "because a stale channel looks exactly like a current one", and it
+ * asked four of the five. The one it skipped was the only channel that **pins a version** - and
+ * when it was finally asked by hand it was 47 days and 55 releases behind, still shipping
+ * `npx -y tewip-ai@latest`, with two of five skills and none of the hooks. Phase 225 found that
+ * `@latest` and fixed it in this repository; the copy people install was never touched, so the
+ * published claim that the plugin is pinned was true here and false where it mattered.
+ *
+ * Three questions, because a plugin can be stale in three ways that look identical from outside:
+ * the manifest version, the pin on the MCP server it installs, and whether it ships the same
+ * skills. The pin is judged by Tewip's own ASI04 check rather than a second opinion about what a
+ * pin looks like.
+ */
+async function pluginChannel(): Promise<ChannelReading> {
+  const raw = 'https://raw.githubusercontent.com/hmamut39/tewip-plugin/main';
+  const asked = `GET raw.githubusercontent.com/hmamut39/tewip-plugin/main/.claude-plugin/plugin.json -> version, and /.mcp.json -> the pin`;
+  const manifest = await ask<{ version?: string }>(`${raw}/.claude-plugin/plugin.json`);
+  const mcp = await ask<{ mcpServers?: Record<string, { command?: string; args?: string[] }> }>(`${raw}/.mcp.json`);
+
+  // What is published that does not match this tree. Reported as content rather than as a version
+  // gap, because both can be true at once and the fix for each is different.
+  const wrong: string[] = [];
+  if (mcp.body?.mcpServers) {
+    for (const [name, spec] of Object.entries(mcp.body.mcpServers)) {
+      const got = sourceOf(name, spec.command ?? '', (spec.args ?? []).join(' '), '');
+      if (got.how === 'fetched at every start') wrong.push(`.mcp.json ships \`${got.what}\`, which is not pinned`);
+      else if (got.pin && got.pin !== plugin.version) wrong.push(`.mcp.json pins ${got.pin} and the manifest says ${plugin.version}`);
+    }
+  }
+  const here = readdirSync(join(import.meta.dirname, '..', 'plugin-standalone', 'skills')).sort();
+  const there = await ask<Array<{ name?: string; type?: string }>>('https://api.github.com/repos/hmamut39/tewip-plugin/contents/skills');
+  if (Array.isArray(there.body)) {
+    const published = there.body.filter((e) => e.type === 'dir').map((e) => e.name ?? '');
+    const missing = here.filter((s) => !published.includes(s));
+    if (missing.length > 0) wrong.push(`skills/ is missing ${missing.join(', ')}`);
+  }
+
+  const published = manifest.body?.version ?? null;
+  return {
+    name: 'Claude Code plugin marketplace',
+    expected: plugin.version,
+    // The clock is the age of what is *published*, not of what this repository is at - which is
+    // the opposite choice from npm next door, and deliberate. npm is staged automatically minutes
+    // after a tag and then waits for a person, so "how long since the tag" is the right question
+    // there. Nothing ever publishes this channel on its own, so the honest question is how long it
+    // has been serving what it serves. Measured from the tag of 0.88.0 it read "It has been 0
+    // hour(s)" while being fifty-five releases behind, which is a true sentence that tells a reader
+    // the opposite of the truth.
+    ageHours: hoursSinceTag(published ?? plugin.version) ?? hoursSinceTag(plugin.version),
+    actual: published,
+    problem: published ? undefined : manifest.problem ?? 'the manifest had no version',
+    asked,
+    changedSince: wrong.length > 0 ? wrong : undefined,
+    // A content answer that could not be read is not a clean one. Both halves are named so a
+    // reader knows which question went unanswered rather than assuming neither did.
+    contentProblem: [mcp.body ? '' : `.mcp.json: ${mcp.problem ?? 'unreadable'}`, Array.isArray(there.body) ? '' : `skills/: ${there.problem ?? 'unreadable'}`].filter(Boolean).join('; ') || undefined,
+  };
+}
+
+// Guarded so a test can import `npmChannel` without this firing five network requests and then
 // calling process.exit out from under the test runner.
 if (import.meta.main) {
-  const readings = await Promise.all([npmChannel(), mcpChannel(), openVsxChannel(), marketplaceChannel()]);
+  const readings = await Promise.all([npmChannel(), mcpChannel(), openVsxChannel(), marketplaceChannel(), pluginChannel()]);
   const { text, behind, unverified, stale } = renderChannels(readings);
   console.log(text);
 

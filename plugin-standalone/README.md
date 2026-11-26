@@ -7,16 +7,17 @@ claude plugin marketplace add hmamut39/tewip-plugin
 claude plugin install tewip@tewip
 ```
 
-This repository holds only the plugin: a manifest, three skills, and a pointer to the published
+This repository holds only the plugin: a manifest, five skills, and a pointer to the published
 package. Tewip itself installs from npm (`tewip-ai`) when a session first calls it.
 
 ## What it adds
 
-- **The MCP server** — 19 tools, from "why did this test fail" to "what will this migration do to a
+- **The MCP server** — 25 tools, from "why did this test fail" to "what will this migration do to a
   live database".
-- **Three skills**, which is the part that matters. They tell Claude Code *when* to reach for Tewip:
-  before claiming a change is done, when a test fails, and when a change touches a migration. Until
-  one is needed they cost about 410 tokens a session.
+- **Five skills**, which is the part that matters. They tell Claude Code *when* to reach for Tewip:
+  before claiming a change is done, when a test fails, when a change touches a migration, when
+  something may have got slower, and when a change touches an interface somebody has to be able to
+  use. Until one is needed they cost about 410 tokens a session.
 
 ## What Tewip is
 

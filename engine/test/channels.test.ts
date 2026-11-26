@@ -115,6 +115,48 @@ describe('the report a person reads', () => {
   });
 });
 
+// Phase 229: a channel can be behind and also publishing something wrong, and being behind is not
+// the more interesting of the two.
+//
+// The Claude Code plugin marketplace joined this check and was 47 days behind while shipping
+// `npx -y tewip-ai@latest` - an unpinned server, which is the defect Tewip's own ASI04 check
+// reports, in Tewip's own distribution. The first version of that reading said only "waiting -
+// normal this soon after a release", because the content differences were read on the branch where
+// the versions agree and patience was granted on the age of a tag that had nothing to do with it.
+describe('a channel that is behind and also wrong', () => {
+  const stale = (over: Partial<ChannelReading> = {}): ChannelReading =>
+    ({
+      name: 'Claude Code plugin marketplace',
+      expected: '0.88.0',
+      actual: '0.33.0',
+      asked: 'GET raw.githubusercontent.com/.../plugin.json',
+      changedSince: ['.mcp.json ships `npx -y tewip-ai@latest mcp`, which is not pinned'],
+      ...over,
+    });
+
+  it('says what else is wrong, not only that it is behind', () => {
+    const v = judge(stale({ ageHours: 1132 }));
+    assert.equal(v.verdict, 'behind');
+    assert.match(v.says, /this repository is at 0\.88\.0/);
+    assert.match(v.says, /also differs from this tree/);
+    assert.match(v.says, /not pinned/, 'the thing somebody has to fix has to appear in the sentence');
+  });
+
+  it('gives no patience to a channel that is already publishing something wrong', () => {
+    // Patience exists for a channel about to catch up on its own. One shipping an unpinned server
+    // is not waiting for anything, and a fresh tag must not buy it a day of silence.
+    const v = judge(stale({ ageHours: 0.2 }));
+    assert.equal(v.verdict, 'behind', 'a fresh tag does not excuse content that is wrong');
+    assert.match(v.says, /not pinned/);
+  });
+
+  it('still grants patience to a fresh gap with nothing else wrong', () => {
+    // The behaviour this must not break: npm is staged minutes after a tag and then waits for a
+    // person, and calling that BEHIND on every release is how a check stops being read.
+    assert.equal(judge(stale({ ageHours: 0.2, changedSince: undefined })).verdict, 'waiting');
+  });
+});
+
 describe('a release in flight is not a release that failed', () => {
   // Found on the first morning this check ran for real. npm publishing here is staged: the tag is
   // pushed, CI builds, and the version then waits for a person to approve it with a passkey. The

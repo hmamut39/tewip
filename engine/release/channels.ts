@@ -130,7 +130,12 @@ export function judge(reading: ChannelReading): ChannelVerdict {
     const age = reading.ageHours;
     // Unknown age is treated as old. Not knowing how long a channel has been behind is not a reason
     // to assume it only just happened.
-    if (age !== null && age !== undefined && age < PATIENCE_HOURS) {
+    const also = reading.changedSince ?? [];
+    // Patience is for a channel that is about to catch up on its own. A channel that is already
+    // publishing something wrong is not waiting for anything, so it is reported now rather than
+    // tomorrow: the plugin marketplace read as "waiting - normal this soon after a release" while
+    // shipping an unpinned server it had been shipping for seven weeks.
+    if (age !== null && age !== undefined && age < PATIENCE_HOURS && also.length === 0) {
       const how = age < 1 ? `${Math.max(1, Math.round(age * 60))} minute(s)` : `${age.toFixed(1)} hour(s)`;
       return {
         ...reading,
@@ -139,7 +144,16 @@ export function judge(reading: ChannelReading): ChannelVerdict {
       };
     }
     const how = age === null || age === undefined ? '' : ` It has been ${age.toFixed(0)} hour(s).`;
-    return { ...reading, verdict: 'behind', says: `has ${reading.actual}, but this repository is at ${reading.expected}. The release did not reach it.${how}` };
+    // What is published also differing from this tree is said here rather than swallowed.
+    //
+    // `changedSince` used to be read only on the branch where the versions agree, which made
+    // sense while it meant "files changed since this version was set". It stopped making sense
+    // when the plugin marketplace joined: that channel's worst problem - shipping
+    // `npx -y tewip-ai@latest` - has nothing to do with which version it is on, and reporting only
+    // the version gap hid the thing somebody actually has to fix. A channel can be behind *and*
+    // wrong, and being behind is not the more interesting of the two.
+    const and = also.length > 0 ? ` What is published also differs from this tree: ${also.join('; ')}.` : '';
+    return { ...reading, verdict: 'behind', says: `has ${reading.actual}, but this repository is at ${reading.expected}. The release did not reach it.${how}${and}` };
   }
   // Ahead is not an error on its own: the editor extension keeps its own version line, and a
   // channel can legitimately carry something this checkout has not caught up with.

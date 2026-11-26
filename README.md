@@ -253,9 +253,10 @@ claude plugin install tewip@tewip
 That is the whole publication process. A marketplace is a `.claude-plugin/marketplace.json` file in a git
 repository, so Tewip publishes one at
 [hmamut39/tewip-plugin](https://github.com/hmamut39/tewip-plugin) - nobody has to approve it, and there
-is nothing to pay for. That repository holds the plugin only: a manifest, three skills and a pointer to
-the npm package, which is why this one can stay private. The plugin brings Tewip's MCP server and three skills that tell Claude Code *when* to use it:
-before claiming a change is done, when a test fails, and when a change touches a migration. It costs
+is nothing to pay for. That repository holds the plugin only: a manifest, five skills and a pointer to
+the npm package, so it stays small. The plugin brings Tewip's MCP server and five skills that tell Claude Code
+*when* to use it: before claiming a change is done, when a test fails, when a change touches a migration, when
+something may have got slower, and when a change touches an interface somebody has to be able to use. It costs
 about 410 tokens per session until a skill is actually needed.
 
 The MCP server runs from the published package, pinned to the plugin's own version

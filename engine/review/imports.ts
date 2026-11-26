@@ -34,11 +34,50 @@ const FAMILIES: Array<[RegExp, string]> = [
 
 export const familyOf = (file: string): string | null => FAMILIES.find(([p]) => p.test(file))?.[1] ?? null;
 
+/** Folder names that are a place to put code, not a name code is imported by. */
+const CONTAINER = new Set(['src', 'lib', 'source', 'sources', 'dist', 'build', 'out', 'esm', 'cjs', 'app']);
+
+/**
+ * The name the nearest package.json publishes, searching upward a few levels.
+ *
+ * A monorepo's packages are imported by their published name and by nothing else - immich's
+ * `packages/sdk` is `@immich/sdk` everywhere it is used - so this is the only token that can
+ * follow a change out of a package and into the code that consumes it.
+ */
+function publishedName(from: string): string | null {
+  let dir = from;
+  for (let up = 0; up < 4; up += 1) {
+    try {
+      const name = (JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: string }).name;
+      if (name) return name;
+    } catch {
+      // No package.json here, or an unreadable one: keep going up.
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 /** The module names a file can be imported by: its path, its name, and its folder's front door. */
 export function importNames(root: string, changed: string): string[] {
   const full = resolve(root, changed);
   const noExt = full.slice(0, full.length - extname(full).length);
-  const names = new Set<string>([basename(noExt), relative(root, noExt).split(sep).join('/')]);
+  const frontDoor = basename(noExt) === 'index' || basename(noExt) === '__init__';
+  const names = new Set<string>([relative(root, noExt).split(sep).join('/')]);
+  // `index` names a position, not a module, so it is never a name on its own.
+  //
+  // These tokens are matched as substrings inside a quoted import path, so a token has to identify
+  // the file. `index` identifies every front door in the project. immich's
+  // `packages/sdk/src/index.ts` contributed the bare token `index`, and 65 server specs that import
+  // `src/schema/index.js` - a different file, in a different package - were reported as two hops
+  // from a change to `packages/sdk/src/fetch-client.ts`. `tewip done` said 79 test files reached
+  // that change. 15 do.
+  //
+  // The directory is what distinguishes one front door from another, so that is the token: the
+  // specs above match `schema/index` for their own file and not `src/index` for this one. Phase 223.
+  names.add(frontDoor ? `${basename(dirname(noExt))}/${basename(noExt)}` : basename(noExt));
   // Python: a.b.c for src/a/b/c.py, and the package it sits in.
   const parts = relative(root, noExt).split(sep).filter((p) => p !== 'src');
   names.add(parts.join('.'));
@@ -50,7 +89,18 @@ export function importNames(root: string, changed: string): string[] {
   // reported as importing `src/thing/base.js` by name. `packageNames` already answers that
   // question and answers it as the weaker kind, which is what it is. Phase 217.
   if (/\.py$/i.test(full)) names.add(parts.slice(0, -1).join('.'));
-  if (basename(noExt) === 'index' || basename(noExt) === '__init__') names.add(basename(dirname(noExt)));
+  if (frontDoor) {
+    // The folder, unless the folder is a place to put code rather than a name for it. `src` as a
+    // token matches any import path ending in `src`, which is 341 of immich's files and no more
+    // informative than matching nothing; the package name below is what identifies that front door.
+    const folder = basename(dirname(noExt));
+    if (!CONTAINER.has(folder.toLowerCase())) names.add(folder);
+    // What a package is imported by from outside itself, which is the only way to follow a change
+    // across a package boundary. Without it the walk could not leave `packages/sdk` at all: it
+    // missed all 18 immich specs that import `@immich/sdk` while reporting 65 that do not.
+    const published = publishedName(dirname(noExt));
+    if (published) names.add(published);
+  }
   return [...names].filter((n) => n.length > 1);
 }
 

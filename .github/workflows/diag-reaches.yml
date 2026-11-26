@@ -1,9 +1,13 @@
 # Throwaway: prints the import-graph walk's intermediate state on Linux, to diff against Windows.
 #
 # `tewip done` reports 73 test files reaching immich's pinned change on Windows and 15 on Linux, and
-# every count either side of the walk agrees. This clones immich exactly the way scripts/corpus.ts
-# does and prints what each layer of the walk matched, which is the thing reasoning from one
-# platform could not establish. Delete this file once the cause is found.
+# every count either side of the walk agrees - 3,140 source files, 293 test files, the same `start`
+# numbers, and `tewip review` matches on both. So the disagreement is inside the walk, and reasoning
+# about it from one platform has already produced two wrong answers.
+#
+# The clone is made by scripts/corpus.ts itself rather than by hand here, so it is the same clone
+# the corpus measures: same filter, same depth, same forced checkout, same symlink handling.
+# Delete this file once the cause is found.
 name: diag reaches
 
 on:
@@ -21,33 +25,26 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+    env:
+      TEWIP_CORPUS: ${{ github.workspace }}/corpus-cache
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      # The same clone scripts/corpus.ts makes: blobless, depth 2 for the diff, forced checkout.
-      - name: Clone immich at the pinned commit
+      - name: Let the corpus runner make the clone, and say what it measures
         shell: bash
-        run: |
-          set -eux
-          git -c core.longpaths=true clone --filter=blob:none --no-checkout --quiet https://github.com/immich-app/immich.git immich-clone
-          cd immich-clone
-          git -c core.longpaths=true fetch --quiet --filter=blob:none --depth 2 origin 188d64e4357e0b5e3a1a7b1a9b7e2c0e0e8e6c3a || \
-            git -c core.longpaths=true fetch --quiet --filter=blob:none --depth 2 origin 188d64e435
-          git -c core.longpaths=true checkout --quiet --force 188d64e435
-          git rev-parse HEAD
+        run: node scripts/corpus.ts immich --asking
 
       - name: Trace the walk
         shell: bash
-        run: node eval/reaches-parity.ts immich-clone packages/sdk/src/fetch-client.ts
+        run: node eval/reaches-parity.ts "$TEWIP_CORPUS/immich" packages/sdk/src/fetch-client.ts
 
       - name: What the front door looks like here
         shell: bash
         run: |
           set -eux
-          ls -la immich-clone/packages/sdk/src/ || echo "no packages/sdk/src"
-          git -C immich-clone ls-files -s packages/sdk/src/index.ts || echo "not tracked"
-          wc -c immich-clone/packages/sdk/src/index.ts || true
-          cat immich-clone/packages/sdk/src/index.ts || true
+          ls -la "$TEWIP_CORPUS/immich/packages/sdk/src/" || echo "no packages/sdk/src"
+          git -C "$TEWIP_CORPUS/immich" ls-files -s packages/sdk/src/index.ts || echo "not tracked"
+          cat "$TEWIP_CORPUS/immich/packages/sdk/src/index.ts" || true

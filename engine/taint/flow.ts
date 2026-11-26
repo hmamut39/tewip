@@ -60,21 +60,37 @@ export function gluedIn(argument: string, expression: string): string | null {
   return null;
 }
 
-/** The first argument of a call that starts at `from`, which is the one parsed as syntax. */
-function firstArgument(text: string, from: number): string {
+/**
+ * The arguments of a call that starts at `from`: all of them, and the first one on its own.
+ *
+ * Both halves are needed and by different callers. The first argument is the one parsed as syntax,
+ * which is the question a SQL or a shell sink asks. Whether the call *as a whole* says
+ * `shell=True`, or hands `yaml.load` a `SafeLoader`, is a question about the rest of the argument
+ * list - so `execution-flow.ts` next door needs the whole of it, and parsing it twice with two
+ * slightly different bracket walkers is how the two would come to disagree.
+ */
+export function callArguments(text: string, from: number): { all: string; first: string } {
   const open = text.indexOf('(', from);
-  if (open === -1) return '';
+  if (open === -1) return { all: '', first: '' };
   let depth = 0;
+  let first = '';
   for (let i = open; i < text.length && i < open + 4000; i += 1) {
     const ch = text[i];
     if (ch === '(' || ch === '[' || ch === '{') depth += 1;
     else if (ch === ')' || ch === ']' || ch === '}') {
       depth -= 1;
-      if (depth === 0) return text.slice(open + 1, i);
-    } else if (ch === ',' && depth === 1) return text.slice(open + 1, i);
+      if (depth === 0) {
+        const all = text.slice(open + 1, i);
+        return { all, first: first || all };
+      }
+    } else if (ch === ',' && depth === 1 && !first) first = text.slice(open + 1, i);
   }
-  return text.slice(open + 1, Math.min(text.length, open + 4000));
+  const all = text.slice(open + 1, Math.min(text.length, open + 4000));
+  return { all, first: first || all };
 }
+
+/** The first argument of a call that starts at `from`, which is the one parsed as syntax. */
+const firstArgument = (text: string, from: number): string => callArguments(text, from).first;
 
 /**
  * The function body each offset sits in, so a source and a sink in different handlers are never

@@ -1,15 +1,17 @@
-// The four flow sections of the agent report: what reaches the model, whose credential the agent
-// acts with, what is kept where it will be read back, and who can reach the agent.
+// The five flow sections of the agent report: what reaches the model, what the model's answer reaches,
+// whose credential the agent acts with, what is kept where it will be read back, and who can reach the
+// agent.
 //
 // Split out of agent-command.ts in Phase 224, when ASI03 took that file past this project's
 // 300-line rule. They belong together: each is a flow found in one function body, each says what
 // it cannot see, and each names the OWASP risk it is about.
 import type { PromptFlow } from './prompt-flow.ts';
 import type { IdentityFlow } from './identity-flow.ts';
+import type { ExecutionFlow } from './execution-flow.ts';
 import type { MemoryFlow } from './memory-flow.ts';
 import type { AgentDoor } from './agent-door.ts';
 
-export function flowSections(injections: PromptFlow[], borrowed: IdentityFlow[], poisoned: MemoryFlow[], doors: AgentDoor[]): string[] {
+export function flowSections(injections: PromptFlow[], executes: ExecutionFlow[], borrowed: IdentityFlow[], poisoned: MemoryFlow[], doors: AgentDoor[]): string[] {
   const lines: string[] = [];
     if (injections.length > 0) {
       const armed = injections.filter((i) => i.withTools);
@@ -38,6 +40,34 @@ export function flowSections(injections: PromptFlow[], borrowed: IdentityFlow[],
       }
       if (injections.length > 20) lines.push(`…and ${injections.length - 20} more`);
       lines.push('');
+    }
+
+    if (executes.length > 0) {
+      lines.push(
+        '## What the model wrote back, run as code',
+        '',
+        `${executes.length} place(s) where the model's own answer reaches something that runs it. This is the far end of a ` +
+          'prompt injection: one that only changes an answer produces a wrong answer, and one that reaches an interpreter ' +
+          'produces a process on this machine. A model is not a boundary.',
+        '',
+      );
+      for (const e of executes.slice(0, 20)) {
+        lines.push(`- ${e.file}:${e.line} — ${e.origin}, ${e.through}, ${e.runs} by \`${e.sink}\``);
+        lines.push(`  \`${e.evidence.split(' — ')[0]}\``);
+      }
+      if (executes.length > 20) lines.push(`…and ${executes.length - 20} more`);
+      lines.push(
+        '',
+        'OWASP calls this ASI05, Unexpected Code Execution, and the published cases are all this shape: LangChain’s ' +
+          'LLMMathChain reached arbitrary execution through Python’s `exec` (CVE-2023-29374, 9.8), its PALChain ran the ' +
+          'model’s Python the same way (CVE-2023-36258), and Vanna.AI generated Plotly code from the model’s answer and ran ' +
+          'it, so a crafted question put the attacker’s code at the top of the script (CVE-2024-5565). The two controls ' +
+          'OWASP names are a sandbox the generated code cannot reach out of, and a person for anything that matters — and ' +
+          'where either of those is at the call site, nothing is reported here. What this does **not** report is a tool ' +
+          'whose documented job is to run code, such as a Python REPL: that is a decision somebody made on purpose, and ' +
+          'whether it is sandboxed is what the guard list answers.',
+        '',
+      );
     }
 
     if (borrowed.length > 0) {

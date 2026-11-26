@@ -52,7 +52,7 @@ const REACH_READS: Record<Reach, string> = {
 
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, poisoned, borrowed, doors, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
+  const { tools, injections, poisoned, borrowed, executes, doors, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -70,6 +70,15 @@ export function renderAgent(scan: AgentScan, root: string): string {
       'An agent built another way, or one whose tools are assembled at run time from a registry, is',
       'invisible to this and is not reported as safe. Nothing here was sent anywhere; no model was',
       'called.',
+      '',
+      // Every flow finding used to be thrown away here, which is the defect this project keeps
+      // finding in itself: a clean answer produced by having looked at nothing. The report said "no
+      // tool definitions were found" and stopped, while holding an execution flow, a prompt
+      // injection, a borrowed credential, a poisoned store and an open door that it had already
+      // read. None of those five needs a declared tool to exist. ASI05 is the clearest case -
+      // running the model's answer with `exec` requires no tool declaration at all, so the project
+      // most likely to have it is exactly the one whose tool list comes back empty.
+      ...flowSections(injections, executes, borrowed, poisoned, doors),
     ].join(NL);
   }
 
@@ -142,7 +151,7 @@ export function renderAgent(scan: AgentScan, root: string): string {
     );
   }
 
-  lines.push(...flowSections(injections, borrowed, poisoned, doors));
+  lines.push(...flowSections(injections, executes, borrowed, poisoned, doors));
 
   lines.push('## The lethal trifecta', '');
   if (trifecta.complete) {

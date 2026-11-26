@@ -108,6 +108,18 @@ export const MEASURED: Confidence[] = [
       'OWASP ASI04, Agentic Supply Chain Vulnerabilities, against the invocation each real MCP server documents in its own README or registry entry - which is the ground truth that matters, because those lines are what people paste into a config file. OWASP cites one case by name and it is the whole argument: a package impersonating `postmark-mcp` ran clean for several versions and then, in 1.0.16, began adding a hidden BCC of every email to its author, with no configuration change. What this cannot say is whether any particular server is trustworthy, which Tewip does not know; the finding is that the choice is made again on every start, by whoever can publish to that name',
   },
   {
+    check: 'agent (the model’s answer, run as code)',
+    command: 'agent',
+    precision:
+      '0 findings across 23,301 files of the corpus, pinned as `executes` on every agent check - and the population is the honest part of that number, so it is published beside it. Of 36,323 files, **131 call anything model-shaped and not one of those also holds an execution sink**, so the corpus contains nothing for this check to be wrong about and the zero is not evidence of precision. The decoys below are. Counting that population is also what found the one real defect: before it, 133 files passed the gate and exactly one held both - n8n’s `code-generator.test.ts`, matched because `generate_code` was in the list of names taken to mean a model call. n8n’s `generateCode(tree, json, graph)` walks an AST and emits TypeScript with no model near it, `generate` plus a noun is what every compiler and ORM calls its own code path, and it is gone from the list. It had gone unreported only because that file is a test and the scan skips those, which is luck rather than design',
+    pinnedIn: ['n8n', 'nocodb', 'immich', 'saleor', 'gin'],
+    recall: '9 of 9 executions read, 0 of 7 safe shapes accused',
+    from: 'eval/execution-recall.ts',
+    measured: { found: 9, of: 9, accused: 0, decoys: 7 },
+    groundTruth:
+      'OWASP ASI05, Unexpected Code Execution, against three published CVEs rather than an opinion about what looks risky: LangChain’s LLMMathChain reached arbitrary execution "via the Python exec method" (CVE-2023-29374, CVSS 9.8), its PALChain ran the model’s Python the same way (CVE-2023-36258), and Vanna.AI generated Plotly code from the model’s answer and ran it, so a crafted question put the attacker’s code at the top of the script (CVE-2024-5565). The two controls OWASP names - a sandbox the generated code cannot reach out of, and a person for anything that matters - are decoys here rather than findings, because Vanna’s own hardening guide asks for the first by name and a check that accuses the project which read the advisory is worse than no check. One documented shape is unreachable by design and named in the harness: LLMMathChain slices the model’s answer out of a variable before evaluating it, which is two hops, and this project refuses the second hop everywhere it reads a flow. What it cannot see is a model’s answer written to a file that something else then runs - which is what `fix` and `write` do in this very repository, deliberately and behind the Reality Check Gate',
+  },
+  {
     check: 'agent (borrowed credential)',
     command: 'agent',
     precision: '0 findings across 66,307 files of the corpus - and two of the three it reported on the way there were correct implementations, now decoys in the harness below',

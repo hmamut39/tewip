@@ -24,6 +24,7 @@ import { measure as guardRecall } from '../../eval/guard-recall.ts';
 import { measure as memoryRecall } from '../../eval/memory-recall.ts';
 import { measure as identityRecall } from '../../eval/identity-recall.ts';
 import { measure as supplyRecall } from '../../eval/supply-recall.ts';
+import { measure as executionRecall } from '../../eval/execution-recall.ts';
 import { measure as doorRecall } from '../../eval/door-recall.ts';
 import { measure as goalRecall } from '../../eval/goal-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
@@ -135,6 +136,18 @@ const HARNESSES: Record<string, () => Counts> = {
     return {
       found: flows.filter((f) => f.found).length,
       of: flows.length,
+      accused: decoys.filter((d) => d.found).length,
+      decoys: decoys.length,
+    };
+  },
+  execution: () => {
+    const { flows, decoys } = executionRecall();
+    // The unreachable shape is left out of the denominator rather than counted as a miss: see the
+    // `reachable` field in the harness, and the goal-hijack entry above, which does the same.
+    const reachable = flows.filter((f) => f.reachable);
+    return {
+      found: reachable.filter((f) => f.found).length,
+      of: reachable.length,
       accused: decoys.filter((d) => d.found).length,
       decoys: decoys.length,
     };

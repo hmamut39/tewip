@@ -239,8 +239,31 @@ describe('the report', () => {
     assert.deepEqual(names(scanAgent(root).tools), ['send_email']);
   });
 
+  // Phase 226. The report returned early when no tool was recognised and threw away every flow
+  // finding it was already holding - an execution, an injection, a borrowed credential, a poisoned
+  // store, an open door. None of the five needs a declared tool to exist, and ASI05 least of all:
+  // running the model's answer with `exec` requires no tool declaration at all, so the project most
+  // likely to have one is exactly the project whose tool list comes back empty. What the reader got
+  // instead was "no tool definitions were found", which reads as nothing to see.
+  it('still reports a flow in a project where it recognised no tools', () => {
+    const root = project({
+      'runner.py':
+        'def answer(question):' +
+        NL +
+        '    code = self.llm_chain.predict(question=question)' +
+        NL +
+        '    exec(code, {}, {})',
+    });
+    const scan = scanAgent(root);
+    assert.equal(scan.tools.length, 0, 'the fixture declares no tool, which is the point of it');
+    assert.equal(scan.executes.length, 1);
+    const page = renderAgent(scan, root);
+    assert.match(page, /No tool definitions were found/, 'it still says what it looked for');
+    assert.match(page, /What the model wrote back, run as code/, 'and it no longer throws away what it found');
+    assert.match(page, /runner\.py:3/);
+  });
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], poisoned: [], borrowed: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
+    const page = renderAgent({ tools: [], injections: [], poisoned: [], borrowed: [], executes: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);

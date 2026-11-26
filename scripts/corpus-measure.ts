@@ -168,6 +168,11 @@ export function measure(command: Command, root: string, diff?: string): Expectat
       // OWASP ASI03: the caller's own credential handed onward. Pinned so the "0 findings" in
       // confidence.ts is a number this re-derives rather than a sentence somebody ran once.
       borrowed: scan.borrowed.length,
+      // OWASP ASI05: the model's own answer reaching something that runs it. Pinned for the same
+      // reason, and with more need of it: of 36,323 corpus files, 133 call anything model-shaped
+      // and exactly one of those also holds an execution sink. A zero drawn from a population that
+      // thin is worth re-deriving rather than remembering.
+      executes: scan.executes.length,
       guards: scan.guards.length,
     };
     for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;

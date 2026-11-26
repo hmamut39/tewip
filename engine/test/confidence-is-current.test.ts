@@ -26,6 +26,7 @@ import { measure as identityRecall } from '../../eval/identity-recall.ts';
 import { measure as supplyRecall } from '../../eval/supply-recall.ts';
 import { measure as executionRecall } from '../../eval/execution-recall.ts';
 import { measure as refusalRecall } from '../../eval/refusal-recall.ts';
+import { measure as claimRecall } from '../../eval/claim-recall.ts';
 import { measure as doorRecall } from '../../eval/door-recall.ts';
 import { measure as goalRecall } from '../../eval/goal-recall.ts';
 import { measure as infraRecall } from '../../eval/infra-recall.ts';
@@ -134,6 +135,15 @@ const HARNESSES: Record<string, () => Counts> = {
   },
   supply: () => {
     const { flows, decoys } = supplyRecall();
+    return {
+      found: flows.filter((f) => f.found).length,
+      of: flows.length,
+      accused: decoys.filter((d) => d.found).length,
+      decoys: decoys.length,
+    };
+  },
+  claim: () => {
+    const { flows, decoys } = claimRecall();
     return {
       found: flows.filter((f) => f.found).length,
       of: flows.length,

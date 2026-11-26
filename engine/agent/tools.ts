@@ -15,6 +15,7 @@
 // is a fact about this source, not a verdict about the running system, and the report says which
 // it is.
 import { blank, type Blanked } from './source-text.ts';
+import { reachFor, type UnderClaim } from './declared-reach.ts';
 
 const NL = String.fromCharCode(10);
 
@@ -25,6 +26,12 @@ const NL = String.fromCharCode(10);
 export type Reach = 'destructive' | 'deletes' | 'pays' | 'sends' | 'runs-code' | 'writes' | 'reads' | 'not-sure';
 
 export interface AgentTool {
+  /**
+   * Set when the tool declared itself safer than its own name admits. OWASP ASI09: the protocol
+   * says a client "should never make tool use decisions based on ToolAnnotations received from
+   * untrusted servers", and this report is a tool-use decision somebody signs off against.
+   */
+  under?: UnderClaim | null;
   /** The tool name the model sees. */
   name: string;
   file: string;
@@ -164,42 +171,6 @@ export function trifectaIn(tools: AgentTool[]): Trifecta {
   return { complete: Object.values(legs).every((l) => l.length > 0), legs };
 }
 
-/**
- * What the author declared, which beats anything guessed from a name.
- *
- * MCP tools carry `readOnlyHint` and `destructiveHint`, and a tool that says of itself that it is
- * read-only is better evidence than any verb list. Both shapes are read: written inline, and
- * written once as a named constant and reused - `annotations: readOnly`, with
- * `const readOnly = { readOnlyHint: true, ... }` further up the same file, which is how Tewip's own
- * server does it and therefore the shape most likely to be missed by a check written against the
- * documentation instead of against real code.
- */
-function declaredHint(text: string, from: number): { reach: Reach; why: string } | null {
-  const window = text.slice(from, from + 1200);
-  const named = /annotations\s*:\s*([A-Za-z_$][\w$]*)/.exec(window);
-  const where = named
-    ? new RegExp(String.raw`\b(?:const|let|var)\s+${named[1]}\s*(?::[^=]{0,120})?=\s*\{([^}]{0,300})\}`).exec(text)?.[1] ?? ''
-    : window;
-  if (/destructiveHint\s*:\s*true/.test(where)) return { reach: 'destructive', why: 'its own annotation says destructiveHint: true' };
-  if (/readOnlyHint\s*:\s*true/.test(where)) return { reach: 'reads', why: 'it declares readOnlyHint: true' };
-  // Both written and both false is a decision too, and it was being read as no information.
-  //
-  // The MCP specification defines `readOnlyHint` as "if true, the tool does not modify its
-  // environment", so an author who writes `readOnlyHint: false` beside `destructiveHint: false` has
-  // said: this one writes, and it cannot destroy. nocodb's `linkRecords` declares exactly that and
-  // came back **not decided** - printed under "read these yourself", beside `createRecords` and
-  // `updateRecords` which carry the *same* two annotations and are classified only because their
-  // names begin with a verb Tewip knows. A tool called `linkRecords` is not a worse-documented
-  // tool; it is a tool whose name is not on a list.
-  //
-  // Only when both are present and both false. An absent `readOnlyHint` defaults to false in the
-  // specification and says nothing about intent, so absence is still absence. Phase 215.
-  if (/readOnlyHint\s*:\s*false/.test(where) && /destructiveHint\s*:\s*false/.test(where)) {
-    return { reach: 'writes', why: 'its annotations say readOnlyHint: false and destructiveHint: false - it writes, and does not destroy' };
-  }
-  return null;
-}
-
 export function reachOf(name: string, description: string): { reach: Reach; why: string } {
   // The name first. A description is marketing for the model and often says "safely" about a tool
   // that drops a table; the name is what the person who wrote it called the thing.
@@ -255,9 +226,10 @@ export function toolsIn(file: string, text: string, blanked?: Blanked): AgentToo
       // The original text, not the blanked one: a Python docstring *is* the description, and it
       // has just been blanked for matching. The indexes line up because blanking kept the lengths.
       const description = describedNear(text, m.index ?? 0);
-      // Declared first, guessed second.
-      const { reach, why } = declaredHint(source, m.index ?? 0) ?? reachOf(name, description);
-      found.set(key, { name, file, line, shape: framework, description, reach, why, capabilities: capabilitiesOf(name, description) });
+      // Declared and guessed, compared. See declared-reach.ts: an annotation that admits more
+      // than the name is believed, and one that claims less is reported and overruled.
+      const { reach, why, under } = reachFor(name, description, source, m.index ?? 0);
+      found.set(key, { name, file, line, shape: framework, description, reach, why, under, capabilities: capabilitiesOf(name, description) });
     }
   }
   return [...found.values()];

@@ -178,6 +178,10 @@ export function measure(command: Command, root: string, diff?: string): Expectat
       // shipped files, every one left alone - and a claim that strong should not rest on anybody
       // having run it once.
       toothless: scan.toothless.length,
+      // OWASP ASI09's other half: a tool whose annotation claims less than its own name admits.
+      // Pinned because the direction is what this check gets right or wrong, and nocodb is the one
+      // repository in the corpus with real MCP annotations to be wrong about.
+      'under-claims': scan.tools.filter((t) => t.under).length,
       guards: scan.guards.length,
     };
     for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;

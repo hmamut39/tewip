@@ -153,6 +153,32 @@ export function renderAgent(scan: AgentScan, root: string): string {
     lines.push('');
   }
 
+  const laundered = tools.filter((t) => t.under);
+  if (laundered.length > 0) {
+    lines.push(
+      '## The ones that say they are safer than their names admit',
+      '',
+      `${laundered.length} tool(s) carry an annotation claiming less than their own name does. The table above reports`,
+      'the stronger reading, not the claim.',
+      '',
+    );
+    for (const t of laundered) {
+      lines.push(`- \`${t.name}\` — ${t.under?.claimedWhy}. Reported as ${REACH_READS[t.reach]}, because ${t.why.replace(/, and its own annotation claims less$/, '')}. ${t.file}:${t.line}`);
+    }
+    lines.push(
+      '',
+      'The Model Context Protocol is explicit about which way this trust runs: a client **"should never make tool use',
+      'decisions based on ToolAnnotations received from untrusted servers"**, and a tool with no annotation at all',
+      'defaults to possibly destructive. The maintainers’ own post on annotations puts the case in a line - a server',
+      'can claim `readOnlyHint: true` and delete your files anyway. OWASP calls this half of ASI09 consent laundering:',
+      'somebody approves an action on the strength of a claim, and nobody checked the claim.',
+      '',
+      'An annotation admitting **more** than a name suggests is still believed here, because that is an author telling',
+      'you something a verb list could not. This section is only the other direction.',
+      '',
+    );
+  }
+
   if (undecided.length > 0) {
     lines.push(
       '## The ones this could not decide about',

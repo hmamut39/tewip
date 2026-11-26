@@ -108,6 +108,18 @@ export const MEASURED: Confidence[] = [
       'OWASP ASI04, Agentic Supply Chain Vulnerabilities, against the invocation each real MCP server documents in its own README or registry entry - which is the ground truth that matters, because those lines are what people paste into a config file. OWASP cites one case by name and it is the whole argument: a package impersonating `postmark-mcp` ran clean for several versions and then, in 1.0.16, began adding a hidden BCC of every email to its author, with no configuration change. What this cannot say is whether any particular server is trustworthy, which Tewip does not know; the finding is that the choice is made again on every start, by whoever can publish to that name',
   },
   {
+    check: 'agent (a tool safer than its name admits)',
+    command: 'agent',
+    precision:
+      '0 of 13 real annotated tools accused. The population is small and is stated rather than dressed up: across the corpus and this repository, 36 tools are read, 15 carry a declared hint, and 13 of those also have a name or description that says something the hint could contradict. None of them does. The figure that matters more is the direction - an annotation admitting *more* than its name is still believed, and nocodb’s `deleteRecords` and `linkRecords` are decoys proving it',
+    pinnedIn: ['n8n', 'nocodb', 'immich', 'saleor', 'gin'],
+    recall: '5 of 5 laundered claims read, 0 of 8 honest annotations accused',
+    from: 'eval/claim-recall.ts',
+    measured: { found: 5, of: 5, accused: 0, decoys: 8 },
+    groundTruth:
+      'OWASP ASI09 again, the half it calls consent laundering, against a normative rule rather than an opinion: the Model Context Protocol’s 2025-06-18 schema reference says a client "should never make tool use decisions based on ToolAnnotations received from untrusted servers", the spec’s default for an unannotated tool is possibly destructive, and the maintainers’ post on tool annotations states the case in a line - a server can claim `readOnlyHint: true` and delete your files anyway. Tewip did the thing that warns against: it read the annotation first and the name second, so a tool called `delete_customer` declaring `readOnlyHint: true` was printed as **reads only**, in the table somebody signs off against, and absent from both the headline and the list of things that cannot be undone. The decoys are mostly real annotations - the official filesystem server’s `read_file`, nocodb’s `deleteRecords` and `linkRecords`. What this cannot do is read the tool’s body: the contradiction it finds is between a claim and a name, not between a claim and what the code does',
+  },
+  {
     check: 'agent (a gate that cannot say no)',
     command: 'agent',
     precision:

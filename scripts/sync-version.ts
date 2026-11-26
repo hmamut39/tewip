@@ -56,7 +56,16 @@ for (const manifest of ['plugin/.claude-plugin/plugin.json', 'plugin-standalone/
 //
 // Here rather than written once by hand, because a pin maintained by remembering is a pin that goes
 // stale, and a stale pin is worse than none: it reads as deliberate.
-for (const config of ['plugin/.mcp.json', 'plugin-standalone/.mcp.json']) {
+//
+// **Four places, not two.** Phase 225 pinned the two `.mcp.json` files and said so in the README
+// and in confidence.ts, and that claim was incomplete: each `plugin.json` *also* declares the same
+// server in its own `mcpServers` block, and the `vouch-edit` hook falls back to
+// `npx -y tewip-ai@latest` when no tewip is installed. Both were still unpinned seven weeks later,
+// and the ASI04 check found neither - it reads `.mcp.json` configs, and a server declared inside a
+// manifest and a `spawnSync` array inside a hook are two shapes it does not look at. Found while
+// preparing the plugin for republishing, by grepping for the string rather than trusting the
+// sentence that said it was handled.
+for (const config of ['plugin/.mcp.json', 'plugin-standalone/.mcp.json', 'plugin/.claude-plugin/plugin.json', 'plugin-standalone/.claude-plugin/plugin.json']) {
   const mcp = JSON.parse(readFileSync(config, 'utf8')) as { mcpServers: Record<string, { args?: string[] }> };
   let changed = '';
   for (const server of Object.values(mcp.mcpServers)) {
@@ -69,6 +78,19 @@ for (const config of ['plugin/.mcp.json', 'plugin-standalone/.mcp.json']) {
 `);
   wrote.push(config);
   console.log(`${config} ${changed} -> tewip-ai@${version}`);
+}
+
+// The hook's own fallback, which fetches Tewip when none is installed. The same pin, in the one
+// place it is written as code rather than as configuration - which is exactly why the ASI04 check
+// could not see it. The `npm i -g tewip-ai@latest` further down that file is left alone
+// deliberately: that is advice to a person about getting the newest, not an automated fetch.
+for (const hook of ['plugin/hooks/vouch-edit.mjs', 'plugin-standalone/hooks/vouch-edit.mjs']) {
+  const text = readFileSync(hook, 'utf8');
+  const next = text.replace(/'tewip-ai@[^']+', \.\.\.args/g, `'tewip-ai@${version}', ...args`);
+  if (next === text) throw new Error(`${hook} no longer fetches tewip-ai the way this script pins it - check it by hand`);
+  writeFileSync(hook, next);
+  wrote.push(hook);
+  console.log(`${hook} -> tewip-ai@${version}`);
 }
 
 // Stage what this script wrote, from the list it actually wrote rather than a second one.

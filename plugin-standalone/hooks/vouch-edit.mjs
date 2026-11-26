@@ -47,7 +47,7 @@ function tewip(args) {
   const override = process.env.TEWIP_CMD;
   if (override) return spawnSync(override, args, { encoding: 'utf8', shell: true, timeout: 60_000 });
   const onPath = spawnSync('tewip', ['--version'], { encoding: 'utf8', shell: true, timeout: 10_000 });
-  const run = onPath.status === 0 ? ['tewip', args] : ['npx', ['-y', 'tewip-ai@latest', ...args]];
+  const run = onPath.status === 0 ? ['tewip', args] : ['npx', ['-y', 'tewip-ai@0.88.0', ...args]];
   return spawnSync(run[0], run[1], { encoding: 'utf8', shell: true, timeout: 60_000 });
 }
 

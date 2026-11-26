@@ -79,6 +79,21 @@ describe('where a tool server’s code comes from', () => {
     assert.match(sourceOf('a', 'npx', '-y some-mcp', '').why, /with no version pinned/);
   });
 
+  it('leaves the hook no unpinned fetch either, except the advice to a person', () => {
+    // The hook falls back to `npx -y tewip-ai@<version>` when nothing is installed, and that line
+    // was `@latest` until this was written. It is code rather than configuration, which is why the
+    // ASI04 check could not see it and why it needs a test of its own.
+    const ours = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')) as { version: string };
+    for (const hook of ['plugin/hooks/vouch-edit.mjs', 'plugin-standalone/hooks/vouch-edit.mjs']) {
+      const text = readFileSync(join(HERE, hook), 'utf8');
+      const fetches = [...text.matchAll(/'tewip-ai@([^']+)', \.\.\.args/g)].map((m) => m[1]);
+      assert.deepEqual(fetches, [ours.version], `${hook} fetches tewip-ai at ${fetches.join(', ')} and this release is ${ours.version}`);
+      // The one `@latest` that stays: a sentence telling somebody to install the newest by hand.
+      const advice = [...text.matchAll(/npm i -g tewip-ai@(\S+?)`/g)].map((m) => m[1]);
+      assert.deepEqual(advice, ['latest'], 'the advice to a person should say latest, because that is what they want');
+    }
+  });
+
   it('pins an invocation to a version, which is what keeps this repository honest', () => {
     // A pure function rather than a transform inside the release script, because the only way to
     // test that one is to cut a release.
@@ -100,8 +115,18 @@ describe('where a tool server’s code comes from', () => {
   it('holds Tewip’s own shipped plugins to the same rule', () => {
     // Both plugins said `npx -y tewip-ai@latest mcp` until this check was written and run on them.
     // A plugin pinned at a version that runs whatever was published afterwards is not pinned.
+    //
+    // **Four files, not two.** This test checked the two `.mcp.json` files, and the README and
+    // confidence.ts both said the plugin was pinned on the strength of it - while each
+    // `plugin.json` declared the very same server in its own `mcpServers` block, still on
+    // `@latest`, for seven weeks. The list is derived from the files that actually declare a
+    // server rather than typed out, so a fifth place cannot be added without this noticing.
     const ours = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')) as { version: string };
-    for (const config of ['plugin/.mcp.json', 'plugin-standalone/.mcp.json']) {
+    const declaring = ['plugin/.mcp.json', 'plugin-standalone/.mcp.json', 'plugin/.claude-plugin/plugin.json', 'plugin-standalone/.claude-plugin/plugin.json'].filter((f) =>
+      readFileSync(join(HERE, f), 'utf8').includes('mcpServers'),
+    );
+    assert.equal(declaring.length, 4, 'a file that used to declare the MCP server no longer does, or a new one was added');
+    for (const config of declaring) {
       const mcp = JSON.parse(readFileSync(join(HERE, config), 'utf8')) as { mcpServers: Record<string, { command?: string; args?: string[] }> };
       for (const [name, spec] of Object.entries(mcp.mcpServers)) {
         const got = sourceOf(name, spec.command ?? '', (spec.args ?? []).join(' '), '');

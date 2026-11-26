@@ -108,6 +108,18 @@ export const MEASURED: Confidence[] = [
       'OWASP ASI04, Agentic Supply Chain Vulnerabilities, against the invocation each real MCP server documents in its own README or registry entry - which is the ground truth that matters, because those lines are what people paste into a config file. OWASP cites one case by name and it is the whole argument: a package impersonating `postmark-mcp` ran clean for several versions and then, in 1.0.16, began adding a hidden BCC of every email to its author, with no configuration change. What this cannot say is whether any particular server is trustworthy, which Tewip does not know; the finding is that the choice is made again on every start, by whoever can publish to that name',
   },
   {
+    check: 'agent (a gate that cannot say no)',
+    command: 'agent',
+    precision:
+      '**0 of 54 real confirmation gates accused**, in 42 shipped files across the corpus - which is a precision figure with a population behind it, unlike the two rows below. Getting there took six rounds of reading real code: the first draft reported 54 of those 54 and every single one was a correct implementation. Each round found another way a gate delivers its answer - a receiver chain (`this.jobService.getApproval(job)`, 14 findings on n8n), a callback instead of a return (`didConfirm:`, `async onOk()`, 10 findings on Discourse and nocodb), a gate wrapped across lines, a private field in the chain, a Python definition with a return annotation, and an argument list too long to read to the end. Every one of those is now a decoy in the harness',
+    pinnedIn: ['n8n', 'nocodb', 'immich', 'saleor', 'gin'],
+    recall: '5 of 5 toothless gates read, 0 of 9 working gates accused',
+    from: 'eval/refusal-recall.ts',
+    measured: { found: 5, of: 5, accused: 0, decoys: 9 },
+    groundTruth:
+      'OWASP ASI09, Human-Agent Trust Exploitation, against the shape each library documents for asking a person - the same basis as the guard harness, because those lines are what people copy. This check exists because of a sentence this project prints: the guard list says "something here stops and waits for a person", and nothing asked whether the answer is used. A `confirm()` whose return value is discarded asks the question, shows it, and carries on - and the person has been told by the software that they were consulted, which is the over-trust ASI09 is about. Two shapes are reported and no others: the answer thrown away where it is asked, or kept in a name nothing reads again. What it cannot say is whether the gate stands in front of the dangerous tool, which is the limitation the guard list already states about itself, nor anything about the rest of ASI09 - a confident explanation or a fabricated rationale is not in the source',
+  },
+  {
     check: 'agent (the model’s answer, run as code)',
     command: 'agent',
     precision:

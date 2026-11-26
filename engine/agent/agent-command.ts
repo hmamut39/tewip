@@ -52,7 +52,7 @@ const REACH_READS: Record<Reach, string> = {
 
 
 export function renderAgent(scan: AgentScan, root: string): string {
-  const { tools, injections, poisoned, borrowed, executes, doors, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
+  const { tools, injections, poisoned, borrowed, executes, toothless, doors, guards, filesRead, emptyBudget, config, coverage, evals } = scan;
   const lines = ['# What this agent is allowed to do', ''];
 
   if (tools.length === 0) {
@@ -113,9 +113,23 @@ export function renderAgent(scan: AgentScan, root: string): string {
   }
 
   // The headline, because it is the sentence somebody has to act on.
+  //
+  // The reassuring form of it used to be reached by finding a gate, without asking whether the
+  // gate can refuse. On a project whose only two gates discard the person's answer, this printed
+  // "Something here does ask a person" - the most prominent sentence in the report, telling a
+  // reader that a control exists, about a control that does nothing. That is OWASP ASI09 in one
+  // line, produced by the tool that checks for it, so a gate counts here only if something can
+  // act on its answer. An enforced PreToolUse hook is exempt: the harness stops the call, not this
+  // project's code, so there is no answer in the source to discard.
+  const gateCanRefuse = kinds.has('asks-a-person') && (toothless.length === 0 || config.hasEnforcedHook);
   if (risky.length > 0 && !kinds.has('asks-a-person')) {
     lines.push(
       `**${risky.length} of them do something that cannot be undone, and nothing in this project stops to ask a person.**`,
+      '',
+    );
+  } else if (risky.length > 0 && !gateCanRefuse) {
+    lines.push(
+      `**${risky.length} of them do something that cannot be undone, and ${toothless.length} place(s) where this project asks a person carry on regardless of the answer.** A prompt somebody answers and nothing reads is not a gate.`,
       '',
     );
   } else if (risky.length > 0) {
@@ -183,10 +197,16 @@ export function renderAgent(scan: AgentScan, root: string): string {
   lines.push('## What stands between them and the real world', '');
   for (const kind of ['asks-a-person', 'dry-run', 'step-budget', 'tool-allow-list'] as GuardKind[]) {
     const found = guards.find((g) => g.kind === kind);
+    // A gate whose answer is discarded makes this line say the opposite of what is true, so the
+    // line itself carries the contradiction rather than leaving it to a section further down. This
+    // is the sentence the ASI09 check was written for.
+    const cannotRefuse = kind === 'asks-a-person' && toothless.length > 0;
     lines.push(
-      found
-        ? `- **${kind}** — found at ${found.file}:${found.line}. ${GUARD_MEANS[kind]}.`
-        : `- **${kind}** — nothing found anywhere in this project. Without it: ${GUARD_PREVENTS[kind]}.`,
+      found && cannotRefuse
+        ? `- **${kind}** — found at ${found.file}:${found.line}, **and ${toothless.length} of the places this project asks a person cannot act on the answer.** See below.`
+        : found
+          ? `- **${kind}** — found at ${found.file}:${found.line}. ${GUARD_MEANS[kind]}.`
+          : `- **${kind}** — nothing found anywhere in this project. Without it: ${GUARD_PREVENTS[kind]}.`,
     );
   }
   lines.push('');
@@ -197,6 +217,32 @@ export function renderAgent(scan: AgentScan, root: string): string {
       '',
       `\`${emptyBudget.text}\` in ${emptyBudget.file}. A budget removed this way reads as deliberate, and a check`,
       'that only looked for the word would have called it a budget.',
+      '',
+    );
+  }
+
+  if (toothless.length > 0) {
+    lines.push(
+      '### A gate that asks, and cannot act on the answer',
+      '',
+      `${toothless.length} place(s) where this project asks a person something and then carries on regardless. This is the`,
+      'same shape as a ceiling that is written down and set to nothing, and worse in one way: a person saw the question,',
+      'answered it, and has been told by the software that they were consulted.',
+      '',
+    );
+    for (const g of toothless.slice(0, 20)) {
+      lines.push(`- ${g.file}:${g.line} — \`${g.gate}\`, and ${g.why}.`);
+      if (g.asked) lines.push(`  It asks: "${g.asked}"`);
+      lines.push(`  \`${g.evidence}\``);
+    }
+    if (toothless.length > 20) lines.push(`…and ${toothless.length - 20} more`);
+    lines.push(
+      '',
+      'OWASP calls this ASI09, Human-Agent Trust Exploitation: the risk is a person approving what they would',
+      'otherwise refuse, and an approval step that has quietly stopped being a check is that risk written into the',
+      'source. Two shapes are reported and no others - the answer thrown away where it is asked, or kept in a name',
+      'nothing reads again. A gate whose answer goes to a callback, or into a condition, or back to a caller, is not',
+      'reported, because a working gate wrongly contradicted is worse here than one missed.',
       '',
     );
   }

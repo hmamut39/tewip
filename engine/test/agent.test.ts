@@ -262,8 +262,35 @@ describe('the report', () => {
     assert.match(page, /What the model wrote back, run as code/, 'and it no longer throws away what it found');
     assert.match(page, /runner\.py:3/);
   });
+  // Phase 227. The reassuring headline was reached by finding a gate, without asking whether the
+  // gate can refuse. A project whose only two gates discard the person's answer was told
+  // "Something here does ask a person" in the most prominent sentence of the report - OWASP ASI09
+  // in one line, printed by the check that looks for it.
+  it('does not call a gate a gate when nothing can act on its answer', () => {
+    // `ask_human` is one of the names guards.ts recognises, so this project really does get an
+    // asks-a-person guard - and the answer it returns is dropped on the floor.
+    const root = project({
+      'tools.py':
+        '@tool' + NL +
+        'def issue_refund(order_id: str, amount: float) -> str:' + NL +
+        '    """Refund an order."""' + NL +
+        '    approved = ask_human("Approve this refund?")' + NL +
+        '    payments.refund(order_id, amount)' + NL +
+        '    return "refunded"',
+    });
+    const scan = scanAgent(root);
+    assert.ok(scan.guards.some((g) => g.kind === 'asks-a-person'), 'the guard scan does find a gate here');
+    assert.equal(scan.toothless.length, 1, 'and that gate throws the answer away');
+    const page = renderAgent(scan, root);
+    assert.doesNotMatch(page, /Something here does ask a person/, 'the reassuring headline must not be reached');
+    assert.match(page, /carry on regardless of the answer/);
+    assert.match(page, /A gate that asks, and cannot act on the answer/);
+    // The question itself is quoted back, because that is what the person saw.
+    assert.match(page, /Approve this refund\?/);
+  });
+
   it('says what it looked for when it finds nothing', () => {
-    const page = renderAgent({ tools: [], injections: [], poisoned: [], borrowed: [], executes: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
+    const page = renderAgent({ tools: [], injections: [], poisoned: [], borrowed: [], executes: [], toothless: [], doors: [], guards: [], filesRead: 9, emptyBudget: null, config: { read: [], findings: [], servers: [], hasAllowList: false, hasEnforcedHook: false }, coverage: [], evals: { frameworks: [], files: [] } }, '.');
     assert.match(page, /No tool definitions were found in 9 file/);
     assert.match(page, /not a finding that this agent has no tools/);
     assert.match(page, /MCP SDKs/);

@@ -173,6 +173,11 @@ export function measure(command: Command, root: string, diff?: string): Expectat
       // and exactly one of those also holds an execution sink. A zero drawn from a population that
       // thin is worth re-deriving rather than remembering.
       executes: scan.executes.length,
+      // OWASP ASI09: a place this project asks a person and cannot act on the answer. Pinned
+      // because the figure this one publishes is a real precision claim - 54 gate calls in 42
+      // shipped files, every one left alone - and a claim that strong should not rest on anybody
+      // having run it once.
+      toothless: scan.toothless.length,
       guards: scan.guards.length,
     };
     for (const g of scan.guards) out[g.kind] = (out[g.kind] ?? 0) + 1;

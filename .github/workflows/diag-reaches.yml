@@ -7,6 +7,8 @@
 name: diag reaches
 
 on:
+  push:
+    branches: [fix/reaches-index-token]
   workflow_dispatch:
 
 permissions:

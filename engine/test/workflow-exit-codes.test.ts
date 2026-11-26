@@ -56,7 +56,9 @@ describe('the corpus gate fails where failing means something', () => {
   const corpus = readFileSync(join(DIR, 'corpus.yml'), 'utf8');
 
   it('reports rather than fails when the run was dispatched by hand', () => {
-    const run = corpus.split(NL).find((l) => l.includes('scripts/corpus.ts'));
+    // The line that runs it, not the first line that mentions it: a comment explaining the script
+    // used to be enough to make this read the wrong line and pass or fail for the wrong reason.
+    const run = corpus.split(NL).find((l) => /^\s*run:.*scripts\/corpus\.ts/.test(l));
     assert.ok(run, 'corpus.yml must run scripts/corpus.ts');
     assert.match(run, /--asking/, 'a dispatched run must pass --asking, or it emails a failure for a question');
     assert.match(run, /workflow_dispatch/, '--asking must be conditional on the dispatch, not always on');

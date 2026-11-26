@@ -35,6 +35,14 @@ jobs:
         with:
           node-version: '24'
 
+      # An absolute path, because this cache never cached anything.
+      #
+      # It was `~/.cache/tewip-corpus` on both sides. `actions/cache` expands `~` and saved
+      # `/home/runner/.cache/tewip-corpus`; Node does not, so `scripts/corpus.ts` wrote to a
+      # directory literally named `~` inside the workspace. The two never met, which is why every
+      # run printed "cloning" for all fourteen repositories - and why the runs were measured with a
+      # **relative** root, which is what made immich's `done` read 15 there and 73 everywhere else.
+      #
       # Keyed on the manifest, and only on the manifest.
       #
       # `restore-keys: corpus-` used to fall back to clones saved under an older manifest, which
@@ -47,7 +55,7 @@ jobs:
       - name: Reuse the clones
         uses: actions/cache@v5
         with:
-          path: ~/.cache/tewip-corpus
+          path: ${{ runner.temp }}/tewip-corpus
           key: corpus-${{ hashFiles('corpus/expected.json') }}
 
       # A dispatched run is somebody asking, so it reports what moved and exits 0. The weekly run
@@ -59,5 +67,5 @@ jobs:
       # a broken build, and a red build nobody can trust is a red build nobody reads.
       - name: Re-derive the verified numbers
         env:
-          TEWIP_CORPUS: ~/.cache/tewip-corpus
+          TEWIP_CORPUS: ${{ runner.temp }}/tewip-corpus
         run: node scripts/corpus.ts ${{ inputs.repo }} ${{ github.event_name == 'workflow_dispatch' && '--asking' || '' }}

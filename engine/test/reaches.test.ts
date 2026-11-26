@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { describe, it } from 'node:test';
 import { importNames } from '../review/imports.ts';
 import { testsReaching } from '../prove/reaches.ts';
@@ -95,5 +95,25 @@ describe('following a change through the import graph', () => {
     assert.ok(names.includes('schema/index'), 'this is the token its own tests match on');
     assert.ok(names.includes('schema'));
     assert.ok(!names.includes('index'));
+  });
+
+  it('gives the same answer whether the project is named absolutely or relatively', () => {
+    // The corpus workflow passed `TEWIP_CORPUS: ~/.cache/tewip-corpus`, which Node does not expand,
+    // so every corpus run on CI measured with a relative root. `resolve(root, t)` then joined the
+    // root onto test paths that already contained it, making every entry of the test set a path
+    // that does not exist - so nothing matched and the walk returned no tests. immich's `done`
+    // reported 15 covering tests there against 73 from the same commit at an absolute path, and
+    // that was read as Windows disagreeing with Linux for four days.
+    const { root, tests } = project();
+    const fromHere = relative(process.cwd(), root);
+    // The test paths have to be spelled the way the caller spells them, which is by joining onto
+    // whatever root it was given: `testFiles(relativeRoot)` returns relative paths. Handing
+    // absolute ones to a relative root does not reproduce anything, because `resolve` ignores its
+    // first argument when the second is absolute - which is exactly why this was invisible.
+    const asTheCallerHasThem = tests.map((t) => join(fromHere, relative(root, t)));
+    const absolute = testsReaching(root, 'packages/sdk/src/fetch-client.ts', tests).map((f) => f.testFile);
+    const relatively = testsReaching(fromHere, 'packages/sdk/src/fetch-client.ts', asTheCallerHasThem).map((f) => f.testFile);
+    assert.deepEqual(absolute, ['web/test/uses-sdk.spec.ts'], 'the absolute root finds the consumer');
+    assert.deepEqual(relatively, absolute, 'and how the root is spelled is not a finding about the code');
   });
 });

@@ -176,7 +176,19 @@ export function testsReaching(root: string, file: string, tests: string[], depth
   };
 
   const rel = (path: string) => relative(root, path).split(String.fromCharCode(92)).join('/');
-  const testSet = new Set(tests.map((t) => rel(resolve(root, t))));
+  // `tests` arrive as `testFiles` returns them - built by joining onto `root`, so already resolvable
+  // from the working directory. `resolve(root, t)` joined root onto them a second time.
+  //
+  // With an absolute root that was harmless: an absolute `t` makes `resolve` ignore the first
+  // argument. With a relative one every entry became `<root>/<root>/...`, a path that does not
+  // exist, so `testSet` held nothing that could ever match and the walk returned no tests at all.
+  //
+  // The corpus workflow passes `TEWIP_CORPUS: ~/.cache/tewip-corpus`, and Node does not expand
+  // `~`: every corpus run on CI has measured with a relative root. immich's `done` reported 15
+  // covering tests there against 73 from the same commit at an absolute path, and for four days
+  // that was read as Windows disagreeing with Linux - it was this line. Phase 223.
+  const here = (p: string) => rel(resolve(p));
+  const testSet = new Set(tests.map(here));
   const seen = new Set<string>([rel(resolve(root, file))]);
   // What the chain is: layer 0 is the file, layer 1 the modules importing it, and so on.
   let layer = [file];

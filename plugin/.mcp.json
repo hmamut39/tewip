@@ -2,7 +2,11 @@
   "mcpServers": {
     "tewip": {
       "command": "npx",
-      "args": ["-y", "tewip-ai@latest", "mcp"]
+      "args": [
+        "-y",
+        "tewip-ai@0.87.0",
+        "mcp"
+      ]
     }
   }
 }

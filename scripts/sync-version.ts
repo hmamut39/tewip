@@ -10,6 +10,7 @@
 // thinks of it.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pinnedTo } from '../engine/agent/server-pinning.ts';
 
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version as string;
 /** Every file this script writes, so the staging below cannot drift from it. */
@@ -40,6 +41,34 @@ for (const manifest of ['plugin/.claude-plugin/plugin.json', 'plugin-standalone/
   writeFileSync(manifest, `${JSON.stringify(plugin, null, 2)}\n`);
   wrote.push(manifest);
   console.log(`${manifest} ${had} -> ${version}`);
+}
+
+// The plugin's MCP server, pinned to the version of the plugin that ships it. OWASP ASI04.
+//
+// Both plugins declared `npx -y tewip-ai@latest mcp`, which the check added in Phase 225 reports:
+// the code behind a tool server fetched at every start is chosen again on each run, by whoever can
+// publish to that name. OWASP cites the package that impersonated `postmark-mcp` and began adding a
+// hidden BCC of every email in 1.0.16, after a run of clean versions.
+//
+// Tewip is a harder target than that - published only by CI, with provenance, and staged behind the
+// owner's passkey - but `@latest` was still wrong for a different reason: a plugin pinned at 0.87.0
+// would run whatever tewip-ai was published afterwards, which is not what a pinned plugin means.
+//
+// Here rather than written once by hand, because a pin maintained by remembering is a pin that goes
+// stale, and a stale pin is worse than none: it reads as deliberate.
+for (const config of ['plugin/.mcp.json', 'plugin-standalone/.mcp.json']) {
+  const mcp = JSON.parse(readFileSync(config, 'utf8')) as { mcpServers: Record<string, { args?: string[] }> };
+  let changed = '';
+  for (const server of Object.values(mcp.mcpServers)) {
+    const { args, was } = pinnedTo(server.args ?? [], 'tewip-ai', version);
+    server.args = args;
+    if (was) changed = was;
+  }
+  if (!changed) throw new Error(`${config} no longer invokes tewip-ai, so nothing was pinned - check it by hand`);
+  writeFileSync(config, `${JSON.stringify(mcp, null, 2)}
+`);
+  wrote.push(config);
+  console.log(`${config} ${changed} -> tewip-ai@${version}`);
 }
 
 // Stage what this script wrote, from the list it actually wrote rather than a second one.

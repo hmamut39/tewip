@@ -11,6 +11,7 @@
 // of thing at all, and only one of them is a control an auditor can rely on.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sourceOf, type ServerSource } from './server-pinning.ts';
 
 export interface ConfigFinding {
   rule: string;
@@ -25,6 +26,8 @@ export interface McpServer {
   /** Run here, or reached over the network - somebody else's code either way. */
   where: 'this machine' | 'somewhere else';
   detail: string;
+  /** Where the code behind it comes from, and whether it is pinned. OWASP ASI04. */
+  source: ServerSource;
 }
 
 export interface ConfigScan {
@@ -153,11 +156,18 @@ export function scanConfig(root: string): ConfigScan {
       const url = typeof spec?.url === 'string' ? spec.url : '';
       const command = typeof spec?.command === 'string' ? spec.command : '';
       const args = asList(spec?.args).join(' ');
+      const source = sourceOf(name, command, args, url);
       out.servers.push(
         url
-          ? { name, where: 'somewhere else', detail: url.replace(/\/\/[^@]*@/, '//') }
-          : { name, where: 'this machine', detail: `${command} ${args}`.trim().slice(0, 90) },
+          ? { name, where: 'somewhere else', detail: url.replace(/\/\/[^@]*@/, '//'), source }
+          : { name, where: 'this machine', detail: `${command} ${args}`.trim().slice(0, 90), source },
       );
+      // OWASP ASI04. A server fetched fresh at every start is a choice made again on each run, by
+      // whoever can publish to that name - which is a finding about a committed file rather than an
+      // inference about behaviour, so it belongs with the others from this file.
+      if (source.how === 'fetched at every start') {
+        out.findings.push({ rule: 'server-not-pinned', file: '.mcp.json', what: `${name}: ${source.what}`, why: source.why });
+      }
     }
   }
   return out;
@@ -171,6 +181,7 @@ export const CONFIG_MEANS: Record<string, string> = {
   'mcp-auto-trusted': 'tool servers are trusted without approval',
   'secret-in-settings': 'a credential is committed',
   'boundary-widened': 'the agent may work outside this project',
+  'server-not-pinned': 'a tool server is fetched fresh at every start', 
 };
 
 /**

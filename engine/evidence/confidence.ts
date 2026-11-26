@@ -97,6 +97,17 @@ export const MEASURED: Confidence[] = [
     groundTruth: "the shape each framework's own quickstart declares a tool in",
   },
   {
+    check: 'agent (tool servers fetched at every start)',
+    command: 'agent',
+    precision:
+      '0 of 7 pinned or local invocations accused. No corpus figure, and the reason is worth stating: not one of the fourteen repositories declares an MCP server - n8n is the only one with a `.claude/settings.json` at all, and it grants permissions without configuring a server - so there is nothing there for this to be wrong about. The first real configuration it read was this project’s own plugin, which said `npx -y tewip-ai@latest mcp`; it is now pinned to the plugin’s own version by scripts/sync-version.ts, and engine/test/server-pinning.test.ts holds it there',
+    recall: '7 of 7 unpinned invocations read, 0 of 7 pinned or local ones accused',
+    from: 'eval/supply-recall.ts',
+    measured: { found: 7, of: 7, accused: 0, decoys: 7 },
+    groundTruth:
+      'OWASP ASI04, Agentic Supply Chain Vulnerabilities, against the invocation each real MCP server documents in its own README or registry entry - which is the ground truth that matters, because those lines are what people paste into a config file. OWASP cites one case by name and it is the whole argument: a package impersonating `postmark-mcp` ran clean for several versions and then, in 1.0.16, began adding a hidden BCC of every email to its author, with no configuration change. What this cannot say is whether any particular server is trustworthy, which Tewip does not know; the finding is that the choice is made again on every start, by whoever can publish to that name',
+  },
+  {
     check: 'agent (borrowed credential)',
     command: 'agent',
     precision: '0 findings across 66,307 files of the corpus - and two of the three it reported on the way there were correct implementations, now decoys in the harness below',
